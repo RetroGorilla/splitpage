@@ -12,6 +12,8 @@ import { getEditorName } from "./preferences-owner.ts";
 import { sharedEntry } from "./shared-entry.ts";
 import { captureDocumentOpeningLifetime } from "./transition-owners.ts";
 import { holdDesktopDocumentPublication } from "./desktop-owners.ts";
+import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
+import { focusDesktopSharedScript } from "../../adapters/collab/native/desktop-local-store.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 declare let splitpageInvitation: { readonly script: string; readonly token: string } | false | null;
@@ -61,6 +63,8 @@ function openJoinScreen(request: Extract<JoinRequest, { kind: "browser" }> | und
         });
         const deployment = response.headers.get("Splitpage-Deployment");
         if (!response.ok || !deployment || !SCRIPT_ID.test(deployment)) return { kind: "failed", reason: "relay-unreachable" };
+        const desktop = desktopPort();
+        if (desktop && await focusDesktopSharedScript(desktop.nativeReplica, deployment, script)) return { kind: "focused" };
         const endpoint = new URL("/", origin);
         endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
         const relayUrl = endpoint.href;
@@ -118,6 +122,7 @@ export function startInvitationEntry() {
   const browserDialog = invitation === null ? undefined : openJoinScreen({ kind: "browser", invitation },
     value => { connected = value; }, () => { settled = true; });
   return {
+    hasInvitation: invitation !== null,
     status: () => ({ connected, settled }),
     dispose() {
       browserDialog?.dispose();

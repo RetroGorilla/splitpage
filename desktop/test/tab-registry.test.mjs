@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { sharedScriptKey } from "../../shared/shared-script.ts";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -17,7 +18,7 @@ const ID_B = "b".repeat(32);
 const fileTab = (id, absPath) => ({ id, source: { kind: "file", absPath } });
 
 test("a preferred tab id is kept when it is well formed and free", () => {
-  const r = createTabRegistry({ pathKey });
+  const r = createTabRegistry({ sharedScriptKey, pathKey });
   assert.equal(r.mintUniqueTabId(ID_A), ID_A);
   r.tabs.set(ID_A, {});
   const minted = r.mintUniqueTabId(ID_A);
@@ -28,7 +29,7 @@ test("a preferred tab id is kept when it is well formed and free", () => {
 });
 
 test("window ids are checked against windows, not tabs", () => {
-  const r = createTabRegistry({ pathKey });
+  const r = createTabRegistry({ sharedScriptKey, pathKey });
   r.tabs.set(ID_A, {});
   assert.equal(r.mintUniqueWindowId(ID_A), ID_A);
   r.windowsById.set(ID_B, {});
@@ -37,7 +38,7 @@ test("window ids are checked against windows, not tabs", () => {
 });
 
 test("the first window record is the first one added, or none", () => {
-  const r = createTabRegistry({ pathKey });
+  const r = createTabRegistry({ sharedScriptKey, pathKey });
   assert.equal(r.firstWindowRecord(), null);
   const one = { id: "1" }, two = { id: "2" };
   r.windowsById.set("1", one);
@@ -48,7 +49,7 @@ test("the first window record is the first one added, or none", () => {
 });
 
 test("a routing key stays with a live owner and passes on once the owner is gone", () => {
-  const r = createTabRegistry({ pathKey });
+  const r = createTabRegistry({ sharedScriptKey, pathKey });
   const map = new Map();
   r.tabs.set(ID_A, {});
   assert.equal(r.claimRoutingKey(map, "k", ID_A), true);
@@ -61,7 +62,7 @@ test("a routing key stays with a live owner and passes on once the owner is gone
 });
 
 test("a file tab is indexed by its path key, and a blank tab is not", () => {
-  const r = createTabRegistry({ pathKey });
+  const r = createTabRegistry({ sharedScriptKey, pathKey });
   const a = fileTab(ID_A, "/Docs/One.splitpage");
   r.tabs.set(ID_A, a);
   r.indexTabSource(a);
@@ -69,9 +70,25 @@ test("a file tab is indexed by its path key, and a blank tab is not", () => {
   assert.deepEqual([...r.pathToTabId], [["/docs/one.splitpage", ID_A]]);
 });
 
+test("a shared identity routes to its live tab and is scoped by deployment", () => {
+  const r = createTabRegistry({ sharedScriptKey, pathKey });
+  const a = { id: ID_A, source: { kind: "shared", deployment: "one", script: "production" } };
+  const b = { id: ID_B, source: { ...a.source, deployment: "two" } };
+  r.tabs.set(a.id, a);
+  r.tabs.set(b.id, b);
+  r.indexTabSource(a);
+  r.indexTabSource({ ...b, source: a.source });
+  r.indexTabSource(b);
+  assert.equal(r.sharedTab("one/production"), a);
+  assert.equal(r.sharedTab("two/production"), b);
+  assert.equal(r.pathToTabId.size, 0);
+  r.unindexTabSource(a);
+  assert.equal(r.sharedTab("one/production"), undefined);
+});
+
 test("every source a tab takes, file or blank, is reported once as it is indexed", () => {
   const seen = [];
-  const r = createTabRegistry({ pathKey, sourceChanged: (tab) => seen.push([tab.id, tab.source.kind === "file" ? tab.source.absPath : null]) });
+  const r = createTabRegistry({ sharedScriptKey, pathKey, sourceChanged: (tab) => seen.push([tab.id, tab.source.kind === "file" ? tab.source.absPath : null]) });
   r.indexTabSource(fileTab(ID_A, "/one"));
   r.indexTabSource({ id: ID_A, source: { kind: "blank" } });
   r.unindexTabSource({ id: ID_A });
@@ -79,7 +96,7 @@ test("every source a tab takes, file or blank, is reported once as it is indexed
 });
 
 test("a second live tab on the same path does not take the path over", () => {
-  const r = createTabRegistry({ pathKey });
+  const r = createTabRegistry({ sharedScriptKey, pathKey });
   const a = fileTab(ID_A, "/one"), b = fileTab(ID_B, "/ONE");
   r.tabs.set(ID_A, a); r.tabs.set(ID_B, b);
   r.indexTabSource(a);
@@ -88,7 +105,7 @@ test("a second live tab on the same path does not take the path over", () => {
 });
 
 test("unindexing drops every path the tab holds and leaves others", () => {
-  const r = createTabRegistry({ pathKey });
+  const r = createTabRegistry({ sharedScriptKey, pathKey });
   r.pathToTabId.set("/one", ID_A);
   r.pathToTabId.set("/draft-of-one", ID_A);
   r.pathToTabId.set("/two", ID_B);

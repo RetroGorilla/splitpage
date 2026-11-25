@@ -52,7 +52,9 @@ export interface JoinPreview {
 export interface JoinDialogPorts {
   readonly identity: Pick<Preferences, "myColor" | "setCommentAuthor" | "setMyColor">;
   readonly editor: () => string;
-  readonly check: (request: JoinRequest, signal: AbortSignal, password?: string) => Promise<JoinPreview | { readonly kind: "failed"; readonly reason: string }>;
+  readonly check: (request: JoinRequest, signal: AbortSignal, password?: string) => Promise<
+    JoinPreview | { readonly kind: "failed"; readonly reason: string } | { readonly kind: "focused" }
+  >;
   readonly settled: () => void;
 }
 

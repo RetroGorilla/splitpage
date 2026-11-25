@@ -18,6 +18,7 @@ import type { Transitions } from "../../application/transitions/transitions.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import type { ScreenState } from "../../application/screen.ts";
+import type { createSharedScriptCatalogue } from "../../application/collaboration/shared-script-catalogue.ts";
 
 export interface NewTabMount {
   readonly closeNewTabPage: () => void;
@@ -39,6 +40,11 @@ export interface NewTabPorts {
   readonly place: Pick<DocumentPlace, "home">;
   readonly desktop: () => boolean;
   readonly recents: RecentFiles;
+  readonly browserSharedScripts?: Pick<ReturnType<typeof createSharedScriptCatalogue>, "list"> & {
+    readonly heading: string;
+    readonly storageNotice: string;
+    readonly open: (id: string) => Promise<void>;
+  };
   readonly launch: Pick<LaunchFacts, "launchIntent" | "hasDraftToRestore">;
   readonly lastFile: LastFile;
   readonly seedCheck: SeedCheck;

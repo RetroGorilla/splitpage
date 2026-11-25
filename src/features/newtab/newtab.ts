@@ -8,14 +8,11 @@ import { NO_DESTINATION } from "../../application/transitions/ports.ts";
 import { fileKindFromName } from "../../../shared/file-names.ts";
 import { addListener } from "../common/listeners.ts";
 import { EVERY_OVERLAY, inFront } from "../../application/screen.ts";
+import type { DesktopWireRecent } from "../../../shared/desktop-contract.d.ts";
+import { sharedScriptKey } from "../../../shared/shared-script.ts";
 
 
-type RecentEntry = {
-  readonly fileId: string;
-  readonly title?: string;
-  readonly name: string;
-  readonly at: number;
-};
+type RecentEntry = DesktopWireRecent;
 
 type StarterState = {
   readonly wordsPerMinute?: number;
@@ -240,41 +237,46 @@ function renderContinue(entry: RecentEntry | null) {
   (document.getElementById("newtab-continue-title") as HTMLElement).textContent = title;
   (document.getElementById("newtab-continue-when") as HTMLElement).textContent = formatRecentWhen((entry as RecentEntry).at);
   btn.setAttribute("data-file-id", (entry as RecentEntry).fileId);
+  btn.toggleAttribute("data-shared", entry?.shared === true);
   btn.setAttribute("aria-label", "Continue " + title);
   btn.title = (entry as RecentEntry).name;
 }
 
-function renderRecents(entries: RecentEntry[]) {
+function renderRecents(entries: RecentEntry[], browser?: NewTabPorts["browserSharedScripts"]) {
   const col = document.getElementById("newtab-recents");
   const list = document.getElementById("newtab-recents-list");
   const main = document.querySelector("#newtab-page .newtab-main");
   if (!col || !list) return;
-  col.hidden = false;
-  if (main) main.classList.add("has-recents");
-  renderContinue(entries[0] || null);
+  col.hidden = !!browser && !entries.length;
+  main?.classList.toggle("has-recents", !col.hidden);
+  renderContinue(browser ? null : entries[0] ?? null);
   const clear = document.getElementById("newtab-recents-clear");
-  if (clear) clear.hidden = !entries.length;
+  if (clear) clear.hidden = !!browser || !entries.length;
+  const heading = document.getElementById("newtab-recents-label");
+  if (heading) heading.textContent = browser?.heading ?? "Recent";
   if (!entries.length) {
     list.innerHTML = '<div class="newtab-recents-empty">Nothing yet — what you open shows up here.</div>';
     return;
   }
-  list.innerHTML = entries.map(function (r) {
+  list.innerHTML = (browser ? '<p class="newtab-recent-meta">' + escapeHtml(browser.storageNotice) + '</p>' : '') +
+    entries.map(function (r) {
     const when = formatRecentWhen(r.at);
     const title = r.title || r.name;
     return '<div class="newtab-recent">' +
       '<button type="button" class="newtab-recent-open" data-newtab-action="open-recent" ' +
-        'data-file-id="' + escapeHtml(r.fileId) + '" title="' + escapeHtml(r.name) + '">' +
+        'data-file-id="' + escapeHtml(r.fileId) + '" title="' + escapeHtml(r.name) + '"' + (r.shared ? ' data-shared' : '') + '>' +
         '<svg class="nt-icon newtab-recent-icon" aria-hidden="true"><use href="#i-file"/></svg>' +
         '<span class="newtab-recent-text">' +
           '<span class="newtab-recent-title">' + escapeHtml(title) + '</span>' +
-          '<span class="newtab-recent-meta"><span class="newtab-recent-name">' + escapeHtml(r.name) + '</span></span>' +
+          '<span class="newtab-recent-meta">' + (r.shared ? '<span class="recent-shared-badge">Shared</span>' :
+            '<span class="newtab-recent-name">' + escapeHtml(r.name) + '</span>') + '</span>' +
         '</span>' +
         (when ? '<span class="newtab-recent-when">' + escapeHtml(when) + '</span>' : '') +
       '</button>' +
-      '<button type="button" class="newtab-recent-forget" data-newtab-action="forget-recent" ' +
+      (browser ? '' : '<button type="button" class="newtab-recent-forget" data-newtab-action="forget-recent" ' +
         'data-file-id="' + escapeHtml(r.fileId) + '" title="Forget this one" ' +
         'aria-label="Forget ' + escapeHtml(title) + '">' +
-        '<svg class="nt-icon" aria-hidden="true"><use href="#i-close"/></svg></button>' +
+        '<svg class="nt-icon" aria-hidden="true"><use href="#i-close"/></svg></button>') +
     '</div>';
   }).join("");
 }
@@ -282,6 +284,15 @@ function renderRecents(entries: RecentEntry[]) {
 async function refreshRecents() {
   const mounted = activeMount;
   updateDesktopPitch();
+  const browser = ports.desktop() ? undefined : ports.browserSharedScripts;
+  if (browser) {
+    const entries = await browser.list().catch(() => []);
+    if (activeMount !== mounted) return;
+    renderRecents(entries.map(entry => ({
+      fileId: sharedScriptKey(entry), title: entry.title, name: entry.title, at: entry.at, shared: true
+    })), browser);
+    return;
+  }
   if (!recentsSupported()) { renderContinue(null); return; }
   let entries;
   try { entries = await ports.recents.list(); } catch (e) { return; }
@@ -289,16 +300,17 @@ async function refreshRecents() {
   renderRecents(Array.isArray(entries) ? entries as RecentEntry[] : []);
 }
 
-function openRecent(fileId: string | null): Promise<void> {
+function openRecent(fileId: string | null, shared: boolean): Promise<void> {
+  if (fileId && shared && !ports.desktop() && ports.browserSharedScripts) return ports.browserSharedScripts.open(fileId);
   if (!fileId || !recentsSupported() || ports.entry.before()) return Promise.resolve();
-  return ports.openingActivity.track(() => readRecent(fileId));
+  return ports.openingActivity.track(() => readRecent(fileId, shared));
 }
 
-async function readRecent(fileId: string) {
+async function readRecent(fileId: string, shared: boolean) {
   const mounted = activeMount;
   let entry;
   try {
-    const r = await ports.recents.routeOpen({ kind: "file", fileId: fileId });
+    const r = await ports.recents.routeOpen({ kind: shared ? "shared" : "file", fileId });
     if (activeMount !== mounted) return;
     if (!r || r.where !== "this-tab") {
       refreshRecents();
@@ -307,8 +319,8 @@ async function readRecent(fileId: string) {
     entry = await ports.recents.read(fileId);
   } catch (e) {
     if (activeMount !== mounted) return;
-    ports.notices.show("That file isn't there any more — it may have been moved or deleted. " +
-      "Use × to take it off this list.", "warn");
+    ports.notices.show(shared ? "Could not reopen this shared script. Check that its local copy is still on this device." :
+      "That file isn't there any more — it may have been moved or deleted. Use × to take it off this list.", "warn");
     refreshRecents();
     return;
   }
@@ -395,7 +407,7 @@ export function startNewTab(given: NewTabPorts): NewTabMount {
       else if (action === "gdoc") ports.actions.invoke("show-gdoc-import", "button");
       else if (action === "dismiss") closeNewTabPage();
       else if (action === "tour") { closeNewTabPage(); ports.actions.invoke("tour", "button"); }
-      else if (action === "open-recent") openRecent(target.getAttribute("data-file-id"));
+      else if (action === "open-recent") openRecent(target.getAttribute("data-file-id"), target.hasAttribute("data-shared"));
       else if (action === "forget-recent") forgetRecent(target.getAttribute("data-file-id"));
       else if (action === "clear-recents") clearRecents();
     }));

@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { backupRelay, restoreRelay } from "../../../../collab-server/backup.ts";
-import { DB_NAME, verifyDatabase } from "../../../../collab-server/storage.ts";
+import { DB_NAME, MAX_DEVICE_CREDENTIALS_PER_SCRIPT, verifyDatabase } from "../../../../collab-server/storage.ts";
 import { appendText, ORIGIN, serverHarness } from "./server-harness.ts";
 
 type Harness = ReturnType<typeof serverHarness>;
@@ -57,14 +57,18 @@ test("a protected creation rejects raw credentials from the first request, and l
   assert.equal(denied.status, 403);
   assert.equal(denied.headers.get("Access-Control-Allow-Origin"), null);
   assert.equal(denied.headers.get("Vary"), "Origin");
-  for (let attempt = 0; attempt < 4; attempt++) {
+  const guests = new Set<string>();
+  for (let attempt = 0; attempt < 12; attempt++) guests.add(await exchange(run, scriptId, guest.token, password));
+  assert.equal(guests.size, 12);
+  for (let attempt = 0; attempt < 5; attempt++) {
     const origin = attempt % 2 ? ORIGIN : secondOrigin;
     const wrong = await run.owner(path, passwordRequest("Wrong password!", "POST", origin), guest.token);
     assert.equal(wrong.status, 401);
     assert.equal(wrong.headers.get("Access-Control-Allow-Origin"), origin);
     assert.equal(wrong.headers.get("Cache-Control"), "no-store");
   }
-  const token = await exchange(run, scriptId, guest.token, password);
+  const token = guests.values().next().value;
+  assert.ok(token);
   const live = kit.copy(port, undefined, scriptId, token);
   await kit.until(() => live.relay.status().firstSyncDone || undefined);
   const capped = await run.owner(path, passwordRequest(password), guest.token);
@@ -76,6 +80,47 @@ test("a protected creation rejects raw credentials from the first request, and l
   assert.equal((await run.stop("clean")).code, 0);
   assert.ok(![run.output(), run.errors()].join("\n").includes(password), "relay logs must not disclose the password");
   assert.ok(!readFileSync(join(kit.directory, DB_NAME)).includes(password), "database must not store the plaintext password");
+});
+
+test("exchanged credentials share their link's connection quota and churn cannot evict connected devices or grow the table", async t => {
+  const kit = serverHarness(t);
+  const run = kit.launch({ SPLITPAGE_MAX_CONNECTIONS_PER_GUEST_INVITATION: "2", SPLITPAGE_TEST_REPORT_AUTH: "1" });
+  const password = "Guest quota fixture";
+  const { scriptId, owner, guest } = await run.createScriptWithCredentials(randomUUID(), kit.seed(), undefined, password);
+  assert.ok(owner && guest);
+  const port = await run.port();
+  const first = await exchange(run, scriptId, guest.token, password);
+  const unused = await exchange(run, scriptId, guest.token, password);
+  const second = await exchange(run, scriptId, guest.token, password);
+  const extra = await exchange(run, scriptId, guest.token, password);
+  const active = kit.copy(port, undefined, scriptId, first);
+  const other = kit.copy(port, undefined, scriptId, second);
+  const managing = kit.copy(port, undefined, scriptId, owner.token);
+  await kit.until(() => [active, other, managing].every(copy => copy.relay.status().firstSyncDone) || undefined);
+  const waiting = kit.copy(port, undefined, scriptId, extra);
+  await kit.until(() => waiting.events.some(event => event.kind === "temporary-refusal" && event.reason === "too-many-connections") || undefined);
+  assert.equal(waiting.relay.status().firstSyncDone, false);
+  other.close();
+  await kit.until(() => waiting.relay.status().firstSyncDone || undefined);
+  using db = new DatabaseSync(join(kit.directory, DB_NAME), { readOnly: true });
+  const rows = db.prepare("SELECT id, parent_link, revoked FROM invitations WHERE script = ? AND kind = 'device' ORDER BY rowid");
+  assert.ok(rows.all(scriptId).every(row => row.parent_link === guest.id));
+  for (let count = 4; count <= MAX_DEVICE_CREDENTIALS_PER_SCRIPT + 2; count++) {
+    await exchange(run, scriptId, guest.token, password);
+  }
+  assert.equal(rows.all(scriptId).length, MAX_DEVICE_CREDENTIALS_PER_SCRIPT);
+  await refused(kit, kit.copy(port, undefined, scriptId, unused), "permission-denied");
+  assert.equal((await run.owner(`scripts/${scriptId}/versions`, {}, first)).status, 200);
+  assert.equal((await run.owner(`scripts/${scriptId}/versions`, {}, extra)).status, 200);
+  assert.ok(active.relay.status().connected && waiting.relay.status().connected && managing.relay.status().connected);
+  const reset = await run.owner(`scripts/${scriptId}/reset`, { method: "POST" }, owner.token);
+  assert.equal(reset.status, 200);
+  const next = await reset.json() as { id: string; token: string };
+  await refused(kit, active, "access-removed");
+  await exchange(run, scriptId, next.token, password);
+  const retained = rows.all(scriptId);
+  assert.equal(retained.length, MAX_DEVICE_CREDENTIALS_PER_SCRIPT);
+  assert.deepEqual(retained.filter(row => !row.revoked).map(row => row.parent_link), [next.id]);
 });
 
 test("requiring, changing, removing and resetting a link updates guests without disconnecting either owner", async t => {
@@ -164,7 +209,8 @@ test("v5 data upgrades in place and password records survive verified backup and
   const database = join(kit.directory, DB_NAME);
   {
     using v5 = new DatabaseSync(database);
-    v5.exec(`ALTER TABLE invitations DROP COLUMN revocation_reason; ALTER TABLE invitations DROP COLUMN kind;
+    v5.exec(`DROP INDEX script_device_credentials; ALTER TABLE invitations DROP COLUMN parent_link;
+      ALTER TABLE invitations DROP COLUMN revocation_reason; ALTER TABLE invitations DROP COLUMN kind;
       DROP TABLE link_passwords; PRAGMA user_version = 5`);
     assert.equal(verifyDatabase(v5), 5);
   }
@@ -175,7 +221,7 @@ test("v5 data upgrades in place and password records survive verified backup and
   assert.equal((await run.owner(path + "/password-exchange", passwordRequest(null), guest.token)).status, 428);
   using source = new DatabaseSync(database, { readOnly: true });
   const keys = "SELECT script, salt, key FROM link_passwords";
-  assert.equal(verifyDatabase(source), 6);
+  assert.equal(verifyDatabase(source), 7);
   const record = source.prepare(keys).get();
   assert.ok(record?.salt instanceof Uint8Array && record.key instanceof Uint8Array);
   assert.equal(record.salt.byteLength, 32);
@@ -192,4 +238,37 @@ test("v5 data upgrades in place and password records survive verified backup and
   const { token } = await reset.json() as { token: string };
   assert.equal((await restored.owner(path + "/password-exchange", passwordRequest("Keep across backup"), guest.token)).status, 403);
   await exchange(restored, scriptId, token, "Keep across backup");
+});
+
+test("v6 password credentials retain their access and inherit the link quota on upgrade", async t => {
+  const kit = serverHarness(t);
+  const first = kit.launch();
+  const password = "Upgrade v6 fixture";
+  const { scriptId, owner, guest } = await first.createScriptWithCredentials(randomUUID(), kit.seed(), undefined, password);
+  assert.ok(owner && guest);
+  const device = await exchange(first, scriptId, guest.token, password);
+  await first.stop("clean");
+  const path = join(kit.directory, DB_NAME);
+  {
+    using v6 = new DatabaseSync(path);
+    v6.exec("DROP INDEX script_device_credentials; ALTER TABLE invitations DROP COLUMN parent_link; PRAGMA user_version = 6");
+    const oldDevice = v6.prepare(`INSERT INTO invitations (id, script, label, token_hash, revoked, role, kind, revocation_reason)
+      VALUES (?, ?, 'Old guest device', ?, 1, 'guest', 'device', 'access-removed')`);
+    for (let count = 0; count < MAX_DEVICE_CREDENTIALS_PER_SCRIPT + 3; count++) {
+      const id = randomUUID();
+      oldDevice.run(id, scriptId, createHash("sha256").update(id).digest());
+    }
+    assert.equal(verifyDatabase(v6), 6);
+  }
+  const upgraded = kit.launch({ SPLITPAGE_MAX_CONNECTIONS_PER_GUEST_INVITATION: "1" });
+  const port = await upgraded.port();
+  using storage = new DatabaseSync(path, { readOnly: true });
+  assert.equal(verifyDatabase(storage), 7);
+  assert.equal(storage.prepare("SELECT parent_link FROM invitations WHERE kind = 'device' AND revoked = 0").get()?.parent_link, guest.id);
+  assert.equal(storage.prepare("SELECT count(*) AS count FROM invitations WHERE kind = 'device'").get()?.count,
+    MAX_DEVICE_CREDENTIALS_PER_SCRIPT);
+  const peer = kit.copy(port, undefined, scriptId, device);
+  await kit.until(() => peer.relay.status().firstSyncDone || undefined);
+  const another = kit.copy(port, undefined, scriptId, await exchange(upgraded, scriptId, guest.token, password));
+  await kit.until(() => another.events.some(event => event.kind === "temporary-refusal" && event.reason === "too-many-connections") || undefined);
 });

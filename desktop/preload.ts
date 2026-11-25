@@ -2,7 +2,7 @@
 
 import type { DesktopPort, DesktopFileEntry } from "../src/adapters/desktop/desktop-port.ts";
 import type { DesktopChannel } from "./ipc-channels.ts";
-import type { DesktopChannelRow, DesktopIpcArgs, DesktopIpcContract, DesktopIpcReceiveArgs, DesktopIpcResult } from "../shared/desktop-contract.d.ts";
+import type { DesktopChannelRow, DesktopIpcArgs, DesktopIpcContract, DesktopIpcReceiveArgs, DesktopIpcResult, DesktopWireLaunch } from "../shared/desktop-contract.d.ts";
 
 type PreloadChannelName<D extends DesktopChannelRow["direction"]> = Extract<DesktopChannel, { direction: D }>["name"];
 declare const SPLITPAGE_COLLAB_UI: boolean;
@@ -117,9 +117,10 @@ if (location.origin === "splitpage://app") {
   const boot: Partial<NonNullable<DesktopIpcResult<"splitpage:tab-boot-sync">>> = sendSync("splitpage:tab-boot-sync") || {};
   const tabId = typeof boot.tabId === "string" ? boot.tabId : null;
   const windowId = typeof boot.windowId === "string" ? boot.windowId : null;
-  const launchIntent = boot.launchIntent && typeof boot.launchIntent === "object"
+  const launchIntent: DesktopWireLaunch = boot.launchIntent && typeof boot.launchIntent === "object"
     ? { type: String(boot.launchIntent.type || "blank") }
     : { type: "blank" };
+  if (SPLITPAGE_COLLAB_UI && launchIntent.type === "open-shared" && boot.launchIntent?.shared) launchIntent.shared = boot.launchIntent.shared;
   const hadPriorSession = boot.hadPriorSession === true;
   const firstTabOfLaunch = boot.firstTabOfLaunch === true;
   const hasDraftToRestore = boot.hasDraftToRestore === true;

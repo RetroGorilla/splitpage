@@ -124,7 +124,9 @@ export function verifyCopy(source: DatabaseSync, copy: DatabaseSync): void {
     ? "SELECT name, status, untouched FROM scripts ORDER BY name"
     : "SELECT name, status FROM scripts ORDER BY name");
   if (version >= 3) verifyRows(source, copy, "script pictures", "SELECT script, sha, bytes, mime FROM script_pictures ORDER BY script, sha");
-  verifyRows(source, copy, "invitations", version >= 6
+  verifyRows(source, copy, "invitations", version >= 7
+    ? "SELECT id, script, label, token_hash, revoked, role, creation_id, kind, revocation_reason, parent_link FROM invitations ORDER BY id"
+    : version >= 6
     ? "SELECT id, script, label, token_hash, revoked, role, creation_id, kind, revocation_reason FROM invitations ORDER BY id"
     : version >= 4
     ? "SELECT id, script, label, token_hash, revoked, role, creation_id FROM invitations ORDER BY id"

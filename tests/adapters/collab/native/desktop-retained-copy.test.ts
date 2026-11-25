@@ -6,11 +6,18 @@ import { join } from "node:path";
 import { createRequire } from "node:module";
 import { test } from "node:test";
 import type { createNativeReplicaFiles as CreateFiles } from "../../../../desktop/native-replica-files.ts";
+import { readNativeMembership } from "../../../../shared/native-membership.ts";
 import { desktopFixture, desktopTestCipher, replicaFileFaults, replicasAt } from "./desktop-local-store-fixture.ts";
 import { seedReplica, STORE_OPTIONS } from "./local-store-fixture.ts";
 
 const { createNativeReplicaFiles }: { createNativeReplicaFiles: typeof CreateFiles } =
   createRequire(import.meta.url)("../../../../desktop/native-replica-files.ts");
+
+test("a guest record ignores stale owner password settings and retains both credentials", () => {
+  const record = { token: "device-token", guestLinkToken: "link-token", role: "guest" };
+  assert.deepEqual(readNativeMembership({ ...record, linkPasswordRequired: true }), record);
+  assert.deepEqual(readNativeMembership({ ...record, linkPasswordRequired: "true" }), record);
+});
 
 test("the desktop store opens an old encrypted single-token record as a guest", async t => {
   const { directory, store } = await desktopFixture(t);

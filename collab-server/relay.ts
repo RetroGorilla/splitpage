@@ -59,6 +59,12 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     maxConnections, maxConnectionsPerInvitation, maxConnectionsPerGuestInvitation, maxMessagesPerSecond, maxUploadsInFlight,
     versions: versionOptions
   } = relayConfig(env);
+  const limits = createRelayLimits({
+    maxConnections,
+    maxConnectionsPerInvitation,
+    maxConnectionsPerGuestInvitation,
+    maxMessagesPerSecond
+  });
   const lock = claimWriter(directory);
   let db: ReturnType<typeof openWriter> | undefined;
   let pictures: ReturnType<typeof pictureApi>;
@@ -67,7 +73,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   let history: ReturnType<typeof versionHistory>;
   try {
     db = openWriter(directory);
-    access = scriptAccess(db);
+    access = scriptAccess(db, limits.hasConnectedInvitation);
     pictures = pictureApi(db, directory, access, origins, maxUploadsInFlight);
     versions = versionStorage(db);
     history = versionHistory(versions, directory, versionOptions);
@@ -94,17 +100,11 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     db?.close();
     lock.close();
   }
-  const limits = createRelayLimits({
-    maxConnections,
-    maxConnectionsPerInvitation,
-    maxConnectionsPerGuestInvitation,
-    maxMessagesPerSecond
-  });
   const load = db.prepare("SELECT state FROM documents WHERE name = ?");
   const size = db.prepare("SELECT length(state) AS bytes FROM documents WHERE name = ?");
   const write = db.prepare(`INSERT INTO documents (name, state, version_generation) VALUES (?, ?, 1)
     ON CONFLICT(name) DO UPDATE SET state = excluded.state, version_generation = documents.version_generation + 1`);
-  type Admission = { invitationId: string; role: InvitationRole; reservationId?: string };
+  type Admission = { invitationId: string; quotaId: string; role: InvitationRole; reservationId?: string };
   const storage = new Database({
     async fetch({ documentName }) {
       try {
@@ -253,17 +253,23 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       if (requestParameters.getAll("wire").join(",") !== "1" || requestParameters.getAll("schema").join(",") !== "1") {
         throw { reason: "unsupported-version" };
       }
-      const { id: invitationId, role } = access.authenticate(documentName, token);
-      if (!limits.hasInvitationCapacity(invitationId, role)) throw { reason: "too-many-connections" };
+      const { id: invitationId, parentLinkId, role } = access.authenticate(documentName, token);
+      const quotaId = parentLinkId ?? invitationId;
+      if (!limits.hasInvitationCapacity(quotaId, role)) throw { reason: "too-many-connections" };
       const loading = instance.loadingDocuments.get(documentName);
       const live = instance.documents.get(documentName) ?? (loading ? await loading : undefined);
       if (loading) access.authenticate(documentName, token);
       const bytes = live ? encodeStateAsUpdate(live).byteLength : Number(size.get(documentName)?.bytes ?? 0);
       connectionConfig.readOnly = bytes >= DOCUMENT_BYTES;
-      return { invitationId, role };
+      return { invitationId, quotaId, role };
     },
     async connected({ context, connection }) {
-      const reservationId = limits.tryAdmitInvitation(context.invitationId, context.role);
+      const reason = access.refusal(context.invitationId);
+      if (reason) {
+        connection.close({ code: 4403, reason });
+        return;
+      }
+      const reservationId = limits.tryAdmitInvitation(context.quotaId, context.role, context.invitationId);
       if (!reservationId) {
         connection.close({ code: 4429, reason: "too-many-connections" });
         return;
@@ -272,8 +278,6 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       connection.onClose(() => {
         limits.releaseInvitation(reservationId);
       });
-      const reason = access.refusal(context.invitationId);
-      if (reason) connection.close({ code: 4403, reason });
     },
     async onDisconnect({ context }) {
       if (context?.reservationId) limits.releaseInvitation(context.reservationId);

@@ -7,6 +7,7 @@ const MESSAGES: Record<Exclude<ShareAttemptResult["kind"], "shared" | "not-confi
   "document-changed": "The script changed during upload. Open Share again to share the current script.",
   unreachable: "Could not reach the relay. Try again when it’s available.",
   failed: "Could not share this script. Try again.",
+  "password-mismatch": "Could not confirm the link password settings. Check that the relay is up to date and try again.",
   "already-used": "Someone is already using the earlier upload. Try again to share a new copy.",
   "too-large": "This script exceeds the 15 MB sharing limit."
 };

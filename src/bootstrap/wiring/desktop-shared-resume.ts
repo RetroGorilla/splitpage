@@ -14,34 +14,43 @@ declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 export async function resumeDesktopReference(
   reference: NonNullable<DesktopPort["sharedReference"]>,
   open: (saved: DesktopSharedScriptReference) => Promise<SharedSwitchOutcome>,
-  signal: AbortSignal
+  signal: AbortSignal,
+  clearFailedRestore = false
 ): Promise<SharedSwitchOutcome | null> {
   const saved = await reference([]);
   if (!saved || typeof saved !== "object" || signal.aborted) return null;
-  const outcome = await open(saved);
-  if (!outcome.ok && outcome.reason === RETAINED_SHARED_COPY_UNAVAILABLE && !signal.aborted) {
-    await reference([null, saved]).catch(() => false);
+  let outcome: SharedSwitchOutcome | undefined;
+  try {
+    outcome = await open(saved);
+    return outcome;
+  } finally {
+    const unavailable = outcome?.ok === false && outcome.reason === RETAINED_SHARED_COPY_UNAVAILABLE;
+    if (!signal.aborted && (unavailable || (clearFailedRestore && outcome?.ok !== true))) {
+      await reference([null, saved]).catch(() => false);
+    }
   }
-  return outcome;
 }
 
 function startResume(enter: (entry: RetainedSharedScript) => Promise<SharedSwitchOutcome>): () => void {
-  const reference = desktopPort()?.sharedReference;
+  const desktop = desktopPort();
+  const reference = desktop?.sharedReference;
   const ready = startupReady();
   if (!reference || !ready) return () => {};
   const lifetime = new AbortController();
   const { signal } = lifetime;
   void resumeDesktopReference(reference, async ({ deployment, script, address }) => {
     await waitDuringLifetime(ready, signal);
-    await waitDuringLifetime(captureDocumentOpeningLifetime().settled, signal);
-    signal.throwIfAborted();
+    const opening = captureDocumentOpeningLifetime();
+    const entrySignal = AbortSignal.any([signal, opening.signal]);
+    await waitDuringLifetime(opening.settled, entrySignal);
+    entrySignal.throwIfAborted();
     let endpoint: URL;
     try { endpoint = new URL(address); }
     catch { return { ok: false, reason: RETAINED_SHARED_COPY_UNAVAILABLE }; }
     if (endpoint.protocol !== "https:" && endpoint.protocol !== "http:") return { ok: false, reason: RETAINED_SHARED_COPY_UNAVAILABLE };
     endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
-    return enter({ deployment, script, relayUrl: endpoint.href, signal });
-  }, signal).then(outcome => {
+    return enter({ deployment, script, relayUrl: endpoint.href, signal: entrySignal });
+  }, signal, desktop.launchIntent.type === "open-shared").then(outcome => {
     if (outcome?.ok === false && !signal.aborted) notices.show("Could not reopen the local shared script.", "warn", true);
   }, error => { if (!signal.aborted) console.error(error); });
   return () => { lifetime.abort(); };

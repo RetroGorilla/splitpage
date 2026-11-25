@@ -318,7 +318,13 @@ function createShareCreations(userData: string, owner: ReturnType<typeof createR
       try { created = decodeCreation(await response.json(), address, response.headers.get("Splitpage-Deployment")); }
       catch { return { kind: "unreachable" }; }
       if (created.kind === "created") {
-        if (!!created.passwordRequired !== (password !== undefined)) return { kind: "failed" };
+        if (!!created.passwordRequired !== (password !== undefined)) {
+          if (entry.replica) await eraseReplica(entry.replica);
+          queueAbandon(journal, entry);
+          tabs.delete(creationId);
+          await sendAbandon(journal, entry.relay, creationId);
+          return { kind: "password-mismatch" };
+        }
         entry.replica = created.deployment + "/" + created.scriptId;
         writeJournal(journal);
       }

@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from "no
 import type { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import { RelayError } from "./config.ts";
+import { MAX_DEVICE_CREDENTIALS_PER_SCRIPT } from "./storage.ts";
 
 export type InvitationRole = "owner" | "guest";
 type InvitationKind = "invitation" | "link" | "device";
@@ -30,6 +31,7 @@ export interface ScriptSummary {
 export interface AuthenticatedInvitation {
   readonly id: string;
   readonly role: InvitationRole;
+  readonly parentLinkId?: string;
 }
 
 export interface CreationRecord {
@@ -48,9 +50,9 @@ function hashesMatch(stored: unknown, candidate: Uint8Array): boolean {
   return stored instanceof Uint8Array && Buffer.compare(stored, candidate) === 0;
 }
 
-export function scriptAccess(db: DatabaseSync) {
+export function scriptAccess(db: DatabaseSync, isConnected: (id: string) => boolean = () => false) {
   const state = db.prepare("SELECT status, untouched FROM scripts WHERE name = ?");
-  const match = db.prepare("SELECT id, revoked, role, kind, revocation_reason FROM invitations WHERE token_hash = ? AND script = ?");
+  const match = db.prepare("SELECT id, revoked, role, kind, revocation_reason, parent_link FROM invitations WHERE token_hash = ? AND script = ?");
   const connection = db.prepare(`SELECT status, revoked, kind, revocation_reason, link_passwords.script AS protected
     FROM invitations JOIN scripts ON scripts.name = invitations.script
     LEFT JOIN link_passwords ON link_passwords.script = scripts.name WHERE invitations.id = ?`);
@@ -59,14 +61,20 @@ export function scriptAccess(db: DatabaseSync) {
     ON CONFLICT(script) DO UPDATE SET salt = excluded.salt, key = excluded.key`);
   const erasePassword = db.prepare("DELETE FROM link_passwords WHERE script = ?");
   const register = db.prepare("INSERT INTO scripts (name, status, untouched) VALUES (?, ?, ?)");
-  const issueRow = db.prepare("INSERT INTO invitations (id, script, label, token_hash, role, creation_id, kind) VALUES (?, ?, ?, ?, ?, ?, ?)");
-  const revoke = db.prepare("UPDATE invitations SET revoked = 1, revocation_reason = NULL WHERE id = ?");
+  const issueRow = db.prepare(`INSERT INTO invitations (id, script, label, token_hash, role, creation_id, kind, parent_link)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  const revoke = db.prepare(`UPDATE invitations SET revoked = 1,
+    revocation_reason = CASE WHEN kind = 'device' THEN 'access-removed' END
+    WHERE id = ? OR parent_link = ?`);
   const revokeCreation = db.prepare("UPDATE invitations SET revoked = 1 WHERE script = ? AND creation_id = ? AND revoked = 0");
   const revokeGuests = db.prepare(`UPDATE invitations SET revoked = 1,
     revocation_reason = CASE WHEN kind IN ('link', 'device') THEN 'access-removed' ELSE NULL END
     WHERE script = ? AND role = 'guest' AND (revoked = 0 OR revocation_reason = 'password-changed')`);
   const revokeDevices = db.prepare(`UPDATE invitations SET revoked = 1, revocation_reason = 'password-changed'
     WHERE script = ? AND kind = 'device' AND revoked = 0`);
+  const deviceRows = db.prepare(`SELECT id FROM invitations WHERE script = ? AND kind = 'device'
+    ORDER BY CASE WHEN revoked = 0 THEN 2 WHEN revocation_reason = 'password-changed' THEN 1 ELSE 0 END, rowid`);
+  const pruneDevice = db.prepare("DELETE FROM invitations WHERE id = ? AND kind = 'device'");
   const revokeAll = db.prepare("UPDATE invitations SET revoked = 1 WHERE script = ? AND revoked = 0");
   const clearUntouched = db.prepare("UPDATE scripts SET untouched = 0 WHERE name = ? AND untouched = 1");
   const remove = db.prepare("UPDATE scripts SET status = 'deleted', untouched = 0 WHERE name = ?");
@@ -82,10 +90,10 @@ export function scriptAccess(db: DatabaseSync) {
   const listScriptsQuery = db.prepare("SELECT name, status, untouched FROM scripts ORDER BY name");
 
   function mintInvitation(name: string, label: string, role: InvitationRole, creationId: string | null,
-    kind: InvitationKind = "invitation"): IssuedInvitation {
+    kind: InvitationKind = "invitation", parentLink: string | null = null): IssuedInvitation {
     const id = randomUUID();
     const token = randomBytes(32).toString("base64url");
-    issueRow.run(id, name, label, tokenHash(token), role, creationId, kind);
+    issueRow.run(id, name, label, tokenHash(token), role, creationId, kind, parentLink);
     return { id, token, role };
   }
 
@@ -115,9 +123,10 @@ export function scriptAccess(db: DatabaseSync) {
     return row.kind === "link" && row.protected ? "password-changed" : null;
   }
 
-  function activeLink(name: string, token: string): boolean {
+  function activeLinkId(name: string, token: string): string | null {
     const invitation = match.get(tokenHash(token), name);
-    return invitation?.kind === "link" && invitation.revoked === 0 && state.get(name)?.status === "active";
+    return invitation?.kind === "link" && invitation.revoked === 0 && state.get(name)?.status === "active"
+      ? String(invitation.id) : null;
   }
 
   return {
@@ -230,7 +239,10 @@ export function scriptAccess(db: DatabaseSync) {
           else if (invitation.kind === "link" && password.get(name)) failure = { reason: "password-changed" };
           else {
             clearUntouched.run(name);
-            result = { id: String(invitation.id), role: invitation.role as InvitationRole };
+            result = {
+              id: String(invitation.id), role: invitation.role as InvitationRole,
+              ...(typeof invitation.parent_link === "string" && { parentLinkId: invitation.parent_link })
+            };
           }
         }
         db.exec("COMMIT");
@@ -278,15 +290,40 @@ export function scriptAccess(db: DatabaseSync) {
     isValid(id: string): boolean {
       return refusal(id) === null;
     },
-    activeLink,
+    activeLink(name: string, token: string): boolean {
+      return activeLinkId(name, token) !== null;
+    },
     hasPassword(name: string): boolean {
       return password.get(name) !== undefined;
     },
-    async exchange(name: string, token: string, value: string, stored: LinkPasswordKey): Promise<string | null> {
+    async exchange(name: string, token: string, value: string, stored: LinkPasswordKey) {
       const key = await passwordKey(value, stored.salt);
-      if (!activeLink(name, token) || !hashesMatch(readPassword(name)?.salt, stored.salt) || !timingSafeEqual(stored.key, key)) return null;
-      clearUntouched.run(name);
-      return mintInvitation(name, "Guest device", "guest", null, "device").token;
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const parent = activeLinkId(name, token);
+        const samePassword = parent && hashesMatch(readPassword(name)?.salt, stored.salt);
+        if (!samePassword || !timingSafeEqual(stored.key, key)) {
+          db.exec("COMMIT");
+          return { kind: parent ? samePassword ? "wrong-password" : "stale-password" : "invalid-link" } as const;
+        }
+        const devices = deviceRows.all(name);
+        const excess = devices.length - MAX_DEVICE_CREDENTIALS_PER_SCRIPT + 1;
+        if (excess > 0) {
+          const evictable = devices.map(row => String(row.id)).filter(id => !isConnected(id)).slice(0, excess);
+          if (evictable.length < excess) {
+            db.exec("COMMIT");
+            return { kind: "device-limit" } as const;
+          }
+          for (const id of evictable) pruneDevice.run(id);
+        }
+        clearUntouched.run(name);
+        const device = mintInvitation(name, "Guest device", "guest", null, "device", parent);
+        db.exec("COMMIT");
+        return { kind: "exchanged", token: device.token } as const;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
     },
     readPassword,
     async changePassword(name: string, token: string | null, value: string | null): Promise<boolean> {
@@ -353,7 +390,7 @@ export function scriptAccess(db: DatabaseSync) {
       return issued;
     },
     revoke(id: string): boolean {
-      return revoke.run(id).changes !== 0;
+      return revoke.run(id, id).changes !== 0;
     },
     deleteScript(name: string): boolean {
       db.exec("BEGIN IMMEDIATE");

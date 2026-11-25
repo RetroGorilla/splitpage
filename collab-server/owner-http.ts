@@ -106,11 +106,11 @@ async function creationBody(request: IncomingMessage, limit: number): Promise<{ 
 export function ownerRequests(secret: string | undefined, limit: number, commands: Commands, deployment?: string,
   origins: ReadonlySet<string> = new Set()) {
   const authorize = managementAuthorizer(secret);
-  const attempts = new Map<string, { remaining: number; until: number }>();
+  const attempts = new Map<string, { failures: number; until: number }>();
   let exchangesInFlight = 0;
   let nextSweep = 0;
   const attemptPeriod = 60_000;
-  function takeAttempt(name: string): boolean {
+  function attemptWindow(name: string) {
     const now = Date.now();
     if (now >= nextSweep) {
       for (const [script, record] of attempts) if (record.until <= now) attempts.delete(script);
@@ -118,12 +118,10 @@ export function ownerRequests(secret: string | undefined, limit: number, command
     }
     let record = attempts.get(name);
     if (!record || record.until <= now) {
-      record = { remaining: 5, until: now + attemptPeriod };
+      record = { failures: 0, until: now + attemptPeriod };
       attempts.set(name, record);
     }
-    if (!record.remaining) return false;
-    record.remaining -= 1;
-    return true;
+    return record;
   }
   return async (request: IncomingMessage, response: ServerResponse): Promise<boolean> => {
     const path = request.url?.split("?")[0] ?? "";
@@ -158,18 +156,24 @@ export function ownerRequests(secret: string | undefined, limit: number, command
         if (!request.complete || response.destroyed) return true;
         if (!commands.activeLink(name, token)) throw new RequestError(403);
         const stored = commands.readPassword(name);
+        const attempt = stored && value !== null ? attemptWindow(name) : undefined;
         if (!stored) reply(200, { token });
         else if (value === null) reply(428);
-        else if (exchangesInFlight >= 8 || !takeAttempt(name)) {
+        else if (exchangesInFlight >= 8 || (attempt && attempt.failures >= 5)) {
           response.setHeader("Retry-After", "60");
           reply(429);
         } else {
           exchangesInFlight += 1;
           try {
-            const device = await commands.exchange(name, token, value, stored);
-            if (!commands.activeLink(name, token)) throw new RequestError(403);
-            if (device) reply(200, { token: device });
-            else reply(401);
+            const result = await commands.exchange(name, token, value, stored);
+            if (result.kind === "exchanged") reply(200, { token: result.token });
+            else if (result.kind === "wrong-password") {
+              if (attempt) attempt.failures += 1;
+              reply(401);
+            } else if (result.kind === "device-limit") {
+              response.setHeader("Retry-After", "5");
+              reply(429);
+            } else reply(result.kind === "invalid-link" ? 403 : 409);
           } finally { exchangesInFlight -= 1; }
         }
         return true;

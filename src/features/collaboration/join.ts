@@ -90,6 +90,7 @@ export function mountJoinDialog(ports: JoinDialogPorts, request?: Extract<JoinRe
     cancel.focus();
     const result = await ports.check(invite, signal, value);
     if (signal.aborted) return;
+    if (result.kind === "focused") { dispose(); return; }
     setBusy(false);
     if (result.kind === "failed") {
       if (result.reason === "password-changed" || result.reason === "wrong-password" || result.reason === "password-rate-limited"

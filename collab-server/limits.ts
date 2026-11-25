@@ -25,7 +25,8 @@ export function createRelayLimits(config: RelayLimitsConfig, now = () => perform
   const socketsByKey = new Map<string, Set<Duplex>>();
   const socketIdsBySocket = new Map<Duplex, Set<string>>();
   const byInvitation = new Map<string, Set<string>>();
-  const reservations = new Map<string, string>();
+  const reservations = new Map<string, { quotaId: string; invitationId: string }>();
+  const connectedByInvitation = new Map<string, number>();
   const messageWindows = new Map<string, number[]>();
 
   function invitationLimit(role: InvitationRole): number {
@@ -33,13 +34,17 @@ export function createRelayLimits(config: RelayLimitsConfig, now = () => perform
   }
 
   function releaseReservation(reservationId: string): void {
-    const invitationId = reservations.get(reservationId);
-    if (!invitationId) return;
+    const reservation = reservations.get(reservationId);
+    if (!reservation) return;
+    const { quotaId, invitationId } = reservation;
     reservations.delete(reservationId);
-    const inviteSet = byInvitation.get(invitationId);
+    const connected = connectedByInvitation.get(invitationId) ?? 0;
+    if (connected <= 1) connectedByInvitation.delete(invitationId);
+    else connectedByInvitation.set(invitationId, connected - 1);
+    const inviteSet = byInvitation.get(quotaId);
     if (inviteSet) {
       inviteSet.delete(reservationId);
-      if (inviteSet.size === 0) byInvitation.delete(invitationId);
+      if (inviteSet.size === 0) byInvitation.delete(quotaId);
     }
   }
 
@@ -84,14 +89,18 @@ export function createRelayLimits(config: RelayLimitsConfig, now = () => perform
       const current = byInvitation.get(invitationId);
       return !current || current.size < invitationLimit(role);
     },
-    tryAdmitInvitation(invitationId: string, role: InvitationRole): string | null {
-      const current = byInvitation.get(invitationId);
+    tryAdmitInvitation(quotaId: string, role: InvitationRole, invitationId = quotaId): string | null {
+      const current = byInvitation.get(quotaId);
       if (current && current.size >= invitationLimit(role)) return null;
       const reservationId = randomUUID();
       if (current) current.add(reservationId);
-      else byInvitation.set(invitationId, new Set([reservationId]));
-      reservations.set(reservationId, invitationId);
+      else byInvitation.set(quotaId, new Set([reservationId]));
+      reservations.set(reservationId, { quotaId, invitationId });
+      connectedByInvitation.set(invitationId, (connectedByInvitation.get(invitationId) ?? 0) + 1);
       return reservationId;
+    },
+    hasConnectedInvitation(invitationId: string): boolean {
+      return connectedByInvitation.has(invitationId);
     },
     releaseInvitation(reservationId: string): void {
       releaseReservation(reservationId);

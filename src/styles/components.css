@@ -2254,6 +2254,13 @@ body:has(> .writer:not([hidden])) .tagging-help { z-index: 147; }
   display: flex; min-width: 0;
   font-family: var(--font-display); font-size: 12px; line-height: 16px; color: var(--text-faint);
 }
+
+.recent-shared-badge {
+  display: inline-block;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0 0.35em;
+}
 .newtab-recent-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .newtab-recent-when { flex: none; font-size: 13px; line-height: 16px; color: var(--text-faint); }
 .newtab-recents-empty { padding: 17px var(--space-4) 18px; font-size: 13px; color: var(--text-dim); }

@@ -6,7 +6,7 @@ export function readNativeMembership(value: unknown): NativeMembershipRecord | n
   const { token, role, guestLinkToken, linkPasswordRequired } = value as Partial<NativeMembershipRecord>;
   if (typeof token !== "string" || !token || (role !== "owner" && role !== "guest")) return null;
   if (guestLinkToken !== undefined && (typeof guestLinkToken !== "string" || !guestLinkToken)) return null;
-  if (linkPasswordRequired !== undefined && (role !== "owner" || typeof linkPasswordRequired !== "boolean")) return null;
+  if (role === "owner" && linkPasswordRequired !== undefined && typeof linkPasswordRequired !== "boolean") return null;
   return { token, role, ...(guestLinkToken && { guestLinkToken }),
-    ...(linkPasswordRequired !== undefined && { linkPasswordRequired }) };
+    ...(role === "owner" && linkPasswordRequired !== undefined && { linkPasswordRequired }) };
 }

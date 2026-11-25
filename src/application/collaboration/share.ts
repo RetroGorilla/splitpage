@@ -6,7 +6,7 @@ import { utf8Bytes } from "../../core/document/ids.ts";
 type Created = Extract<ShareScriptCreation, { kind: "created" }>;
 export type ShareAttemptResult =
   | { readonly kind: "shared"; readonly link: string }
-  | { readonly kind: "cancelled" | "document-changed" | "not-configured" | "unreachable" | "failed" | "already-used" | "too-large" };
+  | { readonly kind: "cancelled" | "document-changed" | "not-configured" | "unreachable" | "failed" | "already-used" | "too-large" | "password-mismatch" };
 
 export interface ShareAttemptPorts {
   readonly operations: Operations;
@@ -72,6 +72,7 @@ export function createShareAttempt(ports: ShareAttemptPorts) {
       }
       if (created.kind !== "created") {
         if (created.kind === "already-used") await discard(attempt);
+        if (created.kind === "password-mismatch") previous = undefined;
         return created;
       }
       switching();

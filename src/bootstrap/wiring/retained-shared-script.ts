@@ -1,5 +1,5 @@
 import { createBrowserNativeLocalStore } from "../../adapters/collab/native/browser-local-store.ts";
-import { createDesktopNativeLocalStore } from "../../adapters/collab/native/desktop-local-store.ts";
+import { createDesktopNativeLocalStore, noteDesktopSharedScript } from "../../adapters/collab/native/desktop-local-store.ts";
 import type { NativeInvitationStage, NativeLocalStoreOpen, NativeLocalStoreReceipt } from "../../adapters/collab/native/local-store.ts";
 import { applyNativePeerUpdate } from "../../adapters/collab/native/peer-update.ts";
 import { openNativeSession } from "../../adapters/collab/native/session.ts";
@@ -15,6 +15,7 @@ import { guardUnload, waitDuringLifetime } from "../startup/page-lifetime.ts";
 import { collaborationState, setSharedRetryLocalWrite } from "./collaboration-owner.ts";
 import { notifyDesktopDocumentState, trackSharedDesktopUnsaved } from "./desktop-owners.ts";
 import { notices } from "./ports/effects.ts";
+import { browserSharedCatalogue } from "./ports/shared-scripts.ts";
 import { bindNativeEditor } from "./native-shared-session.ts";
 import { bindSharedPictures } from "./shared-picture-session.ts";
 import { holdSessionCommands, sessionEntryRefusal, sharedSession } from "./session-owner.ts";
@@ -27,7 +28,7 @@ declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 const desktopSharing = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI
   ? () => {
     const desktop = desktopPort();
-    return { manage: desktop?.manageSharing, reference: desktop?.sharedReference, status: desktop?.relayOwner?.status };
+    return { manage: desktop?.manageSharing, status: desktop?.relayOwner?.status };
   }
   : () => undefined;
 const exchangePassword = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI ? exchangeLinkPassword : null;
@@ -561,7 +562,13 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
             }
             pictureBinding?.retryStorage();
           });
-          if (desktop) stopDesktop = trackSharedDesktopUnsaved(replica.hasUnstoredChanges);
+          if (desktop) stopDesktop = trackSharedDesktopUnsaved(replica.hasUnstoredChanges, async () => {
+            try {
+              const refusal = backend.settle(false);
+              const saved = !replica.hasUnstoredChanges() || (await replica.flush()).kind === "stored";
+              return { ok: !refusal && saved && !replica.hasUnstoredChanges() };
+            } catch { return { ok: false }; }
+          });
           stopChanges = replica.session.subscribe(() => {
             if (pendingSyncQueued) return;
             pendingSyncQueued = true;
@@ -593,15 +600,16 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       staged?.commit();
       localCopy = prepared.replica;
       active = true;
+      if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && entry.relayUrl) {
+        const { deployment, script } = entry;
+        const details = { deployment, script, relayUrl: new URL(entry.relayUrl).href, title: prepared.replica.session.document().title };
+        try {
+          if (desktop) await noteDesktopSharedScript(desktop.nativeReplica, { ...details, at: Date.now() });
+          else await browserSharedCatalogue().note(details);
+        } catch { notices.show("Could not remember this shared script for reopening.", "warn"); }
+      }
       try { connectCreated?.(); }
       catch { notices.show("Could not connect to the shared script right now.", "warn"); }
-      if (pictureOrigin && entry.relayUrl && sharing?.reference) {
-        try {
-          if (await sharing.reference([{ deployment: entry.deployment, script: entry.script, address: pictureOrigin }]) !== true) {
-            throw new Error("Could not keep the shared script reference.");
-          }
-        } catch { notices.show("This computer could not remember which shared script to reopen.", "warn"); }
-      }
     }
     return outcome;
   } catch {
@@ -622,10 +630,7 @@ export async function leaveRetainedSharedScript(): Promise<SharedSwitchOutcome> 
   const outcome = leaveRunningSharedSession();
   if (!outcome.ok) return outcome;
   // why: only the closing writer may erase this copy, before its lease is released
-  const discarded = copy.discardOnClose?.();
-  const clear = desktopSharing()?.reference;
-  const cleared = clear ? await clear([null]).catch(() => false) : true;
-  return await discarded && cleared === true ? { ok: true } : { ok: false, reason: "shared-copy-erase-failed" };
+  return await copy.discardOnClose?.() ? { ok: true } : { ok: false, reason: "shared-copy-erase-failed" };
 }
 
 export function retainedSharedScriptActive(): boolean {
