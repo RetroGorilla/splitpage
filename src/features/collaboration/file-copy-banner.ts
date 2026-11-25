@@ -6,7 +6,10 @@ export function mountFileCopyBanner(ports: FileCopyBannerPorts): () => void {
   const banner = document.createElement("div");
   banner.id = "file-copy-banner";
   banner.className = "notice notice-save-error";
+  banner.setAttribute("role", "region");
+  banner.setAttribute("aria-label", "Shared script file copy");
   const body = document.createElement("div");
+  body.id = "file-copy-message";
   body.className = "notice-body";
   body.setAttribute("role", "status");
   const actions = document.createElement("div");
@@ -20,6 +23,7 @@ export function mountFileCopyBanner(ports: FileCopyBannerPorts): () => void {
     button.type = "button";
     button.className = "btn";
     button.textContent = label;
+    button.setAttribute("aria-describedby", body.id);
     button.onclick = async () => {
       busy = true;
       sync();

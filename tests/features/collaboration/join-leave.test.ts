@@ -3,7 +3,48 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mountJoinDialog } from "../../../src/features/collaboration/join.ts";
 import { mountLeaveDialog } from "../../../src/features/collaboration/leave.ts";
+import { mountShareDialog } from "../../../src/features/collaboration/mount.ts";
+import { mountPasswordDialog } from "../../../src/features/collaboration/password-dialog.ts";
 import { PERSON_COLORS } from "../../../src/core/document/person-colors.ts";
+
+for (const [name, mount, first, last] of [
+  ["Join", () => mountJoinDialog({
+    editor: () => "Anonymous",
+    identity: { myColor: () => "", setCommentAuthor() {}, setMyColor() {} },
+    check: async () => ({ kind: "failed", reason: "bad-link" }), settled() {}
+  }).dispose, "#join-script-link", "[type=submit]"],
+  ["Leave", () => mountLeaveDialog({ leave: async () => true, saveCopy: async () => true }).dispose,
+    "[data-dialog-cancel]", "[data-leave-script]"],
+  ["Share", () => mountShareDialog({
+    address: async () => null, share: async () => ({ kind: "not-configured" }), copy: async () => {}, settings() {}
+  }), "[data-share=close]", "[data-share=close]"],
+  ["Password", () => mountPasswordDialog({ title: "Change password", submit: "Save password", save: async () => null }).dispose,
+    "input", "[type=submit]"]
+] as const) {
+  test(name + " wraps Tab and restores the trigger on Escape", t => {
+    const trigger = document.createElement("button");
+    document.body.append(trigger);
+    t.after(() => trigger.remove());
+    trigger.focus();
+    const dispose = mount();
+    t.after(dispose);
+    const dialog = document.querySelector('[role="dialog"]');
+    assert.ok(dialog);
+    assert.equal(dialog.getAttribute("aria-modal"), "true");
+    const view = document.defaultView;
+    assert.ok(view);
+    const key = (key: string, shiftKey = false) => document.activeElement?.dispatchEvent(
+      new view.KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
+    assert.equal(document.activeElement, dialog.querySelector(first));
+    key("Tab", true);
+    assert.equal(document.activeElement, dialog.querySelector(last));
+    key("Tab");
+    assert.equal(document.activeElement, dialog.querySelector(first));
+    key("Escape");
+    assert.equal(dialog.isConnected, false);
+    assert.equal(document.activeElement, trigger);
+  });
+}
 
 test("the Join screen shows the preview, saves identity and cancels the active download", async t => {
   const names: string[] = [], colours: (string | null)[] = [];

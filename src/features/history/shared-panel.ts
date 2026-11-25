@@ -3,6 +3,7 @@ import type { NoticePort } from "../../application/effects/ports.ts";
 import { escapeHtml, storedImageMarkup } from "../../core/document/text-policy.ts";
 import { normalizeImageRef } from "../../../shared/blob-policy.ts";
 import { toHtml } from "../../core/text/html.ts";
+import { handleDialogKey, restoreDialogFocus } from "../common/dialog-focus.ts";
 
 const OFFLINE = "You are offline. Connect to see shared versions.";
 
@@ -13,9 +14,47 @@ export function createSharedHistoryPanel(ports: SharedHistoryPanelPort, formatTi
   let versions: readonly SharedHistoryVersion[] = [];
   let source: SharedHistorySource | null = null;
   let online = false, active = false;
+  let endFocus: (() => void) | undefined;
+  let restore: (() => void) | undefined;
+  let versionId: string | undefined;
 
   function listElement() { return document.getElementById("history-list"); }
   function visible() { return document.getElementById("history-panel")?.hidden === false; }
+
+  function focusOnOpen(trigger: Element | null, close: () => void) {
+    const panel = document.getElementById("history-panel");
+    if (!panel || endFocus) return;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-labelledby", "history-panel-title");
+    panel.setAttribute("aria-describedby", "history-subtitle");
+    panel.dataset.shared = "";
+    const keydown = (event: KeyboardEvent) => handleDialogKey(event, panel, close);
+    panel.addEventListener("keydown", keydown);
+    const Observer = panel.ownerDocument.defaultView?.MutationObserver;
+    const observer = Observer && new Observer(() => {
+      if (panel.hidden) closeShared(document.activeElement === document.body || panel.contains(document.activeElement));
+    });
+    observer?.observe(panel, { attributes: true, attributeFilter: ["hidden"] });
+    endFocus = () => {
+      observer?.disconnect();
+      panel.removeEventListener("keydown", keydown);
+      panel.removeAttribute("role");
+      panel.removeAttribute("aria-labelledby");
+      panel.removeAttribute("aria-describedby");
+      delete panel.dataset.shared;
+    };
+    restore = () => restoreDialogFocus(document, trigger);
+    document.getElementById("history-close")?.focus();
+  }
+
+  function closeShared(returnFocus = true) {
+    endFocus?.();
+    endFocus = undefined;
+    if (returnFocus) restore?.();
+    restore = undefined;
+    versionId = undefined;
+    reset();
+  }
 
   function reset() {
     request?.abort();
@@ -29,12 +68,18 @@ export function createSharedHistoryPanel(ports: SharedHistoryPanelPort, formatTi
 
   function message(text: string) {
     const list = listElement();
-    if (list) list.innerHTML = '<p class="history-empty" role="status">' + escapeHtml(text) + '</p>';
+    if (!list) return;
+    if (list.contains(document.activeElement)) document.getElementById("history-close")?.focus();
+    list.innerHTML = '<p class="history-empty" role="status">' + escapeHtml(text) + '</p>';
   }
 
   const unsubscribe = ports.onChange(() => {
     const next = ports.current();
     if (visible() && (active !== ports.active() || source !== next || online !== (next?.online() ?? false))) {
+      if (!ports.active()) {
+        if (listElement()?.contains(document.activeElement)) document.getElementById("history-close")?.focus();
+        closeShared(false);
+      }
       void renderHistory();
     }
   });
@@ -53,7 +98,7 @@ export function createSharedHistoryPanel(ports: SharedHistoryPanelPort, formatTi
     return isCurrentRequest(signal) && !!source?.online();
   }
 
-  async function render() {
+  async function render(returnTo?: string) {
     reset();
     if (!active) return;
     const subtitle = document.getElementById("history-subtitle");
@@ -78,6 +123,10 @@ export function createSharedHistoryPanel(ports: SharedHistoryPanelPort, formatTi
           escapeHtml(version.id) + '"><time datetime="' + when.toISOString() + '">' + escapeHtml(formatTime(when)) +
           '</time><span>' + escapeHtml(who) + '</span></button></li>';
       }).join("") + '</ol>';
+      if (returnTo && document.activeElement === document.getElementById("history-close")) {
+        const buttons = Array.from(list.querySelectorAll<HTMLButtonElement>("[data-shared-version]"));
+        (buttons.find(button => button.dataset.sharedVersion === returnTo) ?? buttons[0])?.focus();
+      }
     } catch {
       if (isCurrentRequest(signal)) message(source?.online() ? "Could not load versions. Check your connection and reopen Version history." : OFFLINE);
     }
@@ -86,6 +135,7 @@ export function createSharedHistoryPanel(ports: SharedHistoryPanelPort, formatTi
   async function open(version: SharedHistoryVersion) {
     const from = source;
     if (!from) return;
+    versionId = version.id;
     const signal = begin();
     message("Opening version…");
     try {
@@ -95,10 +145,10 @@ export function createSharedHistoryPanel(ports: SharedHistoryPanelPort, formatTi
       const list = listElement();
       if (!list) return;
       list.innerHTML = '<section class="shared-history-preview" contenteditable="false" aria-label="Read-only version">' +
-        '<div class="shared-history-actions"><button type="button" class="btn-outline" data-shared-history="back">Back to versions</button>' +
-        '<button type="button" class="btn-outline" data-shared-history="save">Save a copy…</button></div>' +
         '<h3 tabindex="-1">' + escapeHtml(opened.title) + '</h3><p class="history-older-meta">Read-only · ' +
-        escapeHtml(formatTime(new Date(version.at))) + '</p><div class="shared-history-beats">' +
+        escapeHtml(formatTime(new Date(version.at))) + '</p>' +
+        '<div class="shared-history-actions"><button type="button" class="btn-outline" data-shared-history="back">Back to versions</button>' +
+        '<button type="button" class="btn-outline" data-shared-history="save">Save a copy…</button></div><div class="shared-history-beats">' +
         opened.outline.map((entry, index) => {
           if ("heading" in entry) return '<h4>' + escapeHtml(entry.heading) + '</h4>';
           const beat = entry.beat;
@@ -123,13 +173,14 @@ export function createSharedHistoryPanel(ports: SharedHistoryPanelPort, formatTi
   }
 
   async function save(button: HTMLButtonElement, opened: SharedHistoryPreview, signal: AbortSignal) {
-    button.disabled = true;
+    if (button.getAttribute("aria-disabled") === "true") return;
+    button.setAttribute("aria-disabled", "true");
     try {
       await opened.saveCopy(signal);
     } catch {
       if (current(signal)) notice("Could not save this version. Check that its pictures are available and try again.", "warn");
     } finally {
-      button.disabled = false;
+      button.removeAttribute("aria-disabled");
     }
   }
 
@@ -139,7 +190,7 @@ export function createSharedHistoryPanel(ports: SharedHistoryPanelPort, formatTi
     const { sharedVersion, sharedHistory, beatIndex } = button.dataset;
     const version = versions.find(entry => entry.id === sharedVersion);
     if (version) void open(version);
-    if (sharedHistory === "back") void render();
+    if (sharedHistory === "back") void render(versionId);
     const signal = request?.signal;
     if (!preview || !signal || !current(signal)) return true;
     if (sharedHistory === "save") void save(button, preview, signal);
@@ -153,5 +204,5 @@ export function createSharedHistoryPanel(ports: SharedHistoryPanelPort, formatTi
     return true;
   }
 
-  return { render, click, reset, dispose() { unsubscribe(); reset(); } };
+  return { render, click, reset, focusOnOpen, close: closeShared, dispose() { unsubscribe(); closeShared(false); } };
 }

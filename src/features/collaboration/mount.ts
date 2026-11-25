@@ -2,6 +2,7 @@ import type { ShareDialogPorts } from "./ports.ts";
 import type { ShareAttemptResult } from "../../application/collaboration/share.ts";
 import { SHARE_SCRIPT_COMMAND } from "./actions.ts";
 import { LINK_PASSWORD_MAX, validLinkPassword } from "../../../shared/link-password.ts";
+import { handleDialogKey, restoreDialogFocus } from "../common/dialog-focus.ts";
 
 const MESSAGES: Record<Exclude<ShareAttemptResult["kind"], "shared" | "not-configured" | "cancelled">, string> = {
   "document-changed": "The script changed during upload. Open Share again to share the current script.",
@@ -15,7 +16,7 @@ const MESSAGES: Record<Exclude<ShareAttemptResult["kind"], "shared" | "not-confi
 export function mountShareDialog(ports: ShareDialogPorts) {
   const focus = document.activeElement;
   const backdrop = document.createElement("div");
-  backdrop.className = "modal-backdrop";
+  backdrop.className = "modal-backdrop collaboration-dialog";
   backdrop.id = "share-script-modal";
   backdrop.innerHTML = `
     <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="share-script-title" tabindex="-1">
@@ -31,7 +32,7 @@ export function mountShareDialog(ports: ShareDialogPorts) {
       </fieldset>
       <p class="modal-hint" role="status" id="share-script-status"></p>
       <p class="modal-hint" id="share-script-setup" hidden>Enter a supported relay address in <button type="button" class="btn" data-share="settings">Settings → Collaboration</button>
-        or follow the <a href="https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/native-adapter-design.md#stage-3-bounded-container-limits-and-status-endpoint" target="_blank" rel="noopener noreferrer">relay setup guide</a>.</p>
+        or follow the <a href="https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/relay-setup.md" target="_blank" rel="noopener noreferrer">relay setup guide</a>.</p>
       <label class="modal-hint" id="share-script-link" hidden>Guest link <input readonly type="text"></label>
       <div class="modal-footer">
         <button type="button" class="btn" data-share="close">Close</button>
@@ -64,7 +65,7 @@ export function mountShareDialog(ports: ShareDialogPorts) {
     password.value = "";
     window.removeEventListener("pagehide", dispose);
     backdrop.remove();
-    if (focus instanceof HTMLElement && focus.isConnected) focus.focus();
+    restoreDialogFocus(document, focus);
   }
 
   function unset(): void {
@@ -148,19 +149,7 @@ export function mountShareDialog(ports: ShareDialogPorts) {
     });
   };
   button("settings").onclick = () => { dispose(); ports.settings(); };
-  backdrop.onkeydown = event => {
-    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelOrClose(); }
-    if (event.key !== "Tab") return;
-    const controls = [...backdrop.querySelectorAll<HTMLElement>("button:not(:disabled), a, input:not(:disabled)")]
-      .filter(control => !control.closest("[hidden]"));
-    const first = controls[0], last = controls.at(-1);
-    if (!first || !last) { event.preventDefault(); return; }
-    const boundary = event.shiftKey ? first : last;
-    if (document.activeElement === boundary || !backdrop.contains(document.activeElement)) {
-      event.preventDefault();
-      (event.shiftKey ? last : first).focus();
-    }
-  };
+  backdrop.onkeydown = event => handleDialogKey(event, panel, cancelOrClose);
   window.addEventListener("pagehide", dispose);
   document.body.append(backdrop);
   close.focus();

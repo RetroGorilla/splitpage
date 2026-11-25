@@ -1,6 +1,7 @@
 import type { SharedPopoverPorts } from "./ports.ts";
 import type { PresencePeer } from "../../application/collaboration/presence.ts";
 import { mountPasswordDialog } from "./password-dialog.ts";
+import { handleDialogKey, restoreDialogFocus } from "../common/dialog-focus.ts";
 
 function avatar(person: PresencePeer): HTMLElement {
   const element = document.createElement("span");
@@ -18,13 +19,12 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
   const pill = document.createElement("button");
   pill.id = "shared-pill";
   pill.type = "button";
-  pill.className = "btn";
+  pill.className = "btn shared-trigger";
   pill.setAttribute("aria-haspopup", "dialog");
   pill.setAttribute("aria-expanded", "false");
   pill.setAttribute("aria-controls", "shared-popover");
   pill.innerHTML = '<span class="tally-dot" aria-hidden="true"></span> Shared';
   const dot = pill.firstElementChild as HTMLElement;
-  Object.assign(dot.style, { flex: "none", width: "7px", height: "7px", borderRadius: "50%" });
   const avatars = document.createElement("span");
   avatars.setAttribute("aria-hidden", "true");
   avatars.className = "shared-avatars";
@@ -36,10 +36,9 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
   panel.setAttribute("popover", "auto");
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-labelledby", "shared-popover-title");
-  panel.className = "modal-panel";
-  Object.assign(panel.style, { position: "fixed", inset: "auto", margin: "0", width: "min(19rem, calc(100vw - 16px))" });
+  panel.className = "modal-panel sharing-details";
   panel.innerHTML = `
-    <div class="modal-header"><h2 id="shared-popover-title">Shared</h2><button type="button" class="btn" data-sharing="close" autofocus>Close</button></div>
+    <div class="modal-header"><h2 id="shared-popover-title">Shared</h2><button type="button" class="btn" data-sharing="close">Close</button></div>
     <p class="modal-hint" data-connection></p>
     <section aria-labelledby="shared-here-title">
       <h3 id="shared-here-title">Here now</h3>
@@ -81,10 +80,15 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
   let busy = false;
   let promotionAvailable = false;
   let opening = 0;
+  let trigger: Element | null = null;
   let passwordDialog: ReturnType<typeof mountPasswordDialog> | undefined;
 
   function close(): void {
-    if (panel.matches(":popover-open")) panel.hidePopover();
+    if (!panel.matches(":popover-open")) return;
+    panel.hidePopover();
+    pill.setAttribute("aria-expanded", "false");
+    restoreDialogFocus(document, trigger);
+    trigger = null;
   }
 
   function syncPillLabel(): void {
@@ -101,6 +105,7 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     const hidden = !online;
     if (hereSection.hidden !== hidden) hereSection.hidden = hidden;
     const current = peers ?? [];
+    const focused = here.contains(document.activeElement) ? document.activeElement : null;
     const shown = current.slice(0, 3);
     if (previous.length !== current.length || shown.some((person, i) => {
       const old = previous[i];
@@ -137,8 +142,12 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
         entry.button.replaceChildren(avatar(person), person.name);
       }
       entry.person = person;
-      const disabled = !person.beat;
+      const disabled = !person.beat || !person.side;
       if (entry.button.disabled !== disabled) entry.button.disabled = disabled;
+    }
+    if (focused && (hidden || !focused.isConnected || focused.matches(":disabled")) && panel.matches(":popover-open")) {
+      const next = here.querySelector<HTMLButtonElement>("button:not(:disabled)");
+      (hidden ? button("close") : next ?? button("close")).focus();
     }
   }
 
@@ -146,12 +155,16 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     if (disposed) return;
     const snapshot = ports.collaboration.snapshot();
     if (!snapshot.active) {
+      const hadFocus = pill === document.activeElement || panel.contains(document.activeElement);
       syncPeople(false);
       opening++;
       passwordDialog?.dispose();
       close();
       panel.remove();
       pill.remove();
+      if (hadFocus && (document.activeElement === pill || document.activeElement === document.body)) {
+        restoreDialogFocus(document, null);
+      }
       return;
     }
     const anchor = document.getElementById("present-split");
@@ -166,6 +179,7 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     syncPeople(online && !snapshot.refusal && !snapshot.mergeTooLarge);
     syncPillLabel();
     const membership = ports.membership();
+    const focused = panel.contains(document.activeElement) ? document.activeElement : null;
     const owner = membership?.role === "owner" && !snapshot.refusal;
     if (!owner) passwordDialog?.dispose();
     for (const action of ["copy", "reset", "password", "stop"]) button(action).hidden = !owner;
@@ -180,6 +194,7 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     button("promote").disabled = busy;
     button("leave").disabled = busy;
     button("save").disabled = busy;
+    if (focused?.closest("[hidden], :disabled") && panel.matches(":popover-open")) button("close").focus();
   }
 
   async function run(work: () => Promise<void>, failure: string): Promise<void> {
@@ -192,16 +207,23 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     finally { busy = false; sync(); }
   }
 
+  function position(): void {
+    const anchor = pill.getBoundingClientRect();
+    panel.style.setProperty("--sharing-left", Math.max(8, Math.min(anchor.right - panel.offsetWidth, window.innerWidth - panel.offsetWidth - 8)) + "px");
+    panel.style.setProperty("--sharing-top", Math.min(anchor.bottom + 8, Math.max(8, window.innerHeight - panel.offsetHeight - 8)) + "px");
+  }
+
   function open(): void {
     sync();
     if (!panel.isConnected || panel.matches(":popover-open")) return;
     const generation = ++opening;
     promotionAvailable = false;
     status.textContent = "";
-    panel.showPopover();
-    const anchor = pill.getBoundingClientRect();
-    panel.style.left = Math.max(8, Math.min(anchor.right - panel.offsetWidth, window.innerWidth - panel.offsetWidth - 8)) + "px";
-    panel.style.top = Math.min(anchor.bottom + 8, Math.max(8, window.innerHeight - panel.offsetHeight - 8)) + "px";
+    trigger = document.activeElement;
+    panel.showPopover(trigger === pill ? { source: pill } : undefined);
+    pill.setAttribute("aria-expanded", "true");
+    position();
+    button("close").focus();
     sync();
     if (ports.membership()?.role === "owner" && ports.collaboration.snapshot().relay.connected) {
       void run(() => ports.manage("check-link"), "Could not check the guest link.");
@@ -214,10 +236,19 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     }
   }
 
-  panel.addEventListener("toggle", () => {
-    pill.setAttribute("aria-expanded", String(panel.matches(":popover-open")));
+  panel.addEventListener("beforetoggle", event => {
+    pill.setAttribute("aria-expanded", String((event as ToggleEvent).newState === "open"));
   });
-  pill.onclick = () => { if (panel.matches(":popover-open")) close(); else ports.open(); };
+  panel.addEventListener("keydown", event => handleDialogKey(event, panel, close));
+  const resize = () => { if (panel.matches(":popover-open")) position(); };
+  window.addEventListener("resize", resize);
+  pill.onclick = () => {
+    if (panel.matches(":popover-open")) close();
+    else {
+      pill.focus();
+      ports.open();
+    }
+  };
   button("close").onclick = close;
   button("save").onclick = () => { close(); ports.saveCopy(); };
   button("leave").onclick = () => {
@@ -244,7 +275,6 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     if (button("password").disabled) return;
     const required = ports.membership()?.passwordRequired;
     close();
-    pill.focus();
     passwordDialog?.dispose();
     const title = required ? "Change password" : "Require a password";
     passwordDialog = mountPasswordDialog({
@@ -272,6 +302,7 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
       disposed = true;
       unsubscribe();
       unsubscribePeople();
+      window.removeEventListener("resize", resize);
       passwordDialog?.dispose();
       close();
       panel.remove();

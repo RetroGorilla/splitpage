@@ -238,10 +238,14 @@ function mdToHtml(markdown) {
   return { html: out.join("\n"), toc: tocHtml };
 }
 
-let helpRendered = null;
-function helpHtml() {
-  if (!helpRendered) helpRendered = mdToHtml(readFileSync(join(ROOT, "docs", "help.md"), "utf8"));
-  return helpRendered;
+function helpHtml(collabUi) {
+  const markdown = readFileSync(join(ROOT, "docs", "help.md"), "utf8");
+  if (!collabUi) {
+    return mdToHtml(markdown.split(/(?=^## )/m).filter(section => !section.startsWith("## Collaboration\n")
+      && !section.startsWith("## Collaboration\r\n")).join(""));
+  }
+  return mdToHtml(markdown.replace("](collaboration/relay-setup.md)",
+    "](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/relay-setup.md)"));
 }
 
 const version = () => readFileSync(join(ROOT, "VERSION"), "utf8").trim();
@@ -254,9 +258,7 @@ const PARTS = [
   ["{{VERSION}}", version],
   ["{{SEED_CHECK}}", seedCheckValue],
   ["/*{{APP_CSS}}*/", appCss],
-  ["{{SEED_STATE}}", () => src("seed-state.json")],
-  ["{{HELP_TOC}}", () => helpHtml().toc],
-  ["{{HELP_HTML}}", () => helpHtml().html]
+  ["{{SEED_STATE}}", () => src("seed-state.json")]
 ];
 
 const CSP_DIRECTIVES = (scriptHash, testBuild) => [
@@ -313,7 +315,9 @@ function stripHtmlComments(shell) {
 
 export function build(testHooks = TEST_BUILD, collabUi = testHooks) {
   let html = stripHtmlComments(src("page.html"));
-  for (const [marker, load] of [...PARTS, ["//{{APP_JS}}", () => appJs(testHooks, collabUi)]]) {
+  const help = helpHtml(collabUi);
+  for (const [marker, load] of [...PARTS, ["{{HELP_TOC}}", () => help.toc], ["{{HELP_HTML}}", () => help.html],
+    ["//{{APP_JS}}", () => appJs(testHooks, collabUi)]]) {
     if (!html.includes(marker)) throw new Error(`marker ${marker} missing from src/page.html`);
     html = html.split(marker).join(chomp(load()));
   }

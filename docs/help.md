@@ -1143,6 +1143,46 @@ preferences as a `.json` file. In the desktop app, **Settings ▸ Data ▸ Impor
 app data…** merges one in; nothing is overwritten. Scripts themselves aren't
 included (they're your files).
 
+## Collaboration
+
+### Share or join a script
+
+- In the desktop app, open **File ▸ Share this script…**. If no relay is set
+  up, open **Settings ▸ Collaboration** and configure it. See the
+  [relay setup guide](collaboration/relay-setup.md) if you run the relay.
+- Sharing uploads a copy. Your original file stays where it was. Give
+  collaborators the invitation link and, if required, share the link password
+  separately. Anyone who can use the link can edit the shared script.
+- Open the invitation link in a browser or paste it into **File ▸ Join a shared
+  script…** in the desktop app. Check the script name, enter the password if
+  asked, then choose **Join script**. Your name and colour identify you to other
+  editors.
+- Use **Shared** or **File ▸ Sharing and people…** to see the connection and
+  who is **Here now**. Select someone who is working on a beat to jump to it.
+  The owner can copy or reset the guest link, and add, change or remove its
+  password. After a reset, guests need the new link. If the password changes,
+  guests may be asked to enter it again before their work can sync.
+
+### Offline work and version history
+
+- You can keep editing when the relay is offline. Changes stay on this device
+  and sync when you reconnect. If edits overlap, **Review changes** shows your
+  offline copy alongside the current script. Use **Show beat** to inspect it in
+  the script, or **Put it back** to restore your beat as a new beat.
+- **File ▸ Version history…** lists versions kept by the relay while you’re
+  connected. Open a version to read it, save a separate project, or put an
+  individual beat back into the live script.
+
+### Keep a copy or leave
+
+- Use **Save a copy…** in **Shared** to save a separate project. On desktop,
+  when Splitpage offers to keep a file copy while sharing or joining, that file
+  follows the shared script until you stop keeping it.
+- **Shared ▸ Leave** removes this device’s shared copy and its access. You
+  can save a separate project first. Other people can keep working.
+- **Shared ▸ Stop sharing** is for the owner and requires a connection.
+  It ends sharing for everyone. Your local work stays on this device.
+
 ## Installing and updating
 
 - **Desktop app**: download `SplitpageDesktopSetup-<version>-x64.exe` (or

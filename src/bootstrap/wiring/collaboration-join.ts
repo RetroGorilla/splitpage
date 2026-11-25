@@ -3,6 +3,7 @@ import { exchangeLinkPassword } from "../../adapters/collab/native/password-exch
 import { openNativeSession } from "../../adapters/collab/native/session.ts";
 import { startupReady } from "../../application/startup-signal.ts";
 import { mountJoinDialog } from "../../features/collaboration/join.ts";
+import { announceCollaboration } from "../../features/collaboration/announcements.ts";
 import type { JoinRequest, JoinDialogPorts } from "../../features/collaboration/ports.ts";
 import { sanitizeHtml } from "../richtext.ts";
 import { waitDuringLifetime } from "../startup/page-lifetime.ts";
@@ -91,6 +92,7 @@ function openJoinScreen(request: Extract<JoinRequest, { kind: "browser" }> | und
                 }, joining);
                 if (!outcome?.ok) return outcome?.reason ?? "opening-pending";
                 newTabControls()?.closeNewTabPage();
+                announceCollaboration(document, "Joined the shared script.");
                 return null;
               } finally { publish(); }
             }

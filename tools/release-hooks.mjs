@@ -33,7 +33,9 @@ const COLLABORATION_MARKERS = [
   "shared-here-title", "Visual in use",
   "Link password", "Require a password", "Change password", "Remove password", "Re-enter password",
   "link-password-modal", "collab-access-reenter-password", "/password-exchange", "The link password changed.",
-  "data-shared-version", "data-shared-history", "Versions kept by the relay for this shared script.", "Put this beat back"
+  "data-shared-version", "data-shared-history", "Versions kept by the relay for this shared script.", "Put this beat back",
+  "collaboration-announcements", "Joined the shared script.", "Left the shared script.", "Reconnected to the shared script.",
+  'id="help-collaboration"'
 ];
 
 export function leakedCollaboration(text) {

@@ -105,12 +105,65 @@ async function relayIngress(t, port, relayPort, { tls, incompatible, unreachable
   };
 }
 
-for (const variant of ["accepted", "refused", "deleted", "pictures", "replacement", "restart", "unsupported-version", "retry"]) test(variant === "replacement"
+function phoneLayoutSteps({ summary, name, confirmJoin, joinSteps, leave }) {
+  return [
+    "open /invite.html", "viewport 320 640 mobile", "click #invite", summary,
+    "eval window.$=selector=>document.querySelector(selector);window.fits=selector=>{const panel=$(selector),r=panel.getBoundingClientRect();return panel.checkVisibility()&&panel.clientWidth>0&&panel.scrollWidth<=panel.clientWidth+1&&r.left>=-1&&r.right<=innerWidth+1&&[...panel.querySelectorAll('button,input:not([type=radio]),.swatch')].filter(e=>e.checkVisibility()).every(e=>{const b=e.getBoundingClientRect();return b.width>0&&b.height>0&&b.left>=r.left&&b.right<=r.right})};true",
+    "expect innerWidth===320&&document.documentElement.scrollWidth<=innerWidth&&fits('#join-script-modal [role=dialog]')",
+    name, confirmJoin, ...joinSteps,
+    "expect $('#collaboration-announcements').textContent==='Joined the shared script.'",
+    "expect fits('#shared-pill')&&getComputedStyle($('#shared-pill .shared-avatars')).display==='none'&&$('#shared-pill .tally-dot').getBoundingClientRect().width>0",
+    "click #shared-pill",
+    "wait $('#shared-popover').matches(':popover-open')",
+    "expect fits('#shared-popover')&&$('#shared-popover').getBoundingClientRect().bottom<=innerHeight+1&&$('#shared-pill').getAttribute('aria-expanded')==='true'",
+    "key Escape",
+    "expect document.activeElement===$('#shared-pill')&&$('#shared-pill').getAttribute('aria-expanded')==='false'",
+    "click #btn-file", "click [data-file-action=sharing-and-people]",
+    "wait $('#shared-popover').matches(':popover-open')",
+    "key Escape",
+    "expect document.activeElement===$('#btn-file')",
+    "click #btn-file", "click [data-file-action=history]",
+    "wait $('[data-shared-version]')",
+    "wait $('#history-panel').getBoundingClientRect().right<=innerWidth+1",
+    "expect fits('#history-panel .history-scroll')",
+    "click [data-shared-version]",
+    "wait $('[aria-label=\"Read-only version\"] article')?.textContent.includes('word')",
+    "expect fits('#history-panel .history-scroll')&&document.activeElement===$('.shared-history-preview h3')",
+    "key Escape",
+    "expect $('#history-panel').hidden&&document.activeElement===$('#btn-file')",
+    leave[0],
+    "eval $('[data-file-action=leave-shared-script]').scrollIntoView({block:'center'});true",
+    ...leave.slice(1),
+    "wait $('#collaboration-announcements').textContent==='Left the shared script.'",
+    "expect document.activeElement===$('#btn-file')&&!$('#shared-pill')",
+    "eval window.S=window.__sharedTest;window.P=S.nativePeer;window.F=window.__splitpageFormats;F.openFile(new File([JSON.stringify({schema:2,title:'Offline review',paragraphsDecided:true,rows:[{id:'r1',audioText:'Start'},{id:'r2',audioText:'LongWord'.repeat(35)},{id:'r3',audioText:'End'}]})],'offline-review.splitpage'))",
+    "wait F.state().title==='Offline review'",
+    "eval S.enter()",
+    "wait S.read().peer!==null",
+    "eval P.hold('updates');true",
+    'caret #rows .cell-editable[data-id="r2"][data-field="audioText"]',
+    "press !",
+    "wait S.read().app.rows.find(row=>row.id==='r2')?.audioText.includes('!')",
+    "expect P.removeBeat('r2').kind==='written'",
+    "eval P.release('forward');P.reviewOfflineChanges();true",
+    "wait $('#collab-offline-review').checkVisibility()",
+    "eval window.scrollTo({top:0,behavior:'instant'});true",
+    "click #collab-offline-review",
+    "wait $('#offline-review [role=dialog]').checkVisibility()",
+    "expect fits('#offline-review [role=dialog]')&&getComputedStyle($('#offline-review .merge-sides')).gridTemplateColumns.split(' ').length===1",
+    "expect $('#collab-offline-review').getAttribute('aria-expanded')==='true'",
+    "key Escape",
+    "expect $('#offline-review').hidden&&document.activeElement===$('#collab-offline-review')"
+  ];
+}
+
+for (const variant of ["accepted", "phone", "refused", "deleted", "pictures", "replacement", "restart", "unsupported-version", "retry"]) test(variant === "replacement"
   ? "replacing an invited script stops its pending picture download"
   : variant === "pictures"
   ? "a relay invitation hydrates initial pictures and keeps active transfers independent of entry"
   : variant === "accepted"
   ? "a browser joins a seeded relay invitation, opens shared history and reopens its retained copy"
+  : variant === "phone" ? "collaboration screens fit a 320-pixel phone and return keyboard focus"
   : variant === "restart" ? "a dropped snapshot connection restarts exactly once and the browser joins"
   : variant === "unsupported-version" ? "the Join screen explains a real relay version refusal"
   : variant === "retry" ? "Try again checks the same invitation after the relay recovers and joins after another script opens"
@@ -243,7 +296,8 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
   ];
   const refusal = variant === "deleted" ? "was deleted" : variant === "unsupported-version"
     ? "needs a newer version of Splitpage" : "reset or revoked";
-  const steps = pictureSteps ?? (variant === "restart" ? restartSteps : variant === "retry" ? retrySteps : [
+  const steps = pictureSteps ?? (variant === "phone" ? phoneLayoutSteps({ summary, name, confirmJoin, joinSteps, leave })
+    : variant === "restart" ? restartSteps : variant === "retry" ? retrySteps : [
     "open /invite.html",
     ...(accepted ? ["eval window.open(document.querySelector('#invite').href,'join-peer');true"] : []),
     "click #invite",
@@ -425,7 +479,9 @@ test("a browser joins a passworded relay, re-enters after a live change and a re
     "open /invite.html", "wait location.pathname==='/invite.html'",
     'eval "change-offline"', "wait fetch('/offline-ready.txt', {cache:'no-store'}).then(response=>response.ok)",
     "goto " + origin + "/", "wait window.__splitpageFormats",
-    "eval " + standalone,
+    "eval window.trySeparate=()=>{if(window.openingSeparate)return false;window.openingSeparate=true;Promise.resolve(" +
+      standalone + ").then(opened=>{window.separateOpened=opened;window.openingSeparate=false});return false};true",
+    "wait window.separateOpened || window.trySeparate()",
     "wait window.__splitpageFormats.state().title==='Separate script' && !document.getElementById('shared-pill')",
     "eval window.__newTab.open();true",
     "wait document.querySelector('#newtab-recents-list button[data-shared]')",
@@ -437,6 +493,7 @@ test("a browser joins a passworded relay, re-enters after a live change and a re
     ...reenter(restarted),
     'eval "reset-link"', "wait !" + banner + ".hidden && document.querySelector('" + recovery + "').hidden",
     "expect !document.querySelector('#collab-access-export').hidden && !document.querySelector('#collab-access-leave').hidden",
+    "expect document.querySelector('#collaboration-announcements')?.textContent.startsWith('Access removed.')",
     "quit"
   ];
   const suite = join(kit.directory, "password-join.txt");

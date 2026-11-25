@@ -93,10 +93,17 @@ function restoreSnapshotFromCard(btn: Element | null): ReturnType<HistoryPanelCo
   });
 }
 
-function openHistoryPanel() {
-  sidePanels().open("history-panel");
-  renderHistory();
-}
+  function openHistoryPanel() {
+    const trigger = document.activeElement;
+    sidePanels().open("history-panel");
+    if (ports.shared?.active()) shared?.focusOnOpen(trigger, closeHistoryPanel);
+    renderHistory();
+  }
+
+  function closeHistoryPanel() {
+    sidePanels().close("history-panel");
+    shared?.close();
+  }
 let historyRenderToken = 0;
 let historyShownDocId: string | null = null;
 
@@ -392,7 +399,7 @@ function toastLastEditor(loaded: Parameters<HistoryPanelControl["toastLastEditor
   }
   return {
     openHistoryPanel: guarded(openHistoryPanel), renderHistory: guarded(renderHistory),
-    closeHistoryPanel: guarded(() => { shared?.reset(); sidePanels().close("history-panel"); }),
+    closeHistoryPanel: guarded(closeHistoryPanel),
     handleSharedClick: guarded((event: MouseEvent) => shared?.click(event) ?? false),
     restoreSnapshotFromCard: guarded(restoreSnapshotFromCard), toastLastEditor: guarded(toastLastEditor), restored: guarded(restored),
     dispose: function () {

@@ -26,6 +26,7 @@ export function mountLeaveDialog(ports: LeaveDialogPorts) {
 
   async function finish(saveFirst: boolean) {
     setBusy(true);
+    dialog.part('[role="dialog"]').focus();
     try {
       if (saveFirst) {
         status.textContent = "Saving your copy…";

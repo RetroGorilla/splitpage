@@ -2,6 +2,7 @@ import { accessRemovedMessage } from "../../application/collaboration/state.ts";
 import type { CollaborationLocalWriteError, CollaborationPermanentRefusal } from "../../application/collaboration/state.ts";
 import { sharedSaveStatus } from "../../application/save/status.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
+import { restoreDialogFocus } from "../common/dialog-focus.ts";
 import type { SharedBannersMount, SharedBannersPorts } from "./ports.ts";
 
 declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
@@ -84,7 +85,12 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
   }
 
   function hideBanner(banner: HTMLElement | null): void {
-    if (banner && !banner.hidden) banner.hidden = true;
+    if (!banner || banner.hidden) return;
+    const hadFocus = banner.contains(document.activeElement);
+    banner.hidden = true;
+    if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && hadFocus) {
+      restoreDialogFocus(document, lastWriterOpen ? writerStatus : byId("shared-pill"));
+    }
   }
 
   function showSaveError(error: CollaborationLocalWriteError, reveal: boolean): void {

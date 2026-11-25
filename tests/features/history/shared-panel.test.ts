@@ -73,6 +73,37 @@ test("a failed version open focuses Back to versions and returns to the list", a
   assert.equal(list.querySelector('[role="status"]'), null);
 });
 
+test("shared history restores focus to the chosen version and to the panel trigger", async t => {
+  const { panel, list, click } = setup({ list: async () => [version, otherVersion] });
+  t.after(panel.dispose);
+  const shell = list.parentElement;
+  assert.ok(shell);
+  shell.insertAdjacentHTML("afterbegin", '<h2 id="history-panel-title">Version history</h2><button id="history-close">Close</button>');
+  const trigger = document.createElement("button");
+  document.body.prepend(trigger);
+  trigger.focus();
+  panel.focusOnOpen(trigger, () => { shell.hidden = true; panel.close(); });
+  assert.equal(shell.getAttribute("role"), "dialog");
+  assert.equal(document.activeElement?.id, "history-close");
+  const view = document.defaultView;
+  assert.ok(view);
+  const key = (key: string, shiftKey = false) => document.activeElement?.dispatchEvent(
+    new view.KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
+  await panel.render();
+  key("Tab", true);
+  assert.equal(document.activeElement?.getAttribute("data-shared-version"), otherVersion.id);
+  click('[data-shared-version="new"]');
+  await settle();
+  assert.equal(document.activeElement?.textContent, preview.title);
+  list.querySelector<HTMLElement>('[data-shared-history="back"]')?.focus();
+  click('[data-shared-history="back"]');
+  await settle();
+  assert.equal(document.activeElement?.getAttribute("data-shared-version"), otherVersion.id);
+  key("Escape");
+  assert.equal(shell.hidden, true);
+  assert.equal(document.activeElement, trigger);
+});
+
 test("a late version list cannot replace the versions for a different script", async t => {
   const held = deferred<readonly SharedHistoryVersion[]>();
   const { panel, list, replace } = setup({ list: () => held.promise });
