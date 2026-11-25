@@ -21,6 +21,8 @@ import { holdSessionCommands, sessionEntryRefusal, sharedSession } from "./sessi
 import { enterSharedSession, leaveRunningSharedSession, SHARED_ALREADY, SHARED_ENTER_FAILED, SHARED_NOT_RUNNING } from "./shared-session.ts";
 import type { SharedEditorBackend, SharedSwitchOutcome, SharedSwitchPorts } from "./shared-session.ts";
 import type { NativeMembershipRecord } from "../../../shared/native-replica.d.ts";
+import { keepLandedFile, openSharedFileCopy } from "./shared-file-copy.ts";
+import type { FileCopyWritten } from "../../application/collaboration/file-copy.ts";
 
 declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 
@@ -34,6 +36,7 @@ const desktopSharing = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_C
 type RetainedReplica = Extract<NativeLocalStoreOpen, { kind: "opened" }>;
 let localCopy: RetainedReplica | null = null;
 let sharingControls: (() => RetainedSharingControls) | null = null;
+let leaveWithFile: (() => Promise<SharedSwitchOutcome>) | undefined;
 
 interface RetainedSharingControls {
   readonly role: NativeMembershipRecord["role"];
@@ -81,6 +84,7 @@ export function createRetainedPictureBinding(options: {
   readonly sessionCurrent: () => boolean;
   readonly onLocalError: (error: CollaborationLocalWriteError | null) => void;
   readonly onRelayConnected?: ((connected: boolean) => void) | undefined;
+  readonly onPictureAvailable?: () => void;
 }) {
   let pictures: ReturnType<typeof bindSharedPictures> | undefined;
   let token = options.token;
@@ -89,6 +93,8 @@ export function createRetainedPictureBinding(options: {
   let started = false;
   let connected = false;
   let permanentlyStopped = false;
+  const bind = (copy: Parameters<typeof bindSharedPictures>[0], signal?: AbortSignal) =>
+    bindSharedPictures(copy, options.pictureOrigin, options.script, token, signal, undefined, options.onPictureAvailable);
 
   function detach(): void {
     pictures?.stop();
@@ -126,10 +132,10 @@ export function createRetainedPictureBinding(options: {
       token = next;
       connected = false;
       permanentlyStopped = false;
-      attach(bindSharedPictures({ session }, options.pictureOrigin, options.script, token));
+      attach(bind({ session }));
     },
     bindCopy(copy: Parameters<typeof bindSharedPictures>[0], signal?: AbortSignal) {
-      const bound = bindSharedPictures(copy, options.pictureOrigin, options.script, token, signal);
+      const bound = bind(copy, signal);
       attach(bound);
       return bound;
     },
@@ -168,7 +174,7 @@ export function createRetainedPictureBinding(options: {
         detach();
         options.onRelayConnected?.(false);
         if (!permanentlyStopped) {
-          attach(bindSharedPictures({ session: event.session }, options.pictureOrigin, options.script, token));
+          attach(bind({ session: event.session }));
         }
       } else if (event.kind === "synced") {
         return;
@@ -327,6 +333,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
     }
   }
   let connectCreated: (() => void) | undefined;
+  let startFileCopy: (() => void) | undefined;
   try {
     const outcome = await enterSharedSession({ ...ports, prepare: () => (preparation = prepare()) }, (_, failedClose) => {
       const { replica } = prepared;
@@ -339,6 +346,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       }
       let docWriteError: CollaborationLocalWriteError | null = null;
       let pictureWriteError: CollaborationLocalWriteError | null = null;
+      let fileCopy: ReturnType<typeof openSharedFileCopy> | undefined;
       const syncLocalError = () => {
         if (!sessionCurrent()) return;
         collaborationState().setLocalWriteError(docWriteError ?? pictureWriteError);
@@ -350,7 +358,8 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           token,
           sessionCurrent,
           onLocalError: error => { pictureWriteError = error; syncLocalError(); },
-          onRelayConnected: entry.onRelayConnected
+          onRelayConnected: entry.onRelayConnected,
+          onPictureAvailable: () => fileCopy?.picturesChanged()
         })
         : null;
       let liveRelay: ReturnType<typeof openNativeRelay> | undefined;
@@ -398,6 +407,31 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       const { backend } = bindNativeEditor(ports, replica.session, failedClose);
       let managing = false;
       let editorSession: Parameters<SharedEditorBackend["bind"]>[0] | undefined;
+      if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && desktop?.shareScript) {
+        startFileCopy = () => {
+          if (editorSession && sessionCurrent()) fileCopy = openSharedFileCopy(desktop.nativeReplica, name, editorSession);
+        };
+      }
+      const checkFileBeforeDeparture = async (reason: "leave" | "stop") => {
+        if (!fileCopy) return null;
+        return fileCopy.beforeDeparture(reason);
+      };
+      const leave = async () => {
+        if (!fileCopy) return finishRetainedLeave(replica);
+        if (sessionEntryRefusal()) return { ok: false, reason: "shared-switching" } as const;
+        const refused = backend.settle(true);
+        if (refused) return { ok: false, reason: refused } as const;
+        const unhold = editorSession?.hold("file-copy");
+        const release = holdSessionCommands("file-copy");
+        const ingress = backend.stopIngress?.();
+        try {
+          let written: FileCopyWritten | null | false;
+          try { written = await checkFileBeforeDeparture("leave"); }
+          finally { unhold?.(); release(); }
+          if (written === false || !sessionCurrent()) return { ok: false, reason: "file-copy-cancelled" } as const;
+          return await finishRetainedLeave(replica, written);
+        } finally { ingress?.(); }
+      };
       const manage = replica.membership?.manage;
       const controls = () => {
         const link = pictureOrigin && membership?.guestLinkToken ? new URL("/", pictureOrigin) : null;
@@ -424,12 +458,27 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
             managing = true;
             const unhold = stopSharing ? editorSession?.hold("sharing-controls") : undefined;
             const release = holdSessionCommands("sharing-controls", stopSharing ? "all" : "entries");
+            const ingress = stopSharing && fileCopy ? backend.stopIngress?.() : undefined;
+            let written: FileCopyWritten | null | false = null;
+            let finishStop = false;
             try {
+              if (stopSharing) {
+                written = await checkFileBeforeDeparture("stop");
+                if (written === false || !sessionCurrent()) return;
+              }
               if (stopSharing && ((await replica.flush()).kind !== "stored" || replica.hasUnstoredChanges())) {
                 throw new Error("The shared copy could not be saved.");
               }
               membership = await manage(operation, pictureOrigin);
               if (!sessionCurrent()) return;
+              if (stopSharing && written) {
+                written = await checkFileBeforeDeparture("stop").catch(() => false as const);
+                if (written === false) {
+                  notices.show("Sharing ended. Your local shared copy is still on this device.", "warn", true);
+                  return;
+                }
+              }
+              finishStop = stopSharing;
               if (operation === "promote") {
                 collaborationState().clearRefusal();
                 pictureBinding?.replaceToken(liveRelay.session(), membership.token);
@@ -439,9 +488,10 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
               unhold?.();
               release();
               managing = false;
+              if (!finishStop) ingress?.();
             }
             if (stopSharing && sessionCurrent()) {
-              const left = await leaveRetainedSharedScript().catch(() => null);
+              const left = await finishRetainedLeave(replica, written || null).catch(() => null).finally(() => ingress?.());
               if (!left?.ok) notices.show("Sharing ended. This computer could not finish cleaning up the local shared copy.", "warn", true);
             }
           }
@@ -502,6 +552,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           backend.start();
           if (entry.relayUrl) sharingControls = controls;
           stopUnload = guardUnload(window, pending);
+          leaveWithFile = leave;
           setSharedRetryLocalWrite(async () => {
             if (!sessionCurrent() || replica.session.isClosingOrClosed()) return;
             docWriteError = null;
@@ -520,11 +571,12 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
             }
             pictureBinding?.retryStorage();
           });
-          if (desktop) stopDesktop = trackSharedDesktopUnsaved(replica.hasUnstoredChanges, async () => {
+          if (desktop) stopDesktop = trackSharedDesktopUnsaved(replica.hasUnstoredChanges, async mode => {
             try {
               const refusal = backend.settle(false);
               const saved = !replica.hasUnstoredChanges() || (await replica.flush()).kind === "stored";
-              return { ok: !refusal && saved && !replica.hasUnstoredChanges() };
+              const fileCopyProblem = !refusal && saved && mode ? await fileCopy?.flushOnClose(mode) : null;
+              return { ok: !refusal && saved && !replica.hasUnstoredChanges(), ...(fileCopyProblem && { fileCopyProblem }) };
             } catch { return { ok: false }; }
           });
           stopChanges = replica.session.subscribe(() => {
@@ -539,6 +591,8 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           if (!active) discardPreparedCopy(replica);
           sessionDisposed = true;
           if (sharingControls === controls) sharingControls = null;
+          if (leaveWithFile === leave) leaveWithFile = undefined;
+          attempt(() => fileCopy?.dispose());
           if (localCopy === replica) localCopy = null;
           trackClosing(name, replica);
           attempt(() => { if (sessionToken === activeSessionToken) setSharedRetryLocalWrite(null); });
@@ -562,7 +616,10 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         const { deployment, script } = entry;
         const details = { deployment, script, relayUrl: new URL(entry.relayUrl).href, title: prepared.replica.session.document().title };
         try {
-          if (desktop) await noteDesktopSharedScript(desktop.nativeReplica, { ...details, at: Date.now() });
+          if (desktop) {
+            await noteDesktopSharedScript(desktop.nativeReplica, { ...details, at: Date.now() });
+            startFileCopy?.();
+          }
           else await browserSharedCatalogue().note(details);
         } catch { notices.show("Could not remember this shared script for reopening.", "warn"); }
       }
@@ -585,8 +642,13 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
 export async function leaveRetainedSharedScript(): Promise<SharedSwitchOutcome> {
   const copy = localCopy;
   if (!copy || !sharedSession()) return { ok: false, reason: SHARED_NOT_RUNNING };
-  const outcome = leaveRunningSharedSession();
+  return leaveWithFile?.() ?? finishRetainedLeave(copy);
+}
+
+async function finishRetainedLeave(copy: RetainedReplica, written?: FileCopyWritten | null): Promise<SharedSwitchOutcome> {
+  const outcome = leaveRunningSharedSession(true, written?.file.docId);
   if (!outcome.ok) return outcome;
+  if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && written) keepLandedFile(written);
   // why: only the closing writer may erase this copy, before its lease is released
   return await copy.discardOnClose?.() ? { ok: true } : { ok: false, reason: "shared-copy-erase-failed" };
 }

@@ -314,18 +314,18 @@ function sameDocument(landed: ValidatedDocument): boolean {
   return current !== null && JSON.stringify(current) === JSON.stringify(landed);
 }
 
-export function leaveRunningSharedSession(explicitLeave = true): SharedSwitchOutcome {
-  return running ? leaveSharedSession(running.ports, true, explicitLeave, !explicitLeave) : { ok: false, reason: SHARED_NOT_RUNNING };
+export function leaveRunningSharedSession(explicitLeave = true, fileDocId?: string): SharedSwitchOutcome {
+  return running ? leaveSharedSession(running.ports, true, explicitLeave, !explicitLeave, fileDocId) : { ok: false, reason: SHARED_NOT_RUNNING };
 }
 
-export function leaveSharedSession(ports: SharedSwitchPorts, preserveSelection = true, explicitLeave = false, documentSwitch = false): SharedSwitchOutcome {
+export function leaveSharedSession(ports: SharedSwitchPorts, preserveSelection = true, explicitLeave = false, documentSwitch = false, fileDocId?: string): SharedSwitchOutcome {
   const holdReason = sessionEntryRefusal();
   if (holdReason) return { ok: false, reason: holdReason };
   const release = holdSessionCommands(SHARED_SWITCHING, "entries");
-  try { return leaveAvailableSession(ports, preserveSelection, explicitLeave, documentSwitch); } finally { release(); }
+  try { return leaveAvailableSession(ports, preserveSelection, explicitLeave, documentSwitch, fileDocId); } finally { release(); }
 }
 
-function leaveAvailableSession(ports: SharedSwitchPorts, preserveSelection: boolean, explicitLeave: boolean, documentSwitch: boolean): SharedSwitchOutcome {
+function leaveAvailableSession(ports: SharedSwitchPorts, preserveSelection: boolean, explicitLeave: boolean, documentSwitch: boolean, fileDocId?: string): SharedSwitchOutcome {
   const now = running;
   if (!now) return { ok: false, reason: SHARED_NOT_RUNNING };
   ports = now.ports;
@@ -359,7 +359,7 @@ function leaveAvailableSession(ports: SharedSwitchPorts, preserveSelection: bool
     resumeIngress = now.backend.stopIngress?.();
     // why: the copy is taken after the bindings settled on restart, and admission stays closed until it has landed
     const current = now.backend.landing();
-    landed = ports.migrate({ ...(current ? copyOf(current) : now.kept), docId: ports.docId() });
+    landed = ports.migrate({ ...(current ? copyOf(current) : now.kept), docId: fileDocId ?? ports.docId() });
     if (explicitLeave) now.backend.beforeExplicitLeave?.();
   } catch (error) { return keep(error); }
   now.backend.live(false);

@@ -144,6 +144,8 @@ Audit the save-time disk conflict check, autosave destinations, recent documents
 
 An instance carries its own `docId`, minted when the instance is created. The source file keeps its `docId` and its history. Each standalone export gets a new `docId`, so copies exported by several people never share history or trigger the duplicate-id reassignment between open scripts. Dropping the id, as Standalone HTML export does today, is not enough: opening a file that has no id derives one from its content, so identical exports would share it.
 
+Stage 4 Decision 10 adds a [one-way file copy](collaboration/native-adapter-design.md#the-desktop-file-copy-stage-4-part-8) on the desktop that shared the script. Shared sessions keep autosave and save destinations disabled.
+
 Reuse what exists before adding a parallel mechanism:
 
 - The operation context (`capture` and `stillOwns` in `src/application/session/operation.ts`) already makes a completion belong to the operation that started it. The sharing handoff in section 9 needs exactly that.

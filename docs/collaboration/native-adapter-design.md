@@ -8,6 +8,31 @@ standard behaviour is the default. Every figure names its result file ([appendix
 counts from generated test histories, built to hit bad cases, so not rates in real use. Accounts, invitations,
 pictures and screen design are out of scope.
 
+## The desktop file copy (Stage 4 Part 8)
+
+Decision 10 adds a one-way copy for a script shared from a saved desktop file.
+INV-51 still governs autosave. A shared session keeps both `autosave` and
+`saveDestinations` off. The file-copy owner watches shared revisions and
+picture availability, then captures and formats the current script after idle.
+The ordinary file keeps its original document ID.
+
+The desktop reserves the path and stores its SHA-256 fingerprint in desktop
+state. It checks the file before writing, uses the existing atomic writer and
+checks the bytes after writing. Opening a reserved path routes to the retained
+replica. An external change requires a choice. Before Leave or Stop sharing,
+the owner requires a complete, checked write or an explicit decision to proceed
+without updating it. Close and quit keep the replica and path association.
+
+For Open #2, use a 2-second idle delay and at least 30 seconds between
+background writes. On Windows with Node 24.22.1, 25 warmed writes of a 900-beat
+script generated from the long demo (933,319 bytes, no picture bytes) took
+171 ms median, 218 ms p95 and 229 ms maximum. The app test harness supplied
+the export capture and project formatting, including normalisation. Each
+sample checked SHA-256 before staging and again before rename, synced the
+temporary file, then read and hashed the destination. The measurement excludes
+Electron IPC, desktop state persistence and picture loading. Close, quit and
+explicit actions bypass the background interval.
+
 ## Build status
 
 Slice 7's open acceptance cases are listed in [appendix O](#o-acceptance-cases-from-the-outside-review). The Slice 8

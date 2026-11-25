@@ -26,6 +26,7 @@ export interface DraftFlush {
   readonly ok?: boolean;
   readonly code?: string;
   readonly obsolete?: boolean | undefined;
+  readonly fileCopyProblem?: "changed" | "unavailable" | "missing";
 }
 
 export interface DraftFile {

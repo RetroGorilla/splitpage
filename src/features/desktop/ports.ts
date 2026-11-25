@@ -38,7 +38,7 @@ export interface DesktopPorts {
   readonly documents: { readonly open: (opening: DesktopOpening) => Promise<unknown> };
   readonly saves: Pick<SaveState, "unsaved"> & { readonly save: () => Promise<unknown> };
   readonly startup: StartupSignal;
-  readonly flushDraft: (request: { readonly keep: boolean }) => unknown;
+  readonly flushDraft: (request: DesktopDraftFlushRequest) => unknown;
   readonly reassignDocId: (toId: string, message: unknown) => boolean;
   readonly documentState: Pick<DesktopDocumentStateOwner, "notify" | "settled" | "awaitHanded">;
   readonly menuCommands: { readonly run: (command: string) => boolean };
@@ -49,3 +49,4 @@ export interface DesktopActionPorts {
   readonly running: () => boolean;
   readonly canOpenPrompterInBrowser: DesktopPorts["canOpenPrompterInBrowser"];
 }
+import type { DesktopDraftFlushRequest } from "../../application/desktop/shell.ts";

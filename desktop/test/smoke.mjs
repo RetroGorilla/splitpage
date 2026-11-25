@@ -2944,7 +2944,6 @@ async function caseShareScript(target, fixturesDir) {
     : target.variant === "test";
   if (!enabled) return;
   const fixture = writeFixture(fixturesDir, "share-original.splitpage", "Sharing fixture", [["Original visual", "Original narration"]]);
-  const original = fs.readFileSync(fixture);
   const data = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-share-relay-"));
   const secret = crypto.randomBytes(32).toString("base64url");
   const relay = fork(fileURLToPath(new URL("../../tests/adapters/collab/native/server-process.ts", import.meta.url)), {
@@ -3028,14 +3027,22 @@ async function caseShareScript(target, fixturesDir) {
     await clickControl(cdp, name);
     return evalPage(cdp, "window.sharingConfirmation");
   }
+  async function shareCurrent(cdp) {
+    await evalPage(cdp, "document.querySelector('#btn-file').click(); document.querySelector('[data-file-action=share-script]').click()");
+    await poll(cdp, "document.querySelector('[data-share=start]:not([hidden])')");
+    await evalPage(cdp, "document.querySelector('[data-share=start]').click()");
+    await poll(cdp, "document.querySelector('[data-share=copy]:not([hidden])')", 40_000);
+    return new URL(await evalPage(cdp, "document.querySelector('#share-script-link input').value"));
+  }
   try {
     const [port] = await once(relay, "message", { signal: AbortSignal.timeout(10_000) });
     if (typeof port !== "number") throw new Error("The test relay did not report its port.");
     const address = "http://127.0.0.1:" + port;
-    app = await launchApp(target, { label: "share-script", fixtures: [fixture], dialogs: [copyPath, "confirm"] });
+    app = await launchApp(target, { label: "share-script", fixtures: [fixture], dialogs: [copyPath, "cancel", "confirm"] });
     const { cdp } = app;
     await waitForRows(cdp);
     await poll(cdp, "window.__splitpageFormats.state().title === 'Sharing fixture'");
+    const sourceId = await evalPage(cdp, "window.__splitpageFormats.state().docId");
     const standaloneToolbar = await evalPage(cdp, "Array.from(document.querySelector('.topbar .toolbar').children, node => node.id)");
     record(tag + ": the standalone toolbar has no collaboration controls", !standaloneToolbar.includes("shared-pill"));
     await evalPage(cdp, "document.querySelector('#btn-file').click()");
@@ -3097,7 +3104,6 @@ async function caseShareScript(target, fixturesDir) {
     record(tag + ": the handoff completes with an encrypted membership and no pending creation",
       fs.existsSync(path.join(replica, "membership")) && journal.pending.length === 0 &&
       !fs.readFileSync(path.join(replica, "membership")).includes(link.hash.slice(1)));
-    record(tag + ": sharing left the source file byte-for-byte unchanged", fs.readFileSync(fixture).equals(original));
     await evalPage(cdp, "document.querySelector('[data-share=close]').click(); document.querySelector('#btn-file').click()");
     record(tag + ": the File menu hides sharing once the tab is shared",
       await evalPage(cdp, "document.querySelector('[data-file-action=share-script]') === null"));
@@ -3110,6 +3116,7 @@ async function caseShareScript(target, fixturesDir) {
         return ['save-as','export','find','history','sharing-and-people','leave-shared-script'].every(id => item(id) && !item(id).hidden)
           && item('autosave').hidden && item('create-bundle').hidden;
       })()`));
+    await poll(cdp, "document.querySelector('#fm-card-meta').textContent.includes('share-original.splitpage')");
     await evalPage(cdp, "document.querySelector('[data-file-action=sharing-and-people]').click()");
     await poll(cdp, popoverOpen);
     await evalPage(cdp, "Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { async writeText(value) { window.lastSharedCopy = value; } } })");
@@ -3119,6 +3126,11 @@ async function caseShareScript(target, fixturesDir) {
     await clickControl(cdp, "save");
     await pollNode(() => fs.existsSync(copyPath));
     record(tag + ": Save a copy writes a script with the shared content", fs.readFileSync(copyPath, "utf8").includes("Original narration"));
+    await edit(app, "Written to the file copy");
+    await pollNode(() => fs.readFileSync(fixture, "utf8").includes("Written to the file copy"), 35_000);
+    const copied = fs.readFileSync(fixture, "utf8");
+    record(tag + ": the idle write keeps the file's document ID and excludes the invitation credential",
+      JSON.parse(copied).docId === sourceId && !copied.includes(link.hash.slice(1)));
 
     second = await launchApp(target, { label: "share-second", fixtures: [fixture], dialogs: [stoppedPath] });
     const saved = path.join(fixturesDir, "guest-copy.splitpage");
@@ -3171,11 +3183,29 @@ async function caseShareScript(target, fixturesDir) {
     await clickControl(cdp, "leave");
     const leaveHint = "#leave-script-modal .modal-hint";
     const leaveText = await poll(cdp, `document.querySelector(${JSON.stringify(leaveHint)})?.textContent`);
+    const external = splitpageFixtureText("Changed outside Splitpage", [["Outside visual", "Outside edit"]]);
+    fs.writeFileSync(fixture, external, "utf8");
+    const beforeCancel = await dialogsSeen(cdp);
+    await evalPage(cdp, "document.querySelector('#leave-script-modal [data-leave-script]').click()");
+    await poll(cdp, "document.querySelector('#leave-script-modal [data-dialog-cancel]:not(:disabled)')");
+    record(tag + ": cancelling Leave keeps the replica and the externally edited bytes",
+      await dialogsSeen(cdp) > beforeCancel && fs.existsSync(replica) && fs.readFileSync(fixture, "utf8") === external);
+    await evalPage(cdp, "document.querySelector('#leave-script-modal [data-dialog-cancel]').click()");
+    await poll(cdp, "document.querySelector('#file-copy-banner:not([hidden])')");
+    await evalPage(cdp, "[...document.querySelectorAll('#file-copy-banner button')].find(button => button.textContent === 'Overwrite the file').click()");
+    await pollNode(() => fs.readFileSync(fixture, "utf8").includes("Written to the file copy"));
+    await openPopover(cdp);
+    await clickControl(cdp, "leave");
+    await poll(cdp, "document.querySelector('#leave-script-modal [data-leave-script]')");
     await evalPage(cdp, "document.querySelector('#leave-script-modal [data-leave-script]').click()");
     await poll(cdp, "!document.getElementById('shared-pill')");
     await pollNode(() => !fs.existsSync(replica));
     record(tag + ": owner Leave confirms the script stays shared and removes local credentials",
       leaveText.includes("stay shared") && leaveText.includes("give up its owner controls"));
+    record(tag + ": Leave returns to the checked file with the ordinary document identity",
+      await evalPage(cdp, "window.__splitpageFormats.state().docId") === sourceId &&
+        JSON.parse(fs.readFileSync(fixture, "utf8")).docId === sourceId &&
+        !JSON.parse(fs.readFileSync(path.join(app.userDataDir, "desktop-state.json"), "utf8")).sharedFileCopies?.length);
     await edit(second, "Continued guest editing");
     await contains(guest, "Continued guest editing");
     record(tag + ": the remaining guests can still edit and sync after the owner leaves", true);
@@ -3222,17 +3252,36 @@ async function caseShareScript(target, fixturesDir) {
     record(tag + ": Stop sharing confirms the effect and keeps an unsaved local script while the other owner loses access",
       stopText.includes("everyone") && stopText.includes("stay on this device")
         && await poll(second.cdp, "document.getElementById('btn-save').dataset.dirty === 'true'"));
+    await shareCurrent(second.cdp);
+    record(tag + ": sharing an unsaved script creates no file copy record",
+      !JSON.parse(fs.readFileSync(path.join(second.userDataDir, "desktop-state.json"), "utf8")).sharedFileCopies?.length);
+    await evalPage(second.cdp, "document.querySelector('[data-share=close]').click()");
+    await poll(second.cdp, connected);
+    await openPopover(second.cdp);
+    await confirm(second.cdp, "stop", true);
+    await poll(second.cdp, "!document.getElementById('shared-pill')");
     await evalPage(second.cdp, "window.__desktopTest.runMenuCommand('save')", { awaitPromise: false });
     await pollNode(() => fs.existsSync(stoppedPath));
     await poll(second.cdp, "document.getElementById('btn-save').dataset.dirty === 'false'");
     const tabId = await evalPage(second.cdp, "window.splitpageDesktop.tabId");
     await pollNode(() => !readDraftDirs(second.userDataDir)[tabId]?.current);
-    await evalPage(second.cdp, "document.querySelector('#btn-file').click()");
-    await evalPage(second.cdp, "document.querySelector('[data-file-action=share-script]').click()");
-    await poll(second.cdp, "document.querySelector('[data-share=start]:not([hidden])')");
-    await evalPage(second.cdp, "document.querySelector('[data-share=start]').click()");
-    await poll(second.cdp, "document.querySelector('[data-share=copy]:not([hidden])')", 40000);
-    const crashLink = new URL(await evalPage(second.cdp, "document.querySelector('#share-script-link input').value"));
+    const ordinaryId = JSON.parse(fs.readFileSync(stoppedPath, "utf8")).docId;
+    const stopLink = await shareCurrent(second.cdp);
+    const stopName = "desktop-smoke/" + stopLink.searchParams.get("join");
+    const stopReplica = path.join(second.userDataDir, "native-replicas", crypto.createHash("sha256").update(stopName).digest("hex"));
+    await evalPage(second.cdp, "document.querySelector('[data-share=close]').click()");
+    await poll(second.cdp, connected);
+    await edit(second, "Written before Stop sharing");
+    await openPopover(second.cdp);
+    await confirm(second.cdp, "stop", true);
+    await poll(second.cdp, "!document.getElementById('shared-pill')");
+    await pollNode(() => !fs.existsSync(stopReplica));
+    const stoppedFile = JSON.parse(fs.readFileSync(stoppedPath, "utf8"));
+    record(tag + ": Stop sharing returns to the checked file and clears the file copy record",
+      stoppedFile.docId === ordinaryId && stoppedFile.rows[0].audioText.includes("Written before Stop sharing")
+      && await evalPage(second.cdp, "window.__splitpageFormats.state().docId") === ordinaryId
+      && !JSON.parse(fs.readFileSync(path.join(second.userDataDir, "desktop-state.json"), "utf8")).sharedFileCopies?.length);
+    const crashLink = await shareCurrent(second.cdp);
     const crashName = "desktop-smoke/" + crashLink.searchParams.get("join");
     const crashReplica = path.join(second.userDataDir, "native-replicas", crypto.createHash("sha256").update(crashName).digest("hex"));
     if (!fs.existsSync(path.join(crashReplica, "membership"))) throw new Error("The replica has no retained membership before stopping.");
@@ -3305,13 +3354,17 @@ async function caseSharedTabRestore(target, fixturesDir) {
   });
   let app, setup, standalone;
   let ownerProfile;
+  const openSource = `(async () => {
+    const file = (await window.splitpageDesktop.listRecents()).find(entry => !entry.shared && entry.name === 'share-original.splitpage');
+    return window.splitpageDesktop.routeOpen({ kind: 'file', fileId: file.fileId });
+  })()`;
   try {
     const [port] = await once(relay, "message", { signal: AbortSignal.timeout(10_000) });
     if (typeof port !== "number") throw new Error("The test relay did not report its port.");
     const address = "http://127.0.0.1:" + port;
     app = await launchApp(target, { label: "share-script", fixtures: [fixture] });
     ownerProfile = app.userDataDir;
-    const { cdp } = app;
+    let { cdp } = app;
     await waitForRows(cdp);
     await poll(cdp, "window.__splitpageFormats.state().title === 'Sharing fixture'");
     await evalPage(cdp, "document.querySelector('#btn-file').click()");
@@ -3347,7 +3400,7 @@ async function caseSharedTabRestore(target, fixturesDir) {
     const replica = path.join(ownerProfile, "native-replicas", crypto.createHash("sha256").update(name).digest("hex"));
     await evalPage(cdp, "document.querySelector('[data-share=close]').click()");
 
-    const sharedTabId = await tabIdOfTarget(cdp);
+    let sharedTabId = await tabIdOfTarget(cdp);
     const standaloneId = await shell(cdp, "createTab", {});
     standalone = await connectTab(app, standaloneId);
     await waitForRows(standalone);
@@ -3366,6 +3419,25 @@ async function caseSharedTabRestore(target, fixturesDir) {
       return win?.activeTabId === sharedTabId && win.tabs.length === 2;
     });
     record(tag + ": New Tab Recent uses the Shared badge and focuses the existing tab", true);
+    record(tag + ": opening the source file focuses the shared tab",
+      (await evalPage(standalone, openSource)).where === "other-tab");
+    const closedText = "Kept when closing the shared tab";
+    await evalPage(cdp, "document.querySelector('#rows .row .audio-cell .cell-editable').focus()");
+    await cdp.send("Input.insertText", { text: closedText });
+    await shell(standalone, "closeTab", { tabId: sharedTabId });
+    await pollNode(async () => {
+      const state = await shell(standalone, "listTargets", {});
+      return !state.windows.some(window => window.tabs.some(tab => tab.tabId === sharedTabId));
+    });
+    record(tag + ": closing the tab writes the current copy and keeps the local replica",
+      fs.readFileSync(fixture, "utf8").includes(closedText) && fs.existsSync(path.join(replica, "membership")));
+    cdp.close();
+    const openedSource = await evalPage(standalone, openSource);
+    const routed = await shell(standalone, "listTargets", {});
+    sharedTabId = routed.windows.find(win => win.tabs.some(tab => tab.tabId === standaloneId)).activeTabId;
+    cdp = app.cdp = await connectTab(app, sharedTabId);
+    await poll(cdp, `window.__sharedTest.read().app?.rows[0]?.audioText.includes(${JSON.stringify(closedText)})`);
+    record(tag + ": opening the source file after closing opens the retained shared script", openedSource.where === "new-tab");
     standalone.close();
     standalone = undefined;
     await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
@@ -3402,6 +3474,8 @@ async function caseSharedTabRestore(target, fixturesDir) {
     await fireEval(app.cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
     if (!await waitForExit(app.proc, 8000)) throw new Error("Offline quit did not finish: " + app.getStderr());
     await teardown(app, tag + " before offline restore", { expectExitCode: 0 });
+    record(tag + ": quitting while offline brings the file copy up to date",
+      fs.readFileSync(fixture, "utf8").includes(changed));
     app = await launchApp(target, { label: "shared-offline-restart", userDataDir: ownerProfile });
     if (await tabIdOfTarget(app.cdp) !== sharedTabId) {
       app.cdp.close();
@@ -3415,15 +3489,21 @@ async function caseSharedTabRestore(target, fixturesDir) {
     const membership = path.join(replica, "membership");
     const heldMembership = membership + ".test-held";
     const normal = writeFixture(fixturesDir, "after-failed-shared-restore.splitpage", "Standalone after failed restore", [["Visual", "Standalone"]]);
+    const checkedCopy = fs.readFileSync(fixture);
+    const external = splitpageFixtureText("Edited while closed", [["Outside visual", "Outside narration"]]);
+    fs.writeFileSync(fixture, external, "utf8");
     fs.renameSync(membership, heldMembership);
     try {
-      app = await launchApp(target, { label: "shared-failed-restart", userDataDir: ownerProfile, dialogs: [normal] });
+      app = await launchApp(target, { label: "shared-failed-restart", userDataDir: ownerProfile, dialogs: ["cancel", "confirm", normal] });
       if (await tabIdOfTarget(app.cdp) !== sharedTabId) {
         app.cdp.close();
         app.cdp = await connectTab(app, sharedTabId);
       }
       await poll(app.cdp, "document.getElementById('toast-host')?.textContent.includes('Could not reopen the local shared script.')");
     } finally { fs.renameSync(heldMembership, membership); }
+    const cancelled = await evalPage(app.cdp, openSource);
+    record(tag + ": a file changed while closed asks before opening and Cancel keeps its bytes",
+      cancelled.where === "cancelled" && await dialogsSeen(app.cdp) === 1 && fs.readFileSync(fixture, "utf8") === external);
     const reopened = await evalPage(app.cdp, `(async () => {
       const recent = (await window.splitpageDesktop.listRecents()).find(entry => entry.shared);
       return window.splitpageDesktop.routeOpen({ kind: 'shared', fileId: recent.fileId });
@@ -3434,6 +3514,10 @@ async function caseSharedTabRestore(target, fixturesDir) {
     standalone = await connectTab(app, newId);
     await poll(standalone, `window.__sharedTest?.read().app?.rows[0]?.audioText.includes(${JSON.stringify(changed)})`);
     record(tag + ": Recent opens the script after a failed restore releases its routing slot", newId !== sharedTabId);
+    const confirmed = await evalPage(app.cdp, openSource);
+    record(tag + ": confirming the changed file focuses the shared script without importing the external edit",
+      confirmed.where === "other-tab" && await dialogsSeen(app.cdp) === 2 && fs.readFileSync(fixture, "utf8") === external);
+    fs.writeFileSync(fixture, checkedCopy);
     await evalPage(app.cdp, "window.__desktopTest.runMenuCommand('open')", { awaitPromise: false });
     await poll(app.cdp, "window.__splitpageFormats?.state().title === 'Standalone after failed restore'");
     record(tag + ": the failed tab opens a normal file as a standalone script", await evalPage(app.cdp, "!document.getElementById('shared-pill')"));

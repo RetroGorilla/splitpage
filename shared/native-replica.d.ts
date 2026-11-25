@@ -1,4 +1,5 @@
 import type { SharedScriptCatalogueEntry } from "./shared-script.ts";
+import type { SharedFileRequest, SharedFileResult } from "./shared-file-copy.d.ts";
 
 export interface NativeMembershipRecord {
   readonly token: string;
@@ -7,6 +8,7 @@ export interface NativeMembershipRecord {
 }
 
 export type NativeReplicaRequest =
+  | SharedFileRequest
   | ["open" | "delete" | "focus-shared", name: string]
   | ["note-shared", name: string, entry: SharedScriptCatalogueEntry]
   | ["membership" | "forget" | "read-journal", name: string, lease: string]
@@ -25,6 +27,7 @@ export interface NativeReplicaEntry {
 }
 
 export type NativeReplicaReply =
+  | SharedFileResult
   | { readonly kind: "failed"; readonly reason: "locked" | "closed" | "quota" | "io" }
   | { readonly kind: "opened"; readonly lease: string }
   | { readonly kind: "read"; readonly entries: readonly NativeReplicaEntry[] }

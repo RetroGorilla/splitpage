@@ -79,18 +79,28 @@ function savedWord(at?: number | null) {
   return { text: savedStatusText(at, now), title: when ? "Last saved at " + when : "" };
 }
 
+declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
+
 function fileCardView(): { name: string | null | undefined; bits: { text: string | null | undefined; unsaved?: boolean; title?: string }[] } {
   const current = (ports as FileMenuDropdownPorts).document.current();
   if (!current) return { name: "Loading…", bits: [] };
   const collab = (ports as FileMenuDropdownPorts).collaboration.snapshot();
   if (collab.active) {
     const shared = sharedSaveStatus(collab);
+    const bits: ReturnType<typeof fileCardView>["bits"] = [
+      { text: shared.label, unsaved: shared.state === "warn", title: shared.title },
+      { text: "Shared script" }
+    ];
+    if (typeof SPLITPAGE_COLLAB_UI === "undefined" || SPLITPAGE_COLLAB_UI) {
+      const copy = (ports as FileMenuDropdownPorts).sharedFileCopy?.read().file;
+      if (copy) bits.push({ text: copy.name });
+      if (copy?.missing) bits.push({
+        text: `Incomplete copy (${copy.missing} ${copy.missing === 1 ? "picture" : "pictures"} missing)`, unsaved: true
+      });
+    }
     return {
       name: current.title || "Untitled Script",
-      bits: [
-        { text: shared.label, unsaved: shared.state === "warn", title: shared.title },
-        { text: "Shared script" }
-      ]
+      bits
     };
   }
   if ((ports as FileMenuDropdownPorts).place.home().kind === "file") {
@@ -443,6 +453,7 @@ export function startFileMenu(given: FileMenuDropdownPorts): FileMenuDropdownMou
   const mounted = {};
   activeMount = mounted;
   const items = given.collaborationItems;
+  const stopFileCopy = given.sharedFileCopy?.subscribe(refreshOpenFileMenu);
   let collaborationGroup: HTMLElement | undefined;
   let visibleItems = "";
   const stopCollaboration = items?.length ? onFileMenuRefresh(() => {
@@ -473,6 +484,7 @@ export function startFileMenu(given: FileMenuDropdownPorts): FileMenuDropdownMou
       disposed = true;
       while (listeners.length) (listeners.pop() as () => void)();
       stopCollaboration?.();
+      stopFileCopy?.();
       collaborationGroup?.remove();
       if (withdrawHook) withdrawHook();
       if (activeMount === mounted) {

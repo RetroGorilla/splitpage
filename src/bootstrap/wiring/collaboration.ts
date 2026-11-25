@@ -23,6 +23,8 @@ import { captureOperation, stillOwns } from "./transition-owners.ts";
 import { undoOwner } from "./undo.ts";
 import { holdDesktopDocumentPublication } from "./desktop-owners.ts";
 import { autoSavePolicy, saveBusy, scheduleAutoSave } from "./save-owners.ts";
+import { mountFileCopyBanner } from "../../features/collaboration/file-copy-banner.ts";
+import { sharedFileCopy } from "./shared-file-copy.ts";
 
 declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 
@@ -49,7 +51,11 @@ function openLeave() {
       const file = await files.buildFileData("splitpage", files.exportBaseName());
       return fileDelivery.deliver(file.filename, file.data, { savedMsg: "Saved a separate copy" });
     },
-    async leave() { return stillOwns(context) && ((await sharedEntry()?.leave())?.ok ?? false); }
+    async leave() {
+      if (!stillOwns(context)) return false;
+      const result = await sharedEntry()?.leave();
+      return result?.ok ? true : result?.reason === "file-copy-cancelled" ? "cancelled" : false;
+    }
   });
   return true;
 }
@@ -57,6 +63,7 @@ function openLeave() {
 export const requestRetainedLeave = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI ? openLeave : () => false;
 
 function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "register">): () => void {
+  const unmountFileCopy = mountFileCopyBanner(sharedFileCopy);
   let attempt: ReturnType<typeof createShareAttempt> | undefined;
   let dispose: (() => void) | undefined;
   const unregister = registry.register(shareScriptAction({
@@ -152,6 +159,7 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
   const unregisterLeave = registry.register(leaveScriptAction({ screen, visible: sharedSession, open: () => { if (!openLeave()) void sharedEntry()?.leave(); } }));
   return () => {
     unregisterLeave();
+    unmountFileCopy();
     unregisterSharing();
     popover.dispose();
     unregisterJoin();

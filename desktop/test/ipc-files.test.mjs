@@ -10,7 +10,7 @@ const { createFileIpc } = require("../ipc-files.ts");
 const { createRecents } = require("../recents.ts");
 const { createFileRegistry, pathKey } = require("../file-service.ts");
 
-function harness(t, saved = {}) {
+function harness(t, saved = {}, reservedCopyPath) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-file-dialog-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   let state = { recents: [], ...saved };
@@ -46,7 +46,7 @@ function harness(t, saved = {}) {
     fileIds, recents, pathToTabId: new Map(), tabs: new Map(),
     tabOf: () => null, dialogParentFor: () => undefined,
     consumeTestDialogAnswer: () => answers.shift(),
-    testDialogsSeen: () => 0, testMode: false,
+    testDialogsSeen: () => 0, testMode: false, reservedCopyPath,
     bundleJobs: {
       noteSaveTarget: (id, tab) => { noted.push({ id, tab }); },
       prepareWrite: async (id) => ({ refused: null, landed: (ok) => { if (ok) landed.push(id); } }),
@@ -60,6 +60,18 @@ function harness(t, saved = {}) {
     invoke: (name, ...args) => handlers.get("splitpage:" + name)({}, ...args)
   };
 }
+
+test("a shared file copy's path rejects Save As and file IDs granted before sharing", async t => {
+  const h = harness(t, {}, absPath => absPath === file);
+  const file = path.join(h.root, "Reserved.splitpage");
+  fs.writeFileSync(file, "shared copy");
+  h.answers.push(file);
+  assert.equal(await h.invoke("save-file-dialog", { suggestedName: "Reserved.splitpage", script: true }), null);
+  assert.deepEqual(h.noted, []);
+  const id = h.fileIds.register(file);
+  await assert.rejects(h.invoke("write-file", id, "another tab's work"), /kept by a shared script/);
+  assert.equal(fs.readFileSync(file, "utf8"), "shared copy");
+});
 
 test("Open starts in Documents when no script has been saved or opened", async (t) => {
   const h = harness(t);

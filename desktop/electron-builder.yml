@@ -39,6 +39,7 @@ files:
   - desktop-state.ts
   - update-release.ts
   - file-service.ts
+  - shared-file-copy.ts
   - doc-claims.ts
   - recents.ts
   - window-appearance.ts

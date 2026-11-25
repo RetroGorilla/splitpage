@@ -28,7 +28,8 @@ const COLLABORATION_MARKERS = [
   "leave-script-modal", "Leave shared script",
   "share-script", "Share this script…", "share-script-modal", "splitpage:relay-owner-share-create",
   "Shared scripts on this device", "note-shared", "focus-shared", "open-shared",
-  "shared-pill", "shared-popover", "sharing-and-people", "leave-shared-script", "splitpage:relay-owner-sharing"
+  "shared-pill", "shared-popover", "sharing-and-people", "leave-shared-script", "splitpage:relay-owner-sharing",
+  "file-copy-banner", "file-copy-status", "file-copy-write", "file-copy-stop", "file-copy-choice", "Incomplete copy ("
 ];
 
 export function leakedCollaboration(text) {

@@ -46,7 +46,7 @@ function desktopPorts(): DesktopPorts {
     documents: { open: (opening) => openDocument(opening) },
     saves: { unsaved: portSaves.unsaved, save: () => saveDoc() },
     startup: portStartup,
-    flushDraft: options => flushSharedDesktopCopy() ?? flushDraftNow(options),
+    flushDraft: options => flushSharedDesktopCopy(options.fileCopyMode) ?? flushDraftNow(options),
     reassignDocId: (toId, message) => documentIdentity.reassignDocId(toId, message),
     documentState: { notify: notifyDesktopDocumentState, settled: handedDocumentSettled, awaitHanded: awaitHandedDocument },
     menuCommands: { run: runMenuCommand }

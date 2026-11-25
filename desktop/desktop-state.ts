@@ -7,6 +7,7 @@ import type { DesktopSharedScriptReference } from "../shared/desktop-contract.d.
 import type { Rectangle } from "electron";
 import type { writeFileDurableSync as WriteDesktopStateFile } from "./drafts.ts";
 import type { SharedScriptCatalogueEntry, SharedScriptIdentity, readSharedScriptCatalogueEntry, readSharedScriptIdentity } from "../shared/shared-script.ts";
+import type { SharedFileRecord } from "../shared/shared-file-copy.d.ts";
 
 const path: typeof NodePath = require("node:path");
 const fs: typeof NodeFs = require("node:fs");
@@ -145,6 +146,23 @@ function normalizeDesktopStateV2(raw: unknown, pathKey: (path: string) => string
       return entry ? [{ ...entry, ...((rawEntry as DesktopStateRaw).recent === false && { recent: false as const }) }] : [];
     });
   }
+  const rawCopies = (raw as DesktopStateRaw | null)?.sharedFileCopies;
+  if (shared && Array.isArray(rawCopies)) {
+    const paths = new Set<string>(), scripts = new Set<string>();
+    state.sharedFileCopies = rawCopies.flatMap((value: unknown) => {
+      const identity = shared.identity(value);
+      if (!identity) return [];
+      const { absPath, docId, fingerprint, missing } = value as Partial<SharedFileRecord>;
+      if (typeof absPath !== "string" || !path.isAbsolute(absPath) || typeof docId !== "string" ||
+          !/^d[a-f0-9]{32}$/.test(docId) || typeof fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(fingerprint) ||
+          typeof missing !== "number" || !Number.isSafeInteger(missing) || missing < 0) return [];
+      const key = pathKey(absPath), script = identity.deployment + "/" + identity.script;
+      if (paths.has(key) || scripts.has(script)) return [];
+      paths.add(key);
+      scripts.add(script);
+      return [{ ...identity, absPath, docId, fingerprint, missing }];
+    });
+  }
   const lastSavedFolder = raw && (raw as DesktopStateRaw).lastSavedFolder;
   if (typeof lastSavedFolder === "string" && path.isAbsolute(lastSavedFolder)) {
     return { ...state, lastSavedFolder };
@@ -249,6 +267,7 @@ export interface DesktopStoredWindow {
   tabs: DesktopStoredTab[];
 }
 export interface DesktopStoredState {
+  sharedFileCopies?: SharedFileRecord[];
   version: number;
   lastSavedFolder?: string;
   windows: DesktopStoredWindow[];
