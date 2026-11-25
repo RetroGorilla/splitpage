@@ -37,17 +37,17 @@ test("mark rules group peers by beat and side, including the Writer sign for a v
   const audio: PresencePeer = { clientId: 1, name: "Ada", color: "#80BDFB", view: "writer", beat: 'r"1', side: "audioText" };
   const visual: PresencePeer = { ...audio, clientId: 2, color: "#EF958E", side: "visualText" };
   const present: PresencePeer = { ...audio, clientId: 3, view: "present", beat: null, side: null };
-  const rules = markRules([audio, visual, present], cssAttr).split("\n");
-  assert.equal(rules.length, 4);
-  assert.ok(rules[0]?.startsWith('.rd-block[data-row="r\\"1"]::after'));
-  assert.match(rules[0] ?? "", /box-shadow:0px 0 #80BDFB,-8px 0 #EF958E/);
-  assert.match(rules[1] ?? "", /audio-cell.*background:#80BDFB/);
-  assert.match(rules[2] ?? "", /visual-cell.*background:#EF958E/);
-  assert.match(rules[3] ?? "", /wr-beat.*Visual in use.*#EF958E/);
-  assert.equal(markRules([present], cssAttr), "");
+  const beat = '[data-id="r\\"1"]';
+  assert.deepEqual(markRules([audio, visual, present], cssAttr), [
+    { selector: '.rd-block[data-row="r\\"1"]', kind: "dots", color: "#80BDFB", shadows: "-8px 0 #EF958E" },
+    { selector: "#rows .row" + beat + " .audio-cell .field-wrap", kind: "dots", color: "#80BDFB", shadows: "none" },
+    { selector: "#rows .row" + beat + " .visual-cell .field-wrap", kind: "dots", color: "#EF958E", shadows: "none" },
+    { selector: "#writer-doc.is-flow .wr-beat" + beat, kind: "visual", color: "#EF958E" }
+  ]);
+  assert.deepEqual(markRules([present], cssAttr), []);
 });
 
-test("the presence view samples only while the relay is synced and cancels pending work on disposal", t => {
+test("the presence view samples while synced and keeps a marker on a replaced field", async t => {
   const h = viewHarness();
   const original = Object.getOwnPropertyDescriptors(globalThis);
   Object.assign(globalThis, { window: h.window, document: h.document, CSS: { escape: cssAttr } });
@@ -60,7 +60,8 @@ test("the presence view samples only while the relay is synced and cancels pendi
     h.window.close();
   });
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  const { collaboration, ports, published } = fakePresenceView();
+  h.el("rows").innerHTML = '<div class="row" data-id="r1"><div class="cell audio-cell"><div class="field-wrap"></div></div></div>';
+  const { collaboration, presence, ports, published } = fakePresenceView();
   const dispose = mountPresenceView(ports);
   collaboration.enter();
   t.mock.timers.tick(100);
@@ -68,8 +69,19 @@ test("the presence view samples only while the relay is synced and cancels pendi
   collaboration.setRelay({ connected: true, firstSyncDone: true, pendingChangeCount: 0 });
   t.mock.timers.tick(100);
   assert.deepEqual(published, [{ name: "Ada", color: "#80BDFB", view: "split", beat: null, side: null }]);
+  const binding = presence.bind(() => {});
+  binding.receive([{ clientId: 1, name: "Ada", color: "#80BDFB", view: "split", beat: "r1", side: "audioText" }]);
+  const field = h.document.querySelector<HTMLElement>("#rows .field-wrap");
+  assert.equal(field?.dataset.presenceDots, "");
+  const replacement = h.document.createElement("div");
+  replacement.className = "field-wrap";
+  field?.replaceWith(replacement);
+  await Promise.resolve();
+  assert.equal(replacement.dataset.presenceDots, "");
+  assert.equal(field?.dataset.presenceDots, undefined);
   h.fire(h.document.body, "focusin");
   dispose();
   t.mock.timers.tick(100);
   assert.equal(published.length, 1);
+  assert.equal(replacement.dataset.presenceDots, undefined);
 });

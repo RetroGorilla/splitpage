@@ -1,4 +1,6 @@
 import { HocuspocusProvider } from "@hocuspocus/provider";
+import { readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
+import { declareNativeRoots } from "../../../../src/adapters/collab/native/roots.ts";
 
 export function openMovingPresencePeer(url) {
   const provider = new HocuspocusProvider({ url, name: "presence", token: "presence-test" });
@@ -16,6 +18,10 @@ export function openMovingPresencePeer(url) {
   }, 320);
   return {
     counts: () => ({ moves, movesNearEdits }),
+    received(text) {
+      return readNativeOnce(declareNativeRoots(provider.document), reader =>
+        ["r1", "r2"].every(id => reader.row(id)?.audioText.includes(text)));
+    },
     close() {
       clearInterval(movement);
       provider.destroy();

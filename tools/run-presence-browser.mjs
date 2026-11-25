@@ -13,6 +13,7 @@ const driver = ".claude/skills/run-splitpage-app/driver.mjs";
 const testFile = ".claude/skills/run-splitpage-app/presence.txt";
 const at = "2026-11-24T00:00:00.000Z";
 const long = process.argv.includes("--perf-long");
+const typed = "presenceoverarealrelaypresenceoverarealrelay";
 const rows = long ? Object.fromEntries(Array.from({ length: 300 }, (_, i) => [
   "r" + (i + 1), "Narration for beat " + (i + 1) + ". Leave enough words for this beat to take its place in the rundown."
 ])) : { r1: "First beat", r2: "Second beat" };
@@ -38,19 +39,20 @@ const setup = [
   "open",
   "wait window.__sharedTest && document.querySelector('#rows .row')",
   "expect !document.querySelector('#shared-pill')",
-  "eval localStorage.setItem('splitpage-comment-author','First Editor');window.frame=document.createElement('iframe');frame.src='/?presence-peer=1';frame.style.cssText='position:fixed;right:0;bottom:0;width:640px;height:480px;z-index:100';document.body.append(frame);true",
+  "eval window.frame=document.createElement('iframe');frame.src='/?presence-peer=1';frame.style.cssText='position:fixed;right:0;bottom:0;width:640px;height:480px;z-index:100';document.body.append(frame);true",
   "wait frame.contentWindow.__sharedTest && frame.contentDocument.querySelector('#rows .row')",
-  "eval window.P=frame.contentWindow;window.enter=(win,deployment)=>win.__sharedTest.enterRetained({deployment,script:'presence',relayUrl:" +
+  "eval localStorage.setItem('splitpage-comment-author','First Editor');window.enter=(win,deployment)=>win.__sharedTest.enterRetained({deployment,script:'presence',relayUrl:" +
     JSON.stringify(relayUrl) +
-    ",invitation:{token:'presence-test',state:Uint8Array.from(atob(" + JSON.stringify(seed) + "),ch=>ch.charCodeAt(0))}});enter(window,'local').then(result=>result.ok)",
+    ",invitation:{token:'presence-test',state:Uint8Array.from(atob(" + JSON.stringify(seed) + "),ch=>ch.charCodeAt(0))}}).then(result=>{if(!result.ok)throw Error(result.reason);return true});enter(window,'local')",
   "wait document.querySelector('[data-connection]')?.textContent === 'Connected'",
-  "eval localStorage.setItem('splitpage-comment-author','Peer Editor');enter(P,'peer').then(result=>result.ok)",
-  "wait P.document.querySelector('[data-connection]')?.textContent === 'Connected'",
+  ...long ? ["eval frame.remove();true"] : [
+    "eval window.P=frame.contentWindow;localStorage.setItem('splitpage-comment-author','Peer Editor');enter(P,'peer')",
+    "wait P.document.querySelector('[data-connection]')?.textContent === 'Connected'"
+  ],
   "eval window.Q=(win,id,field)=>win.document.querySelector('#rows .cell-editable[data-id=\"'+id+'\"][data-field=\"'+field+'\"]');true",
 ];
 
 function benchmark() {
-  const typed = "presenceoverarealrelaypresenceoverarealrelay";
   const keys = [...typed].flatMap(letter => ["press " + letter, "sleep 65"]);
   const label = long ? "shared long moving peer" : "shared";
   const lines = [
@@ -59,22 +61,22 @@ function benchmark() {
       "wait !document.querySelector('[data-here-now]') || document.querySelector('#shared-pill .person-avatar[title=\"Moving Editor\"]')"
     ] : []),
     "eval " + PROBE.replace(/\n\s*/g, " "),
-    "eval Q(P,'r2','visualText').focus();true",
+    ...long ? [] : ["eval Q(P,'r2','visualText').focus();true"],
     "caret #rows .audio-cell .cell-editable[data-id=r1]",
     "key End",
     "eval window.__perf.reset()",
     ...keys,
-    "wait Q(P,'r1','audioText').textContent.includes('" + typed + "')",
+    ...long ? ["sleep 250"] : ["wait Q(P,'r1','audioText').textContent.includes('" + typed + "')"],
     "eval window.__perf.take('" + label + " Split typing')",
     "click #btn-write",
     "wait window.__writerFlowTest.on()",
     "eval window.w=document.querySelector('#writer-doc');w.focus();const beat=w.querySelector('.wr-beat[data-id=r2]');getSelection().collapse(beat,beat.childNodes.length);true",
     "eval window.__perf.reset()",
     ...keys,
-    "wait Q(P,'r2','audioText').textContent.includes('" + typed + "')",
+    ...long ? ["sleep 250"] : ["wait Q(P,'r2','audioText').textContent.includes('" + typed + "')"],
     "eval window.__perf.take('" + label + " Writer typing')",
     "eval document.querySelector('#wr-close').click();true",
-    "eval P.__sharedTest.leave().then(result=>result.ok)",
+    ...long ? [] : ["eval P.__sharedTest.leave().then(result=>result.ok)"],
     "eval __sharedTest.leave().then(result=>result.ok)"
   ];
   return lines;
@@ -96,6 +98,7 @@ try {
     if (movesNearEdits < 8) {
       throw new Error(`The long typing run had only ${movesNearEdits} peer moves near edits, from ${moves} moves in total.`);
     }
+    if (!mover.received(typed)) throw new Error("The moving peer did not receive both typing cases.");
   }
   process.stdout.write(stdout);
   process.stderr.write(stderr);

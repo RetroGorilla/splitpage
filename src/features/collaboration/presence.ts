@@ -20,7 +20,11 @@ export function location(document: Document): PresenceLocation {
   return cellLocation("split", active?.closest<HTMLElement>("#rows .cell-editable") ?? null);
 }
 
-export function markRules(peers: readonly PresencePeer[], escapeId: (id: string) => string): string {
+type MarkerRule =
+  | { readonly selector: string; readonly color: string; readonly kind: "dots"; readonly shadows: string }
+  | { readonly selector: string; readonly color: string; readonly kind: "visual" };
+
+export function markRules(peers: readonly PresencePeer[], escapeId: (id: string) => string): readonly MarkerRule[] {
   const beats = new Map<string, PresencePeer[]>();
   for (const peer of peers) {
     if (!peer.beat) continue;
@@ -29,12 +33,11 @@ export function markRules(peers: readonly PresencePeer[], escapeId: (id: string)
     else beats.set(peer.beat, [peer]);
   }
 
-  const rules: string[] = [];
-  function dots(selector: string, people: readonly PresencePeer[]): void {
-    if (!people.length) return;
-    const shadows = people.map((person, i) => (i * -8) + "px 0 " + person.color).join(",");
-    rules.push(selector + '::after {content:"";position:absolute;inset:1px 3px auto auto;width:6px;height:6px;' +
-      'border-radius:50%;background:' + people[0]?.color + ';box-shadow:' + shadows + ';pointer-events:none;z-index:1}');
+  const rules: MarkerRule[] = [];
+  function dots(selector: string, [first, ...others]: readonly PresencePeer[]): void {
+    if (!first) return;
+    const shadows = others.map((person, i) => ((i + 1) * -8) + "px 0 " + person.color).join(",") || "none";
+    rules.push({ selector, kind: "dots", color: first.color, shadows });
   }
 
   for (const [id, people] of beats) {
@@ -44,18 +47,37 @@ export function markRules(peers: readonly PresencePeer[], escapeId: (id: string)
     dots(row + " .audio-cell .field-wrap", people.filter(peer => peer.side === "audioText"));
     const visuals = people.filter(peer => peer.side === "visualText");
     dots(row + " .visual-cell .field-wrap", visuals);
-    if (visuals.length) {
-      rules.push('#writer-doc.is-flow .wr-beat[data-id="' + idValue + '"]::before {' +
-        'content:attr(data-num) " · Visual in use";color:var(--text);border-bottom:2px solid ' + visuals[0]?.color + '}');
+    const visual = visuals[0];
+    if (visual) {
+      rules.push({ selector: '#writer-doc.is-flow .wr-beat[data-id="' + idValue + '"]', kind: "visual", color: visual.color });
     }
   }
-  return rules.join("\n");
+  return rules;
+}
+
+function clearMark(element: HTMLElement): void {
+  delete element.dataset.presenceDots;
+  delete element.dataset.presenceVisual;
+  element.style.removeProperty("--presence-mark-color");
+  element.style.removeProperty("--presence-mark-shadows");
+}
+
+function putMark(element: HTMLElement, rule: MarkerRule): void {
+  element.style.setProperty("--presence-mark-color", rule.color);
+  if (rule.kind === "dots") {
+    element.dataset.presenceDots = "";
+    element.style.setProperty("--presence-mark-shadows", rule.shadows);
+  } else {
+    element.dataset.presenceVisual = "Visual in use";
+  }
 }
 
 export function mountPresenceView(ports: PresenceViewPorts): () => void {
-  const markers = document.createElement("style");
+  let rules: readonly MarkerRule[] = [];
+  let marked = new Map<HTMLElement, MarkerRule>();
   let tracking: AbortController | undefined;
   let observer: MutationObserver | undefined;
+  let markerObserver: MutationObserver | undefined;
   let stopIdentity: (() => void) | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let showing = false;
@@ -75,8 +97,10 @@ export function mountPresenceView(ports: PresenceViewPorts): () => void {
     stopIdentity = undefined;
     clearTimeout(timer);
     timer = undefined;
-    markers.remove();
-    markers.textContent = "";
+    markerObserver?.disconnect();
+    for (const element of marked.keys()) clearMark(element);
+    marked.clear();
+    rules = [];
   }
 
   function track(): void {
@@ -88,6 +112,10 @@ export function mountPresenceView(ports: PresenceViewPorts): () => void {
       if (document.activeElement?.id === "writer-doc") sample();
     }, { signal });
     observer = new window.MutationObserver(sample);
+    markerObserver = new window.MutationObserver(records => {
+      if (records.some(({ target }) => target.nodeType === 1 &&
+        (target as Element).matches("#rows, .rundown-blocks, #rows .cell, #writer-doc, .wr-par"))) paint();
+    });
     for (const id of ["writer", "prompter"]) {
       const view = document.getElementById(id);
       if (view) observer.observe(view, { attributes: true, attributeFilter: ["hidden"] });
@@ -97,11 +125,38 @@ export function mountPresenceView(ports: PresenceViewPorts): () => void {
   }
 
   function paint(): void {
-    const css = showing ? markRules(ports.presence.peers(), CSS.escape) : "";
-    if (markers.textContent === css) return;
-    markers.textContent = css;
-    if (css && !markers.isConnected) document.head.append(markers);
-    if (!css) markers.remove();
+    const next = new Map<HTMLElement, MarkerRule>();
+    const parents = new Set<Element>();
+    for (const rule of rules) {
+      const element = document.querySelector<HTMLElement>(rule.selector);
+      if (!element) continue;
+      next.set(element, rule);
+      const previous = marked.get(element);
+      if (previous?.color !== rule.color || (rule.kind === "dots" && (previous.kind !== "dots" || previous.shadows !== rule.shadows))) {
+        putMark(element, rule);
+      }
+      const parent = element.parentElement;
+      if (parent?.matches("#rows .cell")) parents.add(parent);
+    }
+    for (const element of marked.keys()) {
+      if (!next.has(element)) clearMark(element);
+    }
+    marked = next;
+    markerObserver?.disconnect();
+    if (!rules.length) return;
+    for (const selector of ["#rows", ".rundown-blocks"]) {
+      const root = document.querySelector(selector);
+      if (root) parents.add(root);
+    }
+    for (const parent of parents) markerObserver?.observe(parent, { childList: true });
+    const writer = document.getElementById("writer-doc");
+    if (writer && rules.some(rule => rule.kind === "visual")) markerObserver?.observe(writer, { childList: true, subtree: true });
+  }
+
+  function updateMarks(): void {
+    if (!showing) return;
+    rules = markRules(ports.presence.peers(), id => CSS.escape(id));
+    paint();
   }
 
   function sync(): void {
@@ -109,13 +164,15 @@ export function mountPresenceView(ports: PresenceViewPorts): () => void {
     const online = active && relay.connected && relay.firstSyncDone && !refusal && !mergeTooLarge;
     if (showing === online) return;
     showing = online;
-    if (online) track();
+    if (online) {
+      track();
+      updateMarks();
+    }
     else stop();
-    paint();
   }
 
   const unlisten = ports.collaboration.onChange(sync);
-  const unpaint = ports.presence.onChange(paint);
+  const unpaint = ports.presence.onChange(updateMarks);
   sync();
   return () => { unlisten(); unpaint(); stop(); };
 }
