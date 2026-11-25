@@ -40,12 +40,15 @@ const SHARED_HOOK_ONLY = Object.freeze([
   "undoReader",
   "queuedReaderUpdates",
   "deliverReaderUpdates",
+  "The stored state does not hold a well-formed native script",
+  "enterFrom"
+]);
+
+const SHARED_ENTRY_NOTICES = Object.freeze([
   "draft-not-kept",
   "The shared session did not start",
   "The draft writer did not detach",
-  "The Writer could not settle",
-  "The stored state does not hold a well-formed native script",
-  "enterFrom"
+  "The Writer could not settle"
 ]);
 
 const RETIRED_SHARED_HOOK_ONLY = Object.freeze([
@@ -111,6 +114,7 @@ eq("the fake desktop backend and its fault switches are left out", FAKE_DESKTOP.
 eq("the render counters and blob store controls are left out", HOOK_ONLY.filter((marker) => release.includes(marker)), []);
 eq("history fault queues, controls and inspection code are left out", historyTestNames(release), []);
 eq("the shared session hook, its peer and their notices are left out", [...SHARED_HOOK_ONLY, ...RETIRED_SHARED_HOOK_ONLY].filter((marker) => release.includes(marker)), []);
+eq("the shared entry and its notices ship with collaboration", SHARED_ENTRY_NOTICES.filter((marker) => !release.includes(marker)), []);
 eq("no timing mark is left in it", [...TIMING_MARKS, ...RETIRED_ADAPTER_TIMING_MARKS, "marksOn"].filter((mark) => release.includes(mark)), []);
 check("no timing mark name of any kind is left in it", !release.includes("measure:"), null);
 
@@ -124,7 +128,7 @@ eq("a converted hook is never also on the list", CONVERTED.filter((name) => STIL
 eq("it keeps the fake desktop backend and its fault switches", FAKE_DESKTOP.filter((marker) => !testBuild.includes(marker)), []);
 eq("it keeps the render counters and blob store controls", HOOK_ONLY.filter((marker) => !testBuild.includes(marker)), []);
 eq("it keeps every history fault and distinctive control name", historyTestNames(testBuild), [...HISTORY_TEST_NAMES].sort());
-eq("it keeps the native shared session hook, its peer and their notices", SHARED_HOOK_ONLY.filter((marker) => !testBuild.includes(marker)), []);
+eq("it keeps the native shared session hook, its peer and their notices", [...SHARED_HOOK_ONLY, ...SHARED_ENTRY_NOTICES].filter((marker) => !testBuild.includes(marker)), []);
 eq("it leaves out the legacy fixture and its peer", ["__legacySharedTest", ...RETIRED_SHARED_HOOK_ONLY].filter((marker) => testBuild.includes(marker)), []);
 eq("it keeps the remaining timing marks", [...TIMING_MARKS, "marksOn"].filter((mark) => !testBuild.includes(mark)), []);
 eq("it leaves out the retired Writer timing marks", RETIRED_TIMING_MARKS.filter((mark) => testBuild.includes(mark)), []);

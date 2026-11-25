@@ -185,15 +185,16 @@ const APP_ROOT = app.isPackaged
   : path.resolve(__dirname, "..");
 
 const DESKTOP_BUILD = app.isPackaged ? path.join(APP_ROOT, "desktop-build") : path.join(__dirname, ".build");
-const COLLAB_UI = (() => {
+const COLLABORATION_SETTING = (() => {
   try {
     const settingPath = path.join(app.isPackaged ? __dirname : DESKTOP_BUILD, "collaboration.json");
-    const setting = JSON.parse(fs.readFileSync(settingPath, "utf8")) as { collabUi?: unknown } | null;
-    return setting?.collabUi === true;
+    return JSON.parse(fs.readFileSync(settingPath, "utf8")) as { collabUi?: unknown; testRelay?: unknown } | null;
   } catch {
-    return false;
+    return null;
   }
 })();
+const COLLAB_UI = COLLABORATION_SETTING?.collabUi === true;
+const TEST_RELAY = COLLAB_UI && COLLABORATION_SETTING?.testRelay === true;
 const SHARED_ROOT = path.join(APP_ROOT, "shared");
 const { readSharedScriptCatalogueEntry, readSharedScriptIdentity, sharedScriptKey }: typeof SharedScripts =
   require(path.join(SHARED_ROOT, "shared-script.ts"));
@@ -1928,9 +1929,9 @@ const relaySetup = COLLAB_UI ? (() => {
   const { createNativeReplicaFiles }: { createNativeReplicaFiles: typeof CreateNativeReplicaFiles } = require("./native-replica-files.ts");
   const setupWindow = createRelaySetupWindow(BrowserWindow, root, RELAY_SETUP_ORIGIN);
   const userData = app.getPath("userData");
-  // why: desktop staging and the dev build enable collaboration with the same flag that grants loopback WebSocket access
+  // why: only test builds accept a loopback HTTP relay, matching the test build's ws://127.0.0.1 connection policy
   const passwordPolicy: typeof LinkPassword = require(path.join(SHARED_ROOT, "link-password.ts"));
-  const owner = createRelayOwner(userData, safeStorage, passwordPolicy, fetch, COLLAB_UI);
+  const owner = createRelayOwner(userData, safeStorage, passwordPolicy, fetch, TEST_RELAY);
   const shares = createShareCreations(userData, owner, createNativeReplicaFiles(userData).remove);
   function tabWindow(event: DesktopIpcEvent) {
     const tab = tabOf(event);

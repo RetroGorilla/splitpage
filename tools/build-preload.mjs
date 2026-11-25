@@ -14,7 +14,7 @@ export function collaborationPreload(name, collabUi) {
   }).code.replaceAll("/* @__PURE__ */ ", "");
 }
 
-export function writeDesktopBuild(directory, collabUi, settingsDirectory = directory) {
+export function writeDesktopBuild(directory, collabUi, testRelay, settingsDirectory = directory) {
   mkdirSync(directory, { recursive: true });
   const setup = join(directory, "relay-setup");
   rmSync(setup, { recursive: true, force: true });
@@ -25,7 +25,7 @@ export function writeDesktopBuild(directory, collabUi, settingsDirectory = direc
     writeFileSync(join(setup, "preload.js"), collaborationPreload("relay-setup-preload", true));
     writeFileSync(join(directory, "preload.js"), collaborationPreload("preload", true));
   }
-  writeFileSync(join(settingsDirectory, "collaboration.json"), JSON.stringify({ collabUi }) + "\n");
+  writeFileSync(join(settingsDirectory, "collaboration.json"), JSON.stringify({ collabUi, testRelay }) + "\n");
 }
 
 if (isMain(import.meta.url)) {

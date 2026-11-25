@@ -1167,8 +1167,8 @@ included (they're your files).
 
 - You can keep editing when the relay is offline. Changes stay on this device
   and sync when you reconnect. If edits overlap, **Review changes** shows your
-  offline copy alongside the current script. Use **Show beat** to inspect it in
-  the script, or **Put it back** to restore your beat as a new beat.
+  offline copy alongside the current script. Use **Show beat** to find it in the
+  script, or **Put it back** to restore your beat as a new beat.
 - **File ▸ Version history…** lists versions kept by the relay while you’re
   connected. Open a version to read it, save a separate project, or put an
   individual beat back into the live script.
