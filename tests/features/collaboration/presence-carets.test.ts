@@ -117,6 +117,9 @@ test("a peer's caret and selection are drawn in a layer outside the cells, follo
   h.setEnds({ anchor: 99, head: 99 });
   h.flush();
   assert.deepEqual(h.caretAt(), ["220px", "50px", "20px"], "an end past the painted text clamps to it");
+  (h.el("writer-doc").firstElementChild?.firstChild as Text).data = "Hello there";
+  await Promise.resolve();
+  assert.equal(h.frames.length, 0, "text changing in the hidden Writer does not redraw the Split view");
 
   h.receive([]);
   h.flush();

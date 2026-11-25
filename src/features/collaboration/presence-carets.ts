@@ -23,6 +23,17 @@ export interface PeerCaretMark {
 
 const PAINTED = "#rows, #writer";
 const MEASURED = "#rows, #writer-doc, #writer .wr-flow-visual-text";
+const SHOWN_TEXT = { split: "#rows", writer: "#writer-doc, .wr-flow-visual-box" } as const;
+
+function paintsShownText(document: Document, records: readonly MutationRecord[]): boolean {
+  const view = shownView(document);
+  if (!view) return false;
+  return records.some(record => {
+    const node = record.target;
+    const element = node.nodeType === 1 ? node as Element : node.parentElement;
+    return !!element?.closest(SHOWN_TEXT[view]);
+  });
+}
 const VIEWS = ["writer", "prompter"];
 
 export function shownView(document: Document): ShownView | null {
@@ -199,7 +210,7 @@ export function mountPresenceCarets(ports: PresenceCaretsPorts): () => void {
     resized?.disconnect();
     resized = undefined;
     if (!wanted) return;
-    painted = new window.MutationObserver(schedule);
+    painted = new window.MutationObserver(records => { if (paintsShownText(document, records)) schedule(); });
     resized = new window.ResizeObserver(schedule);
     for (const root of document.querySelectorAll(PAINTED)) {
       painted.observe(root, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
