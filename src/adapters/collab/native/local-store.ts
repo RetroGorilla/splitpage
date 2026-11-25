@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import type { NativeReplicaEntry } from "../../../../shared/native-replica.d.ts";
+import type { NativeMembershipRecord, NativeReplicaEntry } from "../../../../shared/native-replica.d.ts";
 import { decodeNativePendingEdits, encodeNativePendingEdits } from "./pending-edits.ts";
 import type { NativePendingEditsData } from "./pending-edits.ts";
 import { nativeCallbackGuard } from "./script.ts";
@@ -59,9 +59,10 @@ export interface NativeLocalStore {
 }
 
 export interface NativeReplicaMembership {
+  readonly record: () => Promise<NativeMembershipRecord | null>;
   readonly token: () => Promise<string | null>;
-  readonly join: (token: string) => Promise<void>;
-  readonly stageInvitation?: (token: string, previous: string | null, signal: AbortSignal) => Promise<NativeInvitationStage>;
+  readonly join: (record: string | NativeMembershipRecord) => Promise<void>;
+  readonly stageInvitation?: (token: string, previous: NativeMembershipRecord | null, signal: AbortSignal) => Promise<NativeInvitationStage>;
 }
 
 export interface NativeInvitationStage {

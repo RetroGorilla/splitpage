@@ -12,6 +12,17 @@ import { currentHome } from "./location-owner.ts";
 let started: DesktopDocumentStateOwner | null = null;
 let handOff: DesktopHandOff | null = null;
 let sharedUnsaved: (() => boolean) | null = null;
+let pausePublication: object | null = null;
+
+export function holdDesktopDocumentPublication(): () => void {
+  const hold = {};
+  pausePublication = hold;
+  return () => {
+    if (pausePublication !== hold) return;
+    pausePublication = null;
+    started?.notify();
+  };
+}
 
 export function trackSharedDesktopUnsaved(read: () => boolean): () => void {
   sharedUnsaved = read;
@@ -32,7 +43,9 @@ export function legacyDesktopDocumentPorts(history: Pick<HistoryOwner, "isPristi
         return (home.kind === "file" && handle && handle._desktopId) || null;
       }
     }),
-    publish: function (state: DesktopDocumentState) { desktopPort()?.setDocumentState(state); }
+    publish: function (state: DesktopDocumentState) {
+      if (!pausePublication) desktopPort()?.setDocumentState(state);
+    }
   });
 }
 

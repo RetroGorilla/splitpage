@@ -29,6 +29,9 @@ interface IpcSetupDependencies {
     open: (event: DesktopIpcEvent) => Promise<boolean>;
     test: (event: DesktopIpcEvent) => Promise<DesktopIpcResult<"splitpage:relay-owner-test">>;
     clear: (event: DesktopIpcEvent) => boolean;
+    createShare: ChannelHandler<"splitpage:relay-owner-share-create", IpcMainInvokeEvent>;
+    abandonShare: ChannelHandler<"splitpage:relay-owner-share-abandon", IpcMainInvokeEvent>;
+    completeShare: ChannelHandler<"splitpage:relay-owner-share-complete", IpcMainInvokeEvent>;
     save: (...args: DesktopIpcArgs<"splitpage:relay-setup-save">) => DesktopIpcResult<"splitpage:relay-setup-save">;
   } | undefined;
 }
@@ -139,6 +142,9 @@ function createIpcSetup({ ipcMain, app, testMode, windowsById, relaySetup }: Ipc
       ipcHandle("splitpage:relay-owner-open", relaySetup.open);
       ipcHandle("splitpage:relay-owner-test", relaySetup.test);
       ipcHandle("splitpage:relay-owner-clear", relaySetup.clear);
+      ipcHandle("splitpage:relay-owner-share-create", relaySetup.createShare);
+      ipcHandle("splitpage:relay-owner-share-abandon", relaySetup.abandonShare);
+      ipcHandle("splitpage:relay-owner-share-complete", relaySetup.completeShare);
       ipcHandle("splitpage:relay-setup-save", (_event, address, secret) => relaySetup.save(address, secret));
     }
   }

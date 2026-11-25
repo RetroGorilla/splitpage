@@ -1,7 +1,13 @@
+export interface NativeMembershipRecord {
+  readonly token: string;
+  readonly role: "owner" | "guest";
+  readonly guestLinkToken?: string;
+}
+
 export type NativeReplicaRequest =
   | ["open" | "delete", name: string]
   | ["membership" | "forget" | "read-journal", name: string, lease: string]
-  | ["join", name: string, lease: string, token: string]
+  | ["join", name: string, lease: string, record: string | NativeMembershipRecord]
   | ["close", name: string, lease: string]
   | ["read", name: string, lease: string, through: number | null]
   | ["write", name: string, lease: string, generation: number, checkpoint: boolean, bytes: Uint8Array]
@@ -20,7 +26,7 @@ export type NativeReplicaReply =
   | { readonly kind: "opened"; readonly lease: string }
   | { readonly kind: "read"; readonly entries: readonly NativeReplicaEntry[] }
   | { readonly kind: "journal"; readonly bytes: Uint8Array | null }
-  | { readonly kind: "membership"; readonly token: string | null }
+  | { readonly kind: "membership"; readonly record: NativeMembershipRecord | null }
   | { readonly kind: "stored" };
 
 export type NativeReplicaInvoke = (request: NativeReplicaRequest) => Promise<NativeReplicaReply>;

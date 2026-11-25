@@ -3,9 +3,36 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { createRequire } from "node:module";
 import { test } from "node:test";
+import type { createNativeReplicaFiles as CreateFiles } from "../../../../desktop/native-replica-files.ts";
 import { desktopFixture, desktopTestCipher, replicaFileFaults, replicasAt } from "./desktop-local-store-fixture.ts";
 import { seedReplica, STORE_OPTIONS } from "./local-store-fixture.ts";
+
+const { createNativeReplicaFiles }: { createNativeReplicaFiles: typeof CreateFiles } =
+  createRequire(import.meta.url)("../../../../desktop/native-replica-files.ts");
+
+test("the desktop store opens an old encrypted single-token record as a guest", async t => {
+  const { directory, store } = await desktopFixture(t);
+  const cipher = desktopTestCipher(randomBytes(32));
+  const name = "deployment/legacy";
+  const token = randomBytes(32).toString("base64url");
+  const fixture = await store.open(name, STORE_OPTIONS);
+  assert.equal(fixture.kind, "opened");
+  seedReplica(fixture.session, { A: "Existing shared copy" });
+  assert.equal((await fixture.flush()).kind, "stored");
+  fixture.session.close();
+  await fixture.closed;
+  const files = await createNativeReplicaFiles(directory).open(name);
+  await files.writeMembership(cipher.encrypt(token));
+  const copy = await replicasAt(directory, undefined, cipher).window().store.open(name, STORE_OPTIONS);
+  assert.equal(copy.kind, "opened");
+  try {
+    assert.equal(copy.restored, true);
+    assert.equal(copy.session.document().rows[0]?.audioText, "Existing shared copy");
+    assert.deepEqual(await copy.membership?.record(), { token, role: "guest" });
+  } finally { copy.session.close(); await copy.closed; }
+});
 
 test("desktop keeps encrypted membership with its scoped replica across a restart and removes both on leave", async t => {
   const { directory } = await desktopFixture(t);

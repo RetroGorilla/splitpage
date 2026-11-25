@@ -419,7 +419,12 @@ if (location.origin === "splitpage://app") {
         open: () => invoke("splitpage:relay-owner-open"),
         testConnection: () => invoke("splitpage:relay-owner-test"),
         clear: () => invoke("splitpage:relay-owner-clear")
-      } satisfies NonNullable<DesktopPort["relayOwner"]>
+      } satisfies NonNullable<DesktopPort["relayOwner"]>,
+      shareScript: {
+        create: (...args) => invoke("splitpage:relay-owner-share-create", ...args),
+        abandon: id => invoke("splitpage:relay-owner-share-abandon", id),
+        complete: id => invoke("splitpage:relay-owner-share-complete", id)
+      } satisfies NonNullable<DesktopPort["shareScript"]>
     });
   }
   contextBridge.exposeInMainWorld("splitpageDesktop", bridge);

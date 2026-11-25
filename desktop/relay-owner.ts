@@ -2,17 +2,44 @@
 
 import type * as NodeFs from "node:fs";
 import type * as NodePath from "node:path";
-import type { RelayConnectionCheck, RelaySetupSave } from "../shared/desktop-contract.d.ts";
+import type * as NodeCrypto from "node:crypto";
+import type { RelayConnectionCheck, RelaySetupSave, ShareScriptCreation } from "../shared/desktop-contract.d.ts";
 
 const fs: typeof NodeFs = require("node:fs");
 const { join }: typeof NodePath = require("node:path");
+const { createHash, randomUUID }: typeof NodeCrypto = require("node:crypto");
+const ID = /^[A-Za-z0-9_-]{1,64}(?![\s\S])/;
+const HASH = /^[a-f0-9]{64}(?![\s\S])/;
+const REPLICA = /^[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{1,64}(?![\s\S])/;
+const TOKEN = /^[A-Za-z0-9_-]{43}(?![\s\S])/;
+const MAX_SNAPSHOT_BYTES = 15_000_000;
 
-function relayOrigin(address: string): string | null {
+type PendingShare = { creationId: string; contentHash: string; relay: string; replica?: string };
+type ShareJournal = { pending: PendingShare[]; abandon: Record<string, string[]> };
+
+function sha256(value: string | Uint8Array): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function decodeCreation(data: unknown, address: string, deployment: string | null): ShareScriptCreation {
+  if (!data || typeof data !== "object" || !deployment || !ID.test(deployment)) return { kind: "failed" };
+  const { scriptId, owner, guest } = data as { scriptId?: string; owner?: { token?: string }; guest?: { token?: string } };
+  if (typeof scriptId !== "string" || !ID.test(scriptId)) return { kind: "failed" };
+  if (owner === undefined && guest === undefined) return { kind: "already-used" };
+  if (typeof owner?.token !== "string" || !TOKEN.test(owner.token) ||
+      typeof guest?.token !== "string" || !TOKEN.test(guest.token)) return { kind: "failed" };
+  return { kind: "created", address, deployment, scriptId, owner: owner.token, guest: guest.token };
+}
+
+function relayOrigin(address: string, testBuild: boolean): string | null {
   if (address.length > 2048 || !/^https?:\/\/[^/?#\\]+\/?$/i.test(address) || address.includes("@")) return null;
   try {
     const url = new URL(address);
-    const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-    return url.protocol === "https:" || loopback ? url.origin : null;
+    if (url.protocol === "https:") return url.origin;
+    if (testBuild && /^http:\/\/127\.0\.0\.1:[0-9]+\/?$/i.test(address)) {
+      return url.port ? url.origin : url.origin + ":80";
+    }
+    return null;
   } catch {
     return null;
   }
@@ -27,7 +54,7 @@ function createRelayOwner(userData: string, keyStore: {
   decryptString: (data: Buffer) => string;
   isEncryptionAvailable: () => boolean;
   getSelectedStorageBackend?: () => string;
-}, request: typeof fetch = fetch) {
+}, request: typeof fetch = fetch, testBuild = false) {
   const file = join(userData, "relay-owner.enc");
   const pending = file + ".new";
 
@@ -41,7 +68,7 @@ function createRelayOwner(userData: string, keyStore: {
       if (!keyStoreAvailable()) return null;
       const record = JSON.parse(keyStore.decryptString(bytes)) as { address?: unknown; secret?: unknown } | null;
       if (typeof record?.address !== "string" || typeof record.secret !== "string") return null;
-      if (relayOrigin(record.address) !== record.address || !validSecret(record.secret)) return null;
+      if (relayOrigin(record.address, testBuild) !== record.address || !validSecret(record.secret)) return null;
       return { address: record.address, secret: record.secret };
     } catch {
       return null;
@@ -49,7 +76,7 @@ function createRelayOwner(userData: string, keyStore: {
   }
 
   function save(address: string, secret: string): RelaySetupSave {
-    const origin = relayOrigin(address.trim());
+    const origin = relayOrigin(address.trim(), testBuild);
     if (!origin) return "invalid-address";
     if (!validSecret(secret)) return "invalid-secret";
     try {
@@ -74,19 +101,21 @@ function createRelayOwner(userData: string, keyStore: {
     }
   }
 
-  async function ownerRequest(pathname: string, options: { method: string; body?: BodyInit; contentType?: string }) {
+  async function ownerRequest(pathname: string, options: {
+    method: string; body?: BodyInit; headers?: Record<string, string>; timeout?: number; address?: string
+  }) {
     const record = read();
-    if (!record) return { kind: "not-configured" as const };
+    if (!record || (options.address && record.address !== options.address)) return { kind: "not-configured" as const };
     try {
       const url = new URL(pathname, record.address);
-      if (url.origin !== record.address || !url.pathname.startsWith("/api/") || url.username || url.password || url.hash) {
+      if (url.origin !== new URL(record.address).origin || !url.pathname.startsWith("/api/") || url.username || url.password || url.hash) {
         return { kind: "unreachable" as const };
       }
-      const headers = new Headers({ Authorization: "Bearer " + record.secret });
-      if (options.contentType) headers.set("Content-Type", options.contentType);
+      const headers = new Headers(options.headers);
+      headers.set("Authorization", "Bearer " + record.secret);
       const response = await request(url, {
         method: options.method, body: options.body ?? null, headers,
-        credentials: "omit", redirect: "error", signal: AbortSignal.timeout(5000)
+        credentials: "omit", redirect: "error", signal: AbortSignal.timeout(options.timeout ?? 5000)
       });
       return { kind: "response" as const, response };
     } catch {
@@ -106,5 +135,169 @@ function createRelayOwner(userData: string, keyStore: {
   return { save, clear, status: () => ({ address: read()?.address ?? null }), testConnection, ownerRequest };
 }
 
-export type { createRelayOwner };
-module.exports = { createRelayOwner };
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isShareJournal(value: unknown): value is ShareJournal {
+  return isRecord(value) && Array.isArray(value.pending) && isRecord(value.abandon)
+    && value.pending.every((entry: unknown) => isRecord(entry)
+      && typeof entry.creationId === "string" && ID.test(entry.creationId)
+      && typeof entry.contentHash === "string" && HASH.test(entry.contentHash)
+      && typeof entry.relay === "string" && HASH.test(entry.relay)
+      && (entry.replica === undefined || (typeof entry.replica === "string" && REPLICA.test(entry.replica))))
+    && Object.entries(value.abandon).every(([relay, ids]) => HASH.test(relay) && Array.isArray(ids)
+      && ids.every((id: unknown) => typeof id === "string" && ID.test(id)));
+}
+
+function createShareCreations(userData: string, owner: ReturnType<typeof createRelayOwner>, eraseReplica: (name: string) => Promise<void>) {
+  const file = join(userData, "relay-owner-shares.json");
+  const tabs = new Map<string, string>();
+  let tail = Promise.resolve<unknown>(undefined);
+  function ordered<T>(run: () => Promise<T>): Promise<T> {
+    const result = tail.then(run);
+    tail = result.catch(() => {});
+    return result;
+  }
+
+  function readJournal(): ShareJournal {
+    let json: string;
+    try { json = fs.readFileSync(file, "utf8"); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      return { pending: [], abandon: {} };
+    }
+    let journal: unknown;
+    try { journal = JSON.parse(json); } catch { }
+    if (isShareJournal(journal)) return journal;
+    fs.renameSync(file, file + ".corrupt-" + randomUUID());
+    return { pending: [], abandon: {} };
+  }
+
+  function writeJournal(journal: ShareJournal): void {
+    const temporary = file + ".new";
+    fs.writeFileSync(temporary, JSON.stringify(journal), { mode: 0o600, flush: true });
+    fs.renameSync(temporary, file);
+    if (process.platform !== "win32") {
+      const directory = fs.openSync(userData, "r");
+      try { fs.fsyncSync(directory); } finally { fs.closeSync(directory); }
+    }
+  }
+
+  function queueAbandon(journal: ShareJournal, pending: PendingShare): void {
+    journal.pending = journal.pending.filter(entry => entry !== pending);
+    const ids = journal.abandon[pending.relay] ??= [];
+    if (!ids.includes(pending.creationId)) ids.push(pending.creationId);
+    writeJournal(journal);
+  }
+
+  async function sendAbandon(journal: ShareJournal, relay: string, id: string): Promise<boolean> {
+    const address = owner.status().address;
+    if (!address || sha256(address) !== relay || !ID.test(id)) return false;
+    const result = await owner.ownerRequest("/api/creations/" + id, { method: "DELETE", address });
+    if (result.kind !== "response") return false;
+    await result.response.body?.cancel().catch(() => {});
+    if (![204, 404, 409].includes(result.response.status)) return false;
+    const remaining = (journal.abandon[relay] ?? []).filter(value => value !== id);
+    if (remaining.length) journal.abandon[relay] = remaining;
+    else Reflect.deleteProperty(journal.abandon, relay);
+    writeJournal(journal);
+    return true;
+  }
+
+  async function create(tab: string, creationId: string, contentHash: string, bytes: Uint8Array, expectedAddress: string): Promise<ShareScriptCreation> {
+    return ordered(async (): Promise<ShareScriptCreation> => {
+      if (!ID.test(creationId) || !HASH.test(contentHash) || !(bytes instanceof Uint8Array) ||
+          !(bytes.buffer instanceof ArrayBuffer) || !bytes.byteLength) return { kind: "failed" };
+      if (bytes.byteLength > MAX_SNAPSHOT_BYTES || bytes.buffer.byteLength > MAX_SNAPSHOT_BYTES) return { kind: "too-large" };
+      if (sha256(bytes) !== contentHash) return { kind: "failed" };
+      const address = owner.status().address;
+      if (!address || address !== expectedAddress) return { kind: "not-configured" };
+      const relay = sha256(address);
+      const journal = readJournal();
+      let entry = journal.pending.find(value => value.creationId === creationId);
+      if (entry) {
+        if (tabs.get(creationId) !== tab || entry.contentHash !== contentHash || entry.relay !== relay) return { kind: "failed" };
+      } else {
+        if (Object.values(journal.abandon).some(ids => ids.includes(creationId))) return { kind: "failed" };
+        entry = { creationId, contentHash, relay };
+        journal.pending.push(entry);
+        writeJournal(journal);
+        tabs.set(creationId, tab);
+      }
+      const result = await owner.ownerRequest("/api/scripts", {
+        method: "POST", address, body: Buffer.from(bytes), timeout: 30_000,
+        headers: { "Content-Type": "application/octet-stream", "Idempotency-Key": creationId, "Splitpage-Content-SHA256": contentHash }
+      });
+      if (result.kind !== "response") return { kind: result.kind };
+      const { response } = result;
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => {});
+        return { kind: response.status === 413 ? "too-large" : "failed" };
+      }
+      let created: ShareScriptCreation;
+      try { created = decodeCreation(await response.json(), address, response.headers.get("Splitpage-Deployment")); }
+      catch { return { kind: "unreachable" }; }
+      if (created.kind === "created") {
+        entry.replica = created.deployment + "/" + created.scriptId;
+        writeJournal(journal);
+      }
+      return created;
+    }).catch(() => ({ kind: "failed" }));
+  }
+
+  function abandon(tab: string, creationId: string): Promise<boolean> {
+    return ordered(async () => {
+      const journal = readJournal();
+      const entry = journal.pending.find(value => value.creationId === creationId);
+      if (!entry) return true;
+      if (tabs.get(creationId) !== tab) return false;
+      if (entry.replica) await eraseReplica(entry.replica);
+      queueAbandon(journal, entry);
+      tabs.delete(creationId);
+      await sendAbandon(journal, entry.relay, creationId);
+      return true;
+    }).catch(() => false);
+  }
+
+  function complete(tab: string, creationId: string): Promise<boolean> {
+    return ordered(async () => {
+      if (tabs.get(creationId) !== tab) return false;
+      const journal = readJournal();
+      const entry = journal.pending.find(value => value.creationId === creationId);
+      if (!entry?.replica) return false;
+      journal.pending = journal.pending.filter(value => value !== entry);
+      writeJournal(journal);
+      tabs.delete(creationId);
+      return true;
+    }).catch(() => false);
+  }
+
+  function recover(): Promise<void> {
+    return ordered(async () => {
+      const journal = readJournal();
+      for (const entry of journal.pending) {
+        if (tabs.has(entry.creationId)) continue;
+        try { if (entry.replica) await eraseReplica(entry.replica); }
+        catch { continue; }
+        queueAbandon(journal, entry);
+      }
+    });
+  }
+
+  function retryAbandons(): Promise<void> {
+    return ordered(async () => {
+      const address = owner.status().address;
+      if (!address) return;
+      const relay = sha256(address);
+      const journal = readJournal();
+      for (const id of journal.abandon[relay] ?? []) {
+        if (!await sendAbandon(journal, relay, id)) break;
+      }
+    }).catch(() => {});
+  }
+  return { create, abandon, complete, recover, retryAbandons };
+}
+
+export type { createRelayOwner, createShareCreations };
+module.exports = { createRelayOwner, createShareCreations };

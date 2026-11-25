@@ -29,6 +29,7 @@ export interface SharedSwitchPorts {
   readonly commandRefused: SharedSessionPorts["refused"];
   readonly settle: () => void;
   readonly prepare?: () => Promise<string | null>;
+  readonly ownsEntry?: () => boolean;
   readonly detach: () => void;
   readonly reattach?: () => void;
   readonly left?: (landed: boolean) => void;
@@ -73,6 +74,7 @@ export interface SharedEditorBackend {
   readonly abandon?: () => void;
   readonly drop?: () => void;
   readonly start: () => void;
+  readonly finishEntry?: () => Promise<void>;
   readonly failedEntry?: () => ValidatedDocument | null;
   readonly stopIngress?: () => () => void;
   readonly landing: () => ValidatedDocument | null;
@@ -142,7 +144,9 @@ function captureSelection(backend: SharedEditorBackend, faults: Faults, entering
 function refusedNow(ports: SharedSwitchPorts, faults: Faults): string | null {
   if (running || sharedSession()) return SHARED_ALREADY;
   let reason: string | null = null;
-  return faults.attempt(() => { reason = ports.opening.openingPending() ? "opening-pending" : ports.refusal(); }) ? reason : SHARED_ENTER_FAILED;
+  return faults.attempt(() => {
+    reason = ports.opening.openingPending() || ports.ownsEntry?.() === false ? "opening-pending" : ports.refusal();
+  }) ? reason : SHARED_ENTER_FAILED;
 }
 
 function failed(ports: SharedSwitchPorts, faults: Faults, reason: string): SharedSwitchOutcome {
@@ -154,7 +158,7 @@ export async function enterSharedSession(ports: SharedSwitchPorts, open: OpenBac
   const holdReason = sessionEntryRefusal();
   if (holdReason) return { ok: false, reason: holdReason };
   // why: document opening must remain available during invitation preparation so it can supersede the invitation
-  let release = signal ? undefined : holdSessionCommands(SHARED_SWITCHING, "entries");
+  let release = signal ? undefined : holdSessionCommands(SHARED_SWITCHING, ports.ownsEntry ? "all" : "entries");
   const releaseEntries = () => { release?.(); };
   const holdEntries = () => { release ??= holdSessionCommands(SHARED_SWITCHING, "entries"); };
   try { return await enterAvailableSession(ports, releaseEntries, open, signal, holdEntries); } finally { releaseEntries(); }
@@ -258,6 +262,7 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
       await entrySettled;
       if (failedDuringEntry) throw new Error("The native session closed during entry");
     }
+    if (backend.finishEntry) await backend.finishEntry();
     // why: the D34 reset belongs to a successful entry, so a failed one keeps the standalone history
     undoOwner().adopt(null);
   } catch (error) {

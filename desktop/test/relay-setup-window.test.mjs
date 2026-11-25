@@ -88,7 +88,8 @@ test("the setup window may submit credentials solely from its live top frame", a
       trusts: setup.trusts,
       save: (address, value) => { saved = address === "https://relay.example" && value === secret; return "saved"; },
       status: () => ({ address: "https://relay.example" }), open: async () => true,
-      test: async () => "connected", clear: () => true
+      test: async () => "connected", clear: () => true,
+      createShare: () => ({ kind: "failed" }), abandonShare: () => false, completeShare: () => false
     }
   });
   registerIpc({

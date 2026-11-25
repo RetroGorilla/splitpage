@@ -146,7 +146,7 @@ for (const oldVersion of [1, 2] as const) {
     assert.equal(opened.restored, true);
     assert.equal(opened.session.document().rows[0]?.audioText, "existing narration");
     assert.equal(opened.session.document().rows[1]?.audioText, "second beat");
-    if (oldVersion >= 2) assert.equal(await opened.membership?.token(), "legacy-token");
+    if (oldVersion >= 2) assert.deepEqual(await opened.membership?.record(), { token: "legacy-token", role: "guest" });
     assert.deepEqual(opened.session.pendingEdits?.data(), { through: 0, entries: [] });
 
     typeAt(opened.session, 0, "updated ", "B");

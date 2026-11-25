@@ -500,8 +500,13 @@ export function analyzeScript(path, text) {
     } else if (ts.isCallExpression(node) && loadsByCall.has(node)) {
       const l = loadsByCall.get(node);
       if (liveLoad(l)) {
-        if (l.spec !== null) imports.push({ spec: l.spec, names: loadedNames(node, l.kind), typeOnly: false, kind: l.kind, line: at(node) });
-        else unresolved.push({ kind: l.kind, expression: node.getText(sf).replace(/\s+/g, " "), line: at(node) });
+        const expression = node.getText(sf).replace(/\s+/g, " ");
+        const shared = path === "desktop/main.ts" && l.kind === "require"
+          ? /^require\(\s*path\.join\(\s*SHARED_ROOT\s*,\s*"([\w-]+\.ts)"\s*\)\s*\)$/.exec(expression)?.[1]
+          : undefined;
+        const spec = l.spec ?? (shared ? "../shared/" + shared : null);
+        if (spec !== null) imports.push({ spec, names: loadedNames(node, l.kind), typeOnly: false, kind: l.kind, line: at(node) });
+        else unresolved.push({ kind: l.kind, expression, line: at(node) });
       }
     }
     ts.forEachChild(node, visitEdges);

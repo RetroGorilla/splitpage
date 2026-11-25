@@ -2,6 +2,7 @@
 
 import type * as NodeCrypto from "node:crypto";
 import type { Event, RenderProcessGoneDetails } from "electron";
+import type { readNativeMembership as ReadNativeMembership } from "../shared/native-membership.ts";
 import type { NativeReplicaReply, NativeReplicaRequest } from "../shared/native-replica.d.ts";
 import type { createNativeReplicaFiles, NativeReplicaFileSystem } from "./native-replica-files.ts";
 
@@ -17,6 +18,7 @@ const LEASE_ID = /^[a-f0-9]{32}(?![\s\S])/;
 const LOCKED = { kind: "failed", reason: "locked" } as const;
 const CLOSED = { kind: "failed", reason: "closed" } as const;
 const STORED = { kind: "stored" } as const;
+const MEMBERSHIP_PREFIX = "\0";
 
 type RendererEndListener = {
   (event: "destroyed", listener: () => void): unknown;
@@ -47,13 +49,13 @@ function isPayload(value: unknown): value is Uint8Array {
   return value instanceof Uint8Array && value.byteLength > 0 && value.buffer instanceof ArrayBuffer;
 }
 
-function isRequest(value: unknown): value is NativeReplicaRequest {
+function isRequest(value: unknown, readNativeMembership: typeof ReadNativeMembership): value is NativeReplicaRequest {
   if (!Array.isArray(value)) return false;
   const [op, name, lease, through, checkpoint, bytes, journal]: unknown[] = value;
   if (typeof name !== "string" || !SCRIPT_ID.test(name)) return false;
   if (op === "open" || op === "delete") return value.length === 2;
   if (typeof lease !== "string" || !LEASE_ID.test(lease)) return false;
-  if (op === "join") return value.length === 4 && typeof through === "string" && through.length > 0;
+  if (op === "join") return value.length === 4 && readNativeMembership(through) !== null;
   if (op === "membership" || op === "forget" || op === "close" || op === "read-journal") return value.length === 3;
   if (op === "write-journal") return value.length === 4 && isPayload(through);
   if (op === "read") return value.length === 4 && (through === null || generation(through, 0));
@@ -71,9 +73,14 @@ interface CredentialCipher {
   readonly decrypt: (bytes: Buffer) => string;
 }
 
-function createNativeReplicaIpc(userData: string, disk?: NativeReplicaFileSystem, cipher?: CredentialCipher) {
+function createNativeReplicaIpc(userData: string, readNativeMembership: typeof ReadNativeMembership,
+  disk?: NativeReplicaFileSystem, cipher?: CredentialCipher) {
   const files = filesModule.createNativeReplicaFiles(userData, disk);
   const leases = new Map<string, Lease | null>();
+
+  function decodeMembership(value: string) {
+    return readNativeMembership(value.startsWith(MEMBERSHIP_PREFIX) ? JSON.parse(value.slice(1)) : value);
+  }
 
   function release(name: string, lease: Lease): Promise<void> {
     lease.close ??= lease.done.then(() => {
@@ -107,7 +114,7 @@ function createNativeReplicaIpc(userData: string, disk?: NativeReplicaFileSystem
   }
 
   async function handle(owner: Renderer, request: unknown): Promise<NativeReplicaReply> {
-    if (!isRequest(request)) throw new TypeError("Invalid native replica request");
+    if (!isRequest(request, readNativeMembership)) throw new TypeError("Invalid native replica request");
     if (request[0] === "write") {
       if (request[5].buffer.byteLength > filesModule.MAX_REPLICA_UPDATE_BYTES) {
         if (request[4]) return { kind: "failed", reason: "quota" };
@@ -152,11 +159,11 @@ function createNativeReplicaIpc(userData: string, disk?: NativeReplicaFileSystem
       if (request[0] === "membership") {
         const bytes = await replica.readMembership();
         if (bytes && !cipher) return { kind: "failed", reason: "io" };
-        return { kind: "membership", token: bytes && cipher ? cipher.decrypt(bytes) : null };
+        return { kind: "membership", record: bytes && cipher ? decodeMembership(cipher.decrypt(bytes)) : null };
       }
       if (request[0] === "join") {
         if (!cipher) return { kind: "failed", reason: "io" };
-        await replica.writeMembership(cipher.encrypt(request[3]));
+        await replica.writeMembership(cipher.encrypt(MEMBERSHIP_PREFIX + JSON.stringify(readNativeMembership(request[3]))));
         return STORED;
       }
       if (request[0] !== "write") return CLOSED;

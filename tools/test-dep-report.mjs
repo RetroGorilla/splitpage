@@ -155,6 +155,14 @@ console.log("\nanalyzeScript():\n");
 }
 
 {
+  const source = 'require(path.join(SHARED_ROOT, "native-membership.ts")); require(path.join(SHARED_ROOT, name));';
+  const a = analyzeScript("desktop/main.ts", source);
+  eq("the desktop shared root with a literal filename is a tracked edge", a.imports.map(i => i.spec), ["../shared/native-membership.ts"]);
+  eq("a computed filename stays unresolved", a.unresolved.map(u => u.expression), ["require(path.join(SHARED_ROOT, name))"]);
+  eq("the desktop shared root is only recognized in its owner", analyzeScript("desktop/other.ts", source).unresolved.length, 2);
+}
+
+{
   const a = analyzeScript("src/core/document/g.ts", [
     "const document = { title: 1 };",
     "export const t = document.title;",

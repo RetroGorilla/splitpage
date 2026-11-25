@@ -181,7 +181,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     resetGuests,
     revokeInvitation,
     deleteScript
-  });
+  }, deployment);
   const status = statusRequests(managementSecret, db, directory, {
     totalConnections: () => limits.totalSockets(),
     authenticatedConnections: () => relay.hocuspocus.getConnectionsCount(),

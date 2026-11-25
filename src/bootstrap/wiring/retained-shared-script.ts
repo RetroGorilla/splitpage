@@ -19,6 +19,7 @@ import { bindSharedPictures } from "./shared-picture-session.ts";
 import { sharedSession } from "./session-owner.ts";
 import { enterSharedSession, leaveRunningSharedSession, SHARED_ALREADY, SHARED_ENTER_FAILED, SHARED_NOT_RUNNING } from "./shared-session.ts";
 import type { SharedEditorBackend, SharedSwitchOutcome, SharedSwitchPorts } from "./shared-session.ts";
+import type { NativeMembershipRecord } from "../../../shared/native-replica.d.ts";
 
 type RetainedReplica = Extract<NativeLocalStoreOpen, { kind: "opened" }>;
 const JOIN_TIMEOUT_MS = 15_000;
@@ -37,6 +38,11 @@ export interface RetainedSharedScript {
   readonly deployment: string;
   readonly script: string;
   readonly invitation?: { readonly token: string; readonly state?: Uint8Array };
+  readonly created?: {
+    readonly membership: NativeMembershipRecord;
+    readonly state: Uint8Array;
+    readonly complete: () => Promise<boolean>;
+  };
   readonly relayUrl?: string;
   readonly pictureOrigin?: string;
   readonly signal?: AbortSignal;
@@ -172,7 +178,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
     } catch { return { ok: false, reason: SHARED_ENTER_FAILED }; }
   }
   const deadline = new AbortController();
-  const timed = !!(entry.relayUrl || entry.pictureOrigin);
+  const timed = !entry.created && !!(entry.relayUrl || entry.pictureOrigin);
   const timer = timed ? ports.timers.start(() => deadline.abort(), JOIN_TIMEOUT_MS) : undefined;
   const signals = [cancellation, entry.signal, timed ? deadline.signal : undefined].filter(s => s !== undefined);
   const signal = signals.length ? AbortSignal.any(signals) : undefined;
@@ -204,10 +210,18 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
     try {
       const membership = replica.membership;
       if (!membership) return SHARED_ENTER_FAILED;
-      const saved = membership.token();
-      token = await (signal ? waitDuringLifetime(saved, signal) : saved);
+      const saved = membership.record();
+      const record = await (signal ? waitDuringLifetime(saved, signal) : saved);
+      token = record?.token ?? null;
       signal?.throwIfAborted();
-      if (entry.invitation) {
+      if (entry.created) {
+        if (replica.restored || !applyNativePeerUpdate(replica.session, entry.created.state) || !replica.session.isStoredScript()) {
+          return SHARED_ENTER_FAILED;
+        }
+        if ((await replica.flush()).kind !== "stored" || replica.hasUnstoredChanges()) return SHARED_ENTER_FAILED;
+        await membership.join(entry.created.membership);
+        token = entry.created.membership.token;
+      } else if (entry.invitation) {
         if (entry.relayUrl) {
           state ??= await readInvitationSnapshot(entry.relayUrl, entry.script, entry.invitation.token, signal);
           const preview = openNativeSession({ kind: "stored-script", state }, { actor: ports.editor(), sanitize: sanitizeHtml });
@@ -230,7 +244,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         }
         if (signal && membership.stageInvitation) {
           if (replica.restored && !replica.session.isStoredScript()) return SHARED_ENTER_FAILED;
-          staged = await membership.stageInvitation(entry.invitation.token, token, signal);
+          staged = await membership.stageInvitation(entry.invitation.token, record, signal);
         } else if (cancellation) {
           return SHARED_ENTER_FAILED;
         } else {
@@ -252,8 +266,10 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
     try { await staged?.rollback(); }
     finally {
       try { stop(); } finally { replica.session.close(); await replica.closed; }
+      if (entry.created && !replica.restored) await store.delete(name);
     }
   }
+  let connectCreated: (() => void) | undefined;
   try {
     const outcome = await enterSharedSession({ ...ports, prepare: () => (preparation = prepare()) }, (_, failedClose) => {
       const { replica, token } = prepared;
@@ -278,7 +294,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           onRelayConnected: entry.onRelayConnected
         })
         : null;
-      try {
+      const connect = () => {
         if (entry.relayUrl && pictureBinding) {
           pictureBinding.bindCopy(replica);
           const relay = openNativeRelay(replica.session, {
@@ -311,9 +327,13 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           }
           stopConnection ??= entry.connect?.(replica, token);
         }
+        pictureBinding?.finishPreparation();
+      };
+      if (entry.created) connectCreated = connect;
+      else {
+        try { connect(); }
+        catch { throw new Error("The retained connection could not start."); }
       }
-      catch { throw new Error("The retained connection could not start."); }
-      pictureBinding?.finishPreparation();
       const { backend } = bindNativeEditor(ports, replica.session, failedClose);
       const pending = () => {
         if (!replica.hasUnstoredChanges()) return false;
@@ -359,6 +379,9 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         pictureBinding?.detach();
       };
       const retained: SharedEditorBackend = { ...backend,
+        ...(entry.created && { async finishEntry() {
+          if (!await entry.created?.complete()) throw new Error("Could not complete sharing.");
+        } }),
         beforeDocumentSwitch: () => pending() ? "shared-copy-unsaved" : null,
         beforeExplicitLeave: stopActive,
         start() {
@@ -408,11 +431,13 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         }
       };
       return retained;
-    }, signal);
+    }, entry.created ? undefined : signal);
     if (outcome.ok && prepared.replica) {
       staged?.commit();
       localCopy = prepared.replica;
       active = true;
+      try { connectCreated?.(); }
+      catch { notices.show("Could not connect to the shared script right now.", "warn"); }
     }
     return outcome;
   } catch {

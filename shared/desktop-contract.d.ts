@@ -287,11 +287,25 @@ export interface RelayOwnerControls {
   readonly clear: () => Promise<boolean>;
 }
 
+export type ShareScriptCreation =
+  | { readonly kind: "created"; readonly address: string; readonly deployment: string; readonly scriptId: string;
+    readonly owner: string; readonly guest: string }
+  | { readonly kind: "not-configured" | "unreachable" | "failed" | "already-used" | "too-large" };
+
+export interface ShareScriptControls {
+  readonly create: (creationId: string, hash: string, snapshot: Uint8Array, address: string) => Promise<ShareScriptCreation>;
+  readonly abandon: (creationId: string) => Promise<boolean>;
+  readonly complete: (creationId: string) => Promise<boolean>;
+}
+
 export interface DesktopIpcContract {
   "splitpage:relay-owner-status": DesktopChannelCall<[], Awaited<ReturnType<RelayOwnerControls["status"]>>>;
   "splitpage:relay-owner-open": DesktopChannelCall<[], boolean>;
   "splitpage:relay-owner-test": DesktopChannelCall<[], RelayConnectionCheck>;
   "splitpage:relay-owner-clear": DesktopChannelCall<[], boolean>;
+  "splitpage:relay-owner-share-create": DesktopChannelCall<Parameters<ShareScriptControls["create"]>, ShareScriptCreation>;
+  "splitpage:relay-owner-share-abandon": DesktopChannelCall<[creationId: string], boolean>;
+  "splitpage:relay-owner-share-complete": DesktopChannelCall<[creationId: string], boolean>;
   "splitpage:relay-setup-save": DesktopChannelCall<[address: string, secret: string], RelaySetupSave>;
   "splitpage:ipc-table-sync": DesktopChannelCall<[], readonly DesktopChannelRow[] | null>;
   "splitpage:open-file-dialog": DesktopChannelCall<[], DesktopWireFile | null>;

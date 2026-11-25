@@ -35,6 +35,13 @@ declare let splitpageInvitation: { readonly script: string; readonly token: stri
 const DRAFT_NOT_KEPT = "draft-not-kept";
 const DRAFT_NOT_KEPT_NOTICE = "The shared session did not start: your recovery copy could not be saved.";
 const APP_STOPPED = "app-stopped";
+type CreatedEntry = { readonly owns: () => boolean; readonly release: () => void };
+let enterCreated: ((entry: RetainedSharedScript, handoff: CreatedEntry) => Promise<SharedSwitchOutcome>) | null = null;
+
+export async function enterCreatedSharedScript(entry: RetainedSharedScript, handoff: CreatedEntry): Promise<boolean> {
+  if (!enterCreated) return false;
+  return (await enterCreated(entry, handoff)).ok;
+}
 
 function sharedEntryRefusal(ready: boolean, composing: boolean): string | null {
   return (!ready ? "startup-pending" : null)
@@ -96,7 +103,8 @@ function startSharedTestHook(): () => void {
     const marks = landed && kept ? [() => { noteSaveChange(); }, () => { noteDraftChange(); }] : [];
     runEvery([() => { ending?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);
   };
-  const enter = async (stored?: Uint8Array, retained?: RetainedSharedScript, signal?: AbortSignal): Promise<SharedSwitchOutcome> => {
+  const enter = async (stored?: Uint8Array, retained?: RetainedSharedScript, signal?: AbortSignal,
+    handoff?: CreatedEntry): Promise<SharedSwitchOutcome> => {
     if (!live) return { ok: false, reason: APP_STOPPED };
     if (switching) return { ok: false, reason: SHARED_SWITCHING };
     if (sharedSession()) return { ok: false, reason: SHARED_ALREADY };
@@ -112,6 +120,7 @@ function startSharedTestHook(): () => void {
         ?? (signal?.aborted ? "opening-pending" : null) ?? sharedEntryRefusal(ready, composing);
       const entering: SharedSwitchPorts = {
         refusal, commandRefused: sharedCommandRefusalNotice(notices),
+        ...(handoff && { ownsEntry: handoff.owns }),
         settle: () => {
           if (writerControls()?.writerFlowControl()?.settle?.() === false) throw new Error("The Writer could not settle");
           undoOwner().flush();
@@ -136,6 +145,7 @@ function startSharedTestHook(): () => void {
         opening: openingStatus
       };
       const opened: { session?: ReturnType<typeof openNativeEditor>["native"] } = {};
+      handoff?.release();
       const result = retained ? await enterRetainedSharedScript(entering, retained, signal) : await enterSharedSession(entering, (doc, failedClose) => {
         const { backend, native } = openNativeEditor(entering, doc, failedClose, stored);
         opened.session = native;
@@ -155,6 +165,9 @@ function startSharedTestHook(): () => void {
       return result;
     } finally { switching = false; }
   };
+  if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI) {
+    enterCreated = (entry, handoff) => enter(undefined, entry, undefined, handoff);
+  }
   const leave = (): SharedSwitchOutcome | Promise<SharedSwitchOutcome> => {
     if (!live) return { ok: false, reason: APP_STOPPED };
     if (switching) return { ok: false, reason: SHARED_SWITCHING };
@@ -259,6 +272,7 @@ function startSharedTestHook(): () => void {
   exposeTestHook("__sharedTest", () => hook, release => { withdraw = release; });
   return () => {
     live = false;
+    enterCreated = null;
     invitationLifetime.abort();
     try { forceLeaveSharedSession(); } finally {
       document.removeEventListener("compositionstart", composition, true);
