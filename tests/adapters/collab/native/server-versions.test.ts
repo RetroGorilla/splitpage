@@ -198,7 +198,7 @@ test("version names are sorted and unique, count only editors, and survive a qui
   assert.deepEqual(initial.names, []);
 
   for (const [copy, name] of [[zed, "Zed"], [ada, "Ada"], [lurker, "Lurker"]] as const) {
-    copy.relay.publishPresence({ name, color: hashedPersonColor(name), view: "split", beat: null, side: null });
+    copy.relay.publishPresence({ name, color: hashedPersonColor(name), view: "split", beat: null, side: null, caret: null });
   }
   await kit.until(() => unnamed.peers().length === 3 || undefined);
   appendText(zed.session, " one", 10);
@@ -253,7 +253,7 @@ test("a failed editor names write preserves the live save and drops the failed n
   const ada = kit.copy(port), bea = kit.copy(port);
   await kit.until(() => ada.text() === "word" && bea.text() === "word" || undefined);
   for (const [copy, name] of [[ada, "Ada"], [bea, "Bea"]] as const) {
-    copy.relay.publishPresence({ name, color: hashedPersonColor(name), view: "split", beat: null, side: null });
+    copy.relay.publishPresence({ name, color: hashedPersonColor(name), view: "split", beat: null, side: null, caret: null });
   }
   await kit.until(() => bea.peers().some(peer => peer.name === "Ada") &&
     ada.peers().some(peer => peer.name === "Bea") || undefined);
@@ -430,7 +430,7 @@ test("shutdown commits the final live edit and leaves its capture and editor nam
   const port = await run.port();
   const copy = kit.copy(port), observer = kit.copy(port);
   await kit.until(() => copy.text() === "word" && observer.text() === "word" || undefined);
-  copy.relay.publishPresence({ name: "Final Editor", color: hashedPersonColor("Final Editor"), view: "split", beat: null, side: null });
+  copy.relay.publishPresence({ name: "Final Editor", color: hashedPersonColor("Final Editor"), view: "split", beat: null, side: null, caret: null });
   await kit.until(() => observer.peers().some(peer => peer.name === "Final Editor") || undefined);
   run.send("hold");
   await kit.until(() => run.messages.includes("armed") || undefined);
@@ -583,7 +583,7 @@ test("backup pauses capture, verifies both version tables, and restore preserves
   const port = await run.port();
   const copy = kit.copy(port), observer = kit.copy(port);
   await kit.until(() => copy.text() === "word" && observer.text() === "word" || undefined);
-  copy.relay.publishPresence({ name: "Editor", color: hashedPersonColor("Editor"), view: "split", beat: null, side: null });
+  copy.relay.publishPresence({ name: "Editor", color: hashedPersonColor("Editor"), view: "split", beat: null, side: null, caret: null });
   await kit.until(() => observer.peers().some(peer => peer.name === "Editor") || undefined);
   appendText(copy.session, " one", 4);
   const original = await until(async () => (await history(run, token))[0]);

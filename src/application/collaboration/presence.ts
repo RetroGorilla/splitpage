@@ -4,9 +4,26 @@ export interface PresenceLocation {
   readonly side: "audioText" | "visualText" | null;
 }
 
+export interface PresencePointId {
+  readonly client: number;
+  readonly clock: number;
+}
+
+export interface PresencePoint {
+  readonly type: PresencePointId;
+  readonly item: PresencePointId | null;
+  readonly assoc: 0 | -1;
+}
+
+export interface PresenceCaret {
+  readonly anchor: PresencePoint;
+  readonly head: PresencePoint;
+}
+
 export interface PresenceProfile extends PresenceLocation {
   readonly name: string;
   readonly color: string;
+  readonly caret: PresenceCaret | null;
 }
 
 export interface PresencePeer extends PresenceProfile {

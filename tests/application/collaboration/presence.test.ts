@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { createPresenceState } from "../../../src/application/collaboration/presence.ts";
 import type { PresenceProfile } from "../../../src/application/collaboration/presence.ts";
 
-const profile: PresenceProfile = { name: "Ada", color: "#80BDFB", view: "split", beat: "r1", side: "audioText" };
+const profile: PresenceProfile = { name: "Ada", color: "#80BDFB", view: "split", beat: "r1", side: "audioText", caret: null };
 const peer = { clientId: 42, ...profile };
 
 test("a replacement binding receives the local profile and ignores replies and disposal from the previous binding", () => {

@@ -14,6 +14,7 @@ import { createNativeEditorFind } from "./native-shared-find.ts";
 import { mountNativeRecordEvents } from "./native-shared-record-events.ts";
 import { createNativeEditorStructure } from "./native-shared-structure.ts";
 import { nativeUndoRoute } from "./native-shared-undo.ts";
+import { createNativePresenceCarets } from "./native-presence-carets.ts";
 import { notices } from "./ports/effects.ts";
 import { currentRowsRender } from "./render.ts";
 import { editAllowed } from "./session-owner.ts";
@@ -137,6 +138,7 @@ export function bindNativeEditor(ports: SharedSwitchPorts, native: ReturnType<ty
     hasWriterPreview: beat => input?.hasWriterPreview(beat) ?? false,
     bindWriterPaint: root => input?.bindWriterPaint(root),
     structure: createNativeEditorStructure({ native, session: () => commandSession, input: () => input, publish, report: ports.report }),
+    presenceCarets: createNativePresenceCarets(native),
     undo: admission => nativeUndoRoute({ native, admission, input: () => input, publish: () => { publish(); } }),
     bind: session => {
       commandSession = session;

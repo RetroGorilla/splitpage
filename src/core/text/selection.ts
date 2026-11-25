@@ -243,6 +243,24 @@ export function mapThroughCell(sel: CellPoints, before: readonly string[], after
   return { anchor: at, head: at, affinity: affinity };
 }
 
+export interface CellEnds {
+  readonly anchor: number;
+  readonly head: number;
+}
+
+export function mapEndsThroughCell(ends: CellEnds, before: readonly string[], after: readonly string[]): CellEnds {
+  const anchor = clampUnits(before, ends.anchor), head = clampUnits(before, ends.head);
+  if (before.length === after.length && sameKeys(before, after, 0, 0, before.length)) return { anchor, head };
+  const kept = keptUnits(before, after);
+  if (anchor === head) {
+    const at = clampUnits(after, mapPoint(kept, after.length, head, "forward"));
+    return { anchor: at, head: at };
+  }
+  const from = clampUnits(after, mapPoint(kept, after.length, Math.min(anchor, head), "forward"));
+  const to = Math.max(from, clampUnits(after, mapPoint(kept, after.length, Math.max(anchor, head), "backward")));
+  return anchor < head ? { anchor: from, head: to } : { anchor: to, head: from };
+}
+
 function sameKeys(a: readonly string[], b: readonly string[], aFrom: number, bFrom: number, length: number): boolean {
   for (let i = 0; i < length; i++) if (a[aFrom + i] !== b[bFrom + i]) return false;
   return true;

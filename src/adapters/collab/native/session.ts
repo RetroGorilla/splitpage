@@ -29,6 +29,9 @@ import type { NativeEditStamp, NativeLiveRange, NativeTextPlacement, NativeTextR
 import { openNativeUndo } from "./undo-commands.ts";
 import type { NativeUndoOutcome } from "./undo-commands.ts";
 import { NATIVE_FORMAT_VERSION } from "./roots.ts";
+import { nativeCellView, nativeStoredOffset } from "./inline.ts";
+import type { NativeDeltaItem } from "./inline.ts";
+import type { PresenceLocation, PresencePoint } from "../../../application/collaboration/presence.ts";
 
 export type NativeSessionSource =
   | { readonly kind: "empty" }
@@ -54,6 +57,20 @@ type ChangeListener = (change: NativeSessionChange) => void;
 type CaptureGroup =
   | { readonly kind: "typing"; readonly target: NativeTextTarget; readonly endsInSpace: boolean }
   | { readonly kind: "deletion"; readonly target: NativeTextTarget; readonly direction: -1 | 1; readonly at: number; readonly caret: Y.RelativePosition };
+
+type PresenceSide = NonNullable<PresenceLocation["side"]>;
+
+function presencePointOf(position: Y.RelativePosition | null): PresencePoint | null {
+  const json: unknown = position && Y.relativePositionToJSON(position);
+  if (!json || typeof json !== "object") return null;
+  const { type, item, tname, assoc } = json as { type?: Y.ID; item?: Y.ID; tname?: string; assoc?: number };
+  if (!type || tname !== undefined || (assoc !== 0 && assoc !== -1)) return null;
+  return Object.freeze({
+    type: Object.freeze({ client: type.client, clock: type.clock }),
+    item: item ? Object.freeze({ client: item.client, clock: item.clock }) : null,
+    assoc
+  });
+}
 
 const DELETE_PAUSE_MS = 1000;
 const COMPOUND_RANGE_REFUSAL = Object.freeze({ kind: "refused", reason: "range" } as const);
@@ -345,6 +362,12 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     group = { kind: "deletion", target, direction, at, caret: Y.createRelativePositionFromTypeIndex(live.text, live.from, -1) };
   }
 
+  function presenceVisual(row: string) {
+    const text = script.roots.visuals.get(row);
+    if (!script.reader.beatBoundary(row) || !(text instanceof Y.Text)) return null;
+    return { text, view: nativeCellView(text.toDelta() as NativeDeltaItem[]) };
+  }
+
   const commands = Object.freeze({
     createFirstBeat: bindCompound(createFirstNativeBeat),
     insertAdjacentBeat: bindCompound(insertNativeBeatAdjacent),
@@ -466,6 +489,29 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
           if (!(title instanceof Y.Text)) return null;
           const position = resolveNativeTextPoint(script, range.from, assoc);
           return position && position.type === title && position.index >= 0 && position.index <= title.length ? position.index : null;
+        } catch { return null; }
+      });
+    },
+    presencePoint: (row: string, side: PresenceSide, offset: number, assoc: 0 | -1): PresencePoint | null => {
+      if (refusal() || !Number.isSafeInteger(offset) || offset < 0) return null;
+      return perform(() => {
+        try {
+          if (side === "audioText") return presencePointOf(script.reader.narrationPaint(row, false)(offset, assoc));
+          const visual = presenceVisual(row);
+          if (!visual || offset > visual.view.length) return null;
+          return presencePointOf(Y.createRelativePositionFromTypeIndex(visual.text, nativeStoredOffset(visual.view, offset), assoc));
+        } catch { return null; }
+      });
+    },
+    presenceOffset: (row: string, side: PresenceSide, point: PresencePoint): number | null => {
+      if (refusal()) return null;
+      return perform(() => {
+        try {
+          const position = resolveNativeTextPoint(script, point, point.assoc);
+          if (!position) return null;
+          if (side === "audioText") return script.reader.narrationOffset(row, position);
+          const visual = presenceVisual(row);
+          return visual && position.type === visual.text ? visual.view.ends.filter(unit => unit <= position.index).length : null;
         } catch { return null; }
       });
     },

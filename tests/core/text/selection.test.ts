@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   cellKeys,
   keptUnits,
+  mapEndsThroughCell,
   mapThroughCell,
   resolveSelection,
   takeSnapshot
@@ -174,4 +175,19 @@ test("a snapshot clamps what it is given to the cell it was taken against", () =
   const snap = takeSnapshot(at("r1", -4, 99), keys("abc"), ["r1"]);
   assert.deepEqual([snap.selection.anchor, snap.selection.head], [0, 3]);
   assert.ok(Object.isFrozen(snap) && Object.isFrozen(snap.keys) && Object.isFrozen(snap.selection));
+});
+
+test("ends map from the shared text onto the painted text, each end on its own", () => {
+  const ends = (anchor: number, head: number, before: string, after: string) => mapEndsThroughCell({ anchor, head }, keys(before), keys(after));
+  assert.deepEqual(ends(4, 4, "abc def", "abc def"), { anchor: 4, head: 4 }, "same text keeps the offsets");
+  assert.deepEqual(ends(4, 4, "abc def", "abc XYdef"), { anchor: 6, head: 6 }, "buffered local typing before a caret pushes it on");
+  assert.deepEqual(ends(2, 2, "abc def", "abc XYdef"), { anchor: 2, head: 2 }, "typing after a caret leaves it");
+  assert.deepEqual(ends(7, 7, "abc def", "abc defXY"), { anchor: 7, head: 7 }, "a caret at the end stays before what is buffered there");
+  assert.deepEqual(ends(6, 6, "abc PEERdef", "abc def"), { anchor: 4, head: 4 }, "a caret in held text sits where that text will appear");
+  assert.deepEqual(ends(1, 9, "abc PEERdef", "abc def"), { anchor: 1, head: 5 }, "a selection keeps its painted ends");
+  assert.deepEqual(ends(9, 1, "abc PEERdef", "abc def"), { anchor: 5, head: 1 }, "a backward selection stays backward");
+  assert.deepEqual(ends(4, 8, "abc PEERdef", "abc def"), { anchor: 4, head: 4 }, "a selection of unpainted text collapses");
+  assert.deepEqual(ends(-3, 99, "abc", "abc"), { anchor: 0, head: 3 }, "out-of-range ends clamp to the cell");
+  assert.deepEqual(ends(40, 40, "abc def", "ab"), { anchor: 2, head: 2 }, "a caret past a shortened text clamps to its end");
+  assert.deepEqual(ends(1, 1, GRIN + "x", GRIN + "x"), { anchor: 2, head: 2 }, "an end never splits a surrogate pair");
 });

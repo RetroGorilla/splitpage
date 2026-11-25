@@ -34,7 +34,7 @@ test("location reads Split focus, Writer text selection and visual focus, and cl
 });
 
 test("mark rules group peers by beat and side, including the Writer sign for a visual", () => {
-  const audio: PresencePeer = { clientId: 1, name: "Ada", color: "#80BDFB", view: "writer", beat: 'r"1', side: "audioText" };
+  const audio: PresencePeer = { clientId: 1, name: "Ada", color: "#80BDFB", view: "writer", beat: 'r"1', side: "audioText", caret: null };
   const visual: PresencePeer = { ...audio, clientId: 2, color: "#EF958E", side: "visualText" };
   const present: PresencePeer = { ...audio, clientId: 3, view: "present", beat: null, side: null };
   const beat = '[data-id="r\\"1"]';
@@ -68,9 +68,9 @@ test("the presence view samples while synced and keeps a marker on a replaced fi
   assert.deepEqual(published, []);
   collaboration.setRelay({ connected: true, firstSyncDone: true, pendingChangeCount: 0 });
   t.mock.timers.tick(100);
-  assert.deepEqual(published, [{ name: "Ada", color: "#80BDFB", view: "split", beat: null, side: null }]);
+  assert.deepEqual(published, [{ name: "Ada", color: "#80BDFB", view: "split", beat: null, side: null, caret: null }]);
   const binding = presence.bind(() => {});
-  binding.receive([{ clientId: 1, name: "Ada", color: "#80BDFB", view: "split", beat: "r1", side: "audioText" }]);
+  binding.receive([{ clientId: 1, name: "Ada", color: "#80BDFB", view: "split", beat: "r1", side: "audioText", caret: null }]);
   const field = h.document.querySelector<HTMLElement>("#rows .field-wrap");
   assert.equal(field?.dataset.presenceDots, "");
   const replacement = h.document.createElement("div");
@@ -84,4 +84,48 @@ test("the presence view samples while synced and keeps a marker on a replaced fi
   t.mock.timers.tick(100);
   assert.equal(published.length, 1);
   assert.equal(replacement.dataset.presenceDots, undefined);
+});
+
+test("the presence view sends the focused cell's selection as a caret, collapsing one that leaves a Writer beat", t => {
+  const h = viewHarness();
+  const original = Object.getOwnPropertyDescriptors(globalThis);
+  Object.assign(globalThis, { window: h.window, document: h.document, CSS: { escape: cssAttr } });
+  t.after(() => {
+    for (const key of ["window", "document", "CSS"] as const) {
+      const descriptor = original[key];
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+    h.window.close();
+  });
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  h.el("rows").innerHTML = '<div class="cell-editable" tabindex="0" data-id="r1" data-field="audioText">Hello world</div>';
+  h.el("writer-doc").tabIndex = 0;
+  h.el("writer-doc").innerHTML = '<div class="wr-beat" data-id="r2" data-field="audioText">First</div><div class="wr-beat" data-id="r3" data-field="audioText">Second</div>';
+  const asked: unknown[] = [];
+  const caret = { anchor: { type: { client: 1, clock: 0 }, item: null, assoc: 0 }, head: { type: { client: 1, clock: 0 }, item: null, assoc: 0 } } as const;
+  const { collaboration, ports, published } = fakePresenceView({
+    caret: (where, cell, ends) => { asked.push([where.beat, where.side, (cell as HTMLElement).dataset.id, ends]); return caret; }
+  });
+  const dispose = mountPresenceView(ports);
+  collaboration.enter();
+  collaboration.setRelay({ connected: true, firstSyncDone: true, pendingChangeCount: 0 });
+  const cell = h.document.querySelector<HTMLElement>("#rows .cell-editable") as HTMLElement;
+  cell.focus();
+  h.document.getSelection()?.setBaseAndExtent(cell.firstChild as Node, 8, cell.firstChild as Node, 2);
+  h.document.dispatchEvent(new h.window.Event("selectionchange"));
+  t.mock.timers.tick(100);
+  assert.deepEqual(asked.at(-1), ["r1", "audioText", "r1", { anchor: 8, head: 2 }]);
+  assert.deepEqual(published.at(-1), { name: "Ada", color: "#80BDFB", view: "split", beat: "r1", side: "audioText", caret });
+
+  h.el("writer").hidden = false;
+  const writer = h.el("writer-doc");
+  writer.focus();
+  const [first, second] = writer.querySelectorAll(".wr-beat");
+  h.document.getSelection()?.setBaseAndExtent(first?.firstChild as Node, 1, second?.firstChild as Node, 4);
+  h.document.dispatchEvent(new h.window.Event("selectionchange"));
+  t.mock.timers.tick(100);
+  assert.deepEqual(asked.at(-1), ["r3", "audioText", "r3", { anchor: 4, head: 4 }]);
+  assert.equal(published.at(-1)?.view, "writer");
+  dispose();
 });

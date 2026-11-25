@@ -1,14 +1,23 @@
-import type { PresenceLocation, PresencePeer } from "../../application/collaboration/presence.ts";
+import type { PresenceCaret, PresenceLocation, PresencePeer } from "../../application/collaboration/presence.ts";
+import type { CellEnds } from "../../core/text/selection.ts";
+import { domToPos } from "../common/cell-dom.ts";
 import type { PresenceViewPorts } from "./ports.ts";
 
-function cellLocation(view: PresenceLocation["view"], cell: HTMLElement | null): PresenceLocation {
-  const beat = cell?.dataset.id;
-  const side = cell?.dataset.field;
-  if (beat && beat.length <= 256 && (side === "audioText" || side === "visualText")) return { view, beat, side };
-  return { view, beat: null, side: null };
+const EDITABLE = "#rows .cell-editable, #writer-doc, .wr-flow-visual-text";
+
+interface Located {
+  readonly location: PresenceLocation;
+  readonly cell: HTMLElement | null;
 }
 
-export function location(document: Document): PresenceLocation {
+function cellLocation(view: PresenceLocation["view"], cell: HTMLElement | null): Located {
+  const beat = cell?.dataset.id;
+  const side = cell?.dataset.field;
+  if (cell && beat && beat.length <= 256 && (side === "audioText" || side === "visualText")) return { location: { view, beat, side }, cell };
+  return { location: { view, beat: null, side: null }, cell: null };
+}
+
+function locate(document: Document): Located {
   const active = document.activeElement;
   if (document.querySelector("#prompter:not([hidden])")) return cellLocation("present", null);
   if (document.querySelector("#writer:not([hidden])")) {
@@ -18,6 +27,26 @@ export function location(document: Document): PresenceLocation {
     return cellLocation("writer", element?.closest<HTMLElement>("#writer-doc .wr-beat") ?? null);
   }
   return cellLocation("split", active?.closest<HTMLElement>("#rows .cell-editable") ?? null);
+}
+
+export function location(document: Document): PresenceLocation {
+  return locate(document).location;
+}
+
+export function selectionEnds(document: Document, cell: Element): CellEnds | null {
+  const selection = document.getSelection();
+  const focus = selection?.focusNode;
+  if (!selection || !focus || !cell.contains(focus)) return null;
+  const head = domToPos(cell, focus, selection.focusOffset);
+  if (head === null) return null;
+  const anchorNode = selection.anchorNode;
+  const anchor = anchorNode && cell.contains(anchorNode) ? domToPos(cell, anchorNode, selection.anchorOffset) : null;
+  return { anchor: anchor ?? head, head };
+}
+
+function localCaret(document: Document, ports: Pick<PresenceViewPorts, "caret">, { location, cell }: Located): PresenceCaret | null {
+  const ends = cell && selectionEnds(document, cell);
+  return cell && ends ? ports.caret(location, cell, ends) : null;
 }
 
 type MarkerRule =
@@ -85,7 +114,8 @@ export function mountPresenceView(ports: PresenceViewPorts): () => void {
   function sample(): void {
     timer ??= setTimeout(() => {
       timer = undefined;
-      ports.setLocal({ ...ports.identity(), ...location(document) });
+      const located = locate(document);
+      ports.setLocal({ ...ports.identity(), ...located.location, caret: localCaret(document, ports, located) });
     }, 100);
   }
 
@@ -109,7 +139,7 @@ export function mountPresenceView(ports: PresenceViewPorts): () => void {
     document.addEventListener("focusin", sample, { signal });
     document.addEventListener("focusout", sample, { signal });
     document.addEventListener("selectionchange", () => {
-      if (document.activeElement?.id === "writer-doc") sample();
+      if (document.activeElement?.matches(EDITABLE)) sample();
     }, { signal });
     observer = new window.MutationObserver(sample);
     markerObserver = new window.MutationObserver(records => {

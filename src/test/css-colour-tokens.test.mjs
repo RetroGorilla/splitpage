@@ -51,6 +51,7 @@ test("every CSS variable has a CSS definition or a runtime assignment", () => {
   const definitions = new Set();
   for (const file of [
     "src/features/collaboration/presence.ts",
+    "src/features/collaboration/presence-carets.ts",
     "src/features/prompter/prompter.ts",
     "src/features/rows/row-motion.ts",
     "src/features/broll/panel.ts",

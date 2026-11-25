@@ -18,6 +18,37 @@
   .sharing-details[aria-modal="true"]::backdrop { background: var(--backdrop); }
   .collaboration-dialog :is(form, fieldset, label, input) { min-width: 0; }
   .collaboration-dialog .modal-panel { overflow-wrap: anywhere; }
+  .presence-carets {
+    position: fixed;
+    inset: 0;
+    z-index: 119;
+    overflow: hidden;
+    pointer-events: none;
+    contain: strict;
+  }
+  /* why: the Writer covers the Split view at z-index 145; the layer clips itself to the Writer's scroll area */
+  body:has(> .writer:not([hidden])) .presence-carets { z-index: 146; }
+  .presence-selection, .presence-caret { position: absolute; background: var(--presence-caret-color); }
+  .presence-selection { opacity: 0.28; }
+  .presence-caret { width: 2px; margin-left: -1px; border-radius: 1px; }
+  .presence-caret-flag {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    max-width: 12em;
+    padding: 0 var(--space-4);
+    border-radius: 3px 3px 3px 0;
+    background: var(--presence-caret-color);
+    color: var(--media-ground);
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.9;
+  }
 
   @media (max-width: 760px) {
     .topbar-row:has(.shared-trigger) .topbar-left { min-width: 0; }
