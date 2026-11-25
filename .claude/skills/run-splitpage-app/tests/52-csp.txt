@@ -29,6 +29,7 @@ expect window.__csp.indexOf("default-src 'self'") !== -1
 expect window.__csp.indexOf("object-src 'none'") !== -1
 expect window.__csp.indexOf("base-uri 'self'") !== -1
 expect window.__csp.indexOf("form-action 'none'") !== -1
+expect /connect-src 'self' https: wss: ws:\/\/127\.0\.0\.1:\* http:\/\/127\.0\.0\.1:\*;/.test(window.__csp)
 # The inline app is allowed by hash and by nothing else: no 'unsafe-inline',
 # no 'unsafe-eval', no nonce that a future edit could leave stale.
 expect /script-src [^;]*'sha256-[A-Za-z0-9+/=]{44}'/.test(window.__csp)

@@ -258,14 +258,14 @@ const PARTS = [
   ["{{HELP_HTML}}", () => helpHtml().html]
 ];
 
-const CSP_DIRECTIVES = (scriptHash) => [
+const CSP_DIRECTIVES = (scriptHash, testBuild) => [
   "default-src 'self'",
   `script-src 'self' 'sha256-${scriptHash}'`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
-  "connect-src 'self' https: http:",
+  "connect-src 'self' https: wss:" + (testBuild ? " ws://127.0.0.1:* http://127.0.0.1:*" : ""),
   "object-src 'none'",
   "frame-src 'self' https://www.youtube-nocookie.com https://player.vimeo.com",
   "worker-src 'self'",
@@ -288,9 +288,9 @@ export function inlineScriptBody(html) {
   return html.slice(from, j);
 }
 
-export function buildCsp(html) {
+export function buildCsp(html, testBuild = false) {
   const hash = createHash("sha256").update(asParsed(inlineScriptBody(html)), "utf8").digest("base64");
-  return CSP_DIRECTIVES(hash).join("; ");
+  return CSP_DIRECTIVES(hash, testBuild).join("; ");
 }
 
 const SW_CACHE_LINE = /^var CACHE = "(splitpage-[^"]*)";$/m;
@@ -317,7 +317,7 @@ export function build(testHooks = TEST_BUILD, collabUi = testHooks) {
     html = html.split(marker).join(chomp(load()));
   }
   if (!html.includes("{{CSP}}")) throw new Error("marker {{CSP}} missing from src/page.html");
-  return html.split("{{CSP}}").join(buildCsp(html));
+  return html.split("{{CSP}}").join(buildCsp(html, testHooks));
 }
 
 function main() {

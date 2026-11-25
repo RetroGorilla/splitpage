@@ -8,7 +8,7 @@ import { prepareNativeRuns, writeNativeRuns } from "./inline.ts";
 import type { NativePreparedRun } from "./inline.ts";
 import { NATIVE_FORMAT_VERSION } from "./roots.ts";
 import type { NativeRoots } from "./roots.ts";
-import { transactNativeCommand } from "./script.ts";
+import { openNativeScript, transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { NATIVE_SHOT_PROPS, newNativeShotProps } from "./shot-props.ts";
 import {
@@ -215,4 +215,12 @@ export function convertToNativeScript(script: NativeScript, source: ValidatedDoc
       write(script, script.roots, plan);
     }, "conversion");
   } finally { CONVERTING.delete(script.doc); }
+}
+
+export function createNativeShareSnapshot(source: ValidatedDocument, ports: NativeConversionPorts): Uint8Array {
+  const doc = new Y.Doc();
+  try {
+    convertToNativeScript(openNativeScript(doc), source, ports);
+    return Y.encodeStateAsUpdate(doc);
+  } finally { doc.destroy(); }
 }

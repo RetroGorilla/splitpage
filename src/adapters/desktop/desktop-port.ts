@@ -1,5 +1,5 @@
 import type { HistoryDesktopPort } from "../../application/recovery/history-ports.ts";
-import type { RelayOwnerControls } from "../../../shared/desktop-contract.d.ts";
+import type { RelayOwnerControls, ShareScriptControls } from "../../../shared/desktop-contract.d.ts";
 import type { DesktopDocumentState } from "../../application/desktop/document-state.ts";
 import type { DesktopIpcArgs, DesktopIpcContract, DesktopIpcReceiveArgs, DesktopIpcResult } from "../../../shared/desktop-contract.d.ts";
 import type { NativeReplicaInvoke } from "../../../shared/native-replica.d.ts";
@@ -28,6 +28,7 @@ export type DesktopBundleProgress = Pick<DesktopIpcArgs<"splitpage:bundle-progre
 
 export interface DesktopPort extends HistoryDesktopPort {
   readonly relayOwner?: RelayOwnerControls;
+  readonly shareScript?: ShareScriptControls;
   readonly nativeReplica: NativeReplicaInvoke;
   readonly isDesktop: true;
   readonly platform: string;

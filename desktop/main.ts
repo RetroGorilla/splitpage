@@ -28,7 +28,8 @@ import type * as DesktopState from "./desktop-state.ts";
 import type * as UpdateRelease from "./update-release.ts";
 import type * as IpcSetup from "./ipc-setup.ts";
 import type { DesktopChannelModule } from "./ipc-channels.ts";
-import type { createRelayOwner as CreateRelayOwner } from "./relay-owner.ts";
+import type { createRelayOwner as CreateRelayOwner, createShareCreations as CreateShareCreations } from "./relay-owner.ts";
+import type { createNativeReplicaFiles as CreateNativeReplicaFiles } from "./native-replica-files.ts";
 import type { createRelaySetupWindow as CreateRelaySetupWindow } from "./relay-setup-window.ts";
 import type * as IpcFiles from "./ipc-files.ts";
 import type * as IpcShell from "./ipc-shell.ts";
@@ -1852,9 +1853,14 @@ const relaySetup = COLLAB_UI ? (() => {
   const root = path.join(DESKTOP_BUILD, "relay-setup");
   const { RELAY_SETUP_ORIGIN }: DesktopChannelModule = require("./ipc-channels.ts");
   const { createRelaySetupWindow }: { createRelaySetupWindow: typeof CreateRelaySetupWindow } = require("./relay-setup-window.ts");
-  const { createRelayOwner }: { createRelayOwner: typeof CreateRelayOwner } = require("./relay-owner.ts");
+  const { createRelayOwner, createShareCreations }: {
+    createRelayOwner: typeof CreateRelayOwner; createShareCreations: typeof CreateShareCreations
+  } = require("./relay-owner.ts");
+  const { createNativeReplicaFiles }: { createNativeReplicaFiles: typeof CreateNativeReplicaFiles } = require("./native-replica-files.ts");
   const setupWindow = createRelaySetupWindow(BrowserWindow, root, RELAY_SETUP_ORIGIN);
-  const owner = createRelayOwner(app.getPath("userData"), safeStorage);
+  const userData = app.getPath("userData");
+  const owner = createRelayOwner(userData, safeStorage);
+  const shares = createShareCreations(userData, owner, createNativeReplicaFiles(userData).remove);
   function tabWindow(event: DesktopIpcEvent) {
     const tab = tabOf(event);
     if (!tab || event.senderFrame !== event.sender.mainFrame) return null;
@@ -1872,7 +1878,28 @@ const relaySetup = COLLAB_UI ? (() => {
     },
     test: async (event: DesktopIpcEvent) => tabWindow(event) ? owner.testConnection() : "not-configured" as const,
     clear: (event: DesktopIpcEvent) => !!tabWindow(event) && owner.clear(),
-    save: owner.save
+    save: (address: string, secret: string) => {
+      const result = owner.save(address, secret);
+      if (result === "saved") void shares.retryAbandons();
+      return result;
+    },
+    createShare: (event: DesktopIpcEvent, id: string, hash: string, bytes: Uint8Array, address: string) => {
+      const tab = tabWindow(event) && tabOf(event);
+      return tab ? shares.create(tab.id, id, hash, bytes, address) : { kind: "failed" as const };
+    },
+    abandonShare: (event: DesktopIpcEvent, id: string) => {
+      const tab = tabWindow(event) && tabOf(event);
+      return tab ? shares.abandon(tab.id, id) : false;
+    },
+    completeShare: (event: DesktopIpcEvent, id: string) => {
+      const tab = tabWindow(event) && tabOf(event);
+      return tab ? shares.complete(tab.id, id) : false;
+    },
+    async recoverShares() {
+      await shares.recover();
+      void shares.retryAbandons();
+      setInterval(() => { void shares.retryAbandons(); }, 30_000).unref();
+    }
   };
 })() : undefined;
 
@@ -1971,13 +1998,14 @@ app.on("open-file", (event, filePath) => {
 
 app.setAppUserModelId("com.retrogorilla.splitpage");
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   nativeTheme.themeSource = themeChoice.read();
   desktopState.sweepTempFiles();
   recents.load();
   const draftInit = initDraftStore();
   initBlobStore();
   initHistoryStore();
+  if (relaySetup) await relaySetup.recoverShares().catch(() => {});
   registerProtocol();
   registerIpc({
     registerFileIpc, registerShellIpc, registerDocumentIpc,

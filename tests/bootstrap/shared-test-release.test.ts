@@ -4,14 +4,18 @@ import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 
 for (const enabled of [false, true]) test("shared hook build gate: release has no hook, peer or notices, test build keeps them: " + enabled, async () => {
-  const result = await build({ stdin: { contents: 'export { mountSharedSessionFeature, stopSharedSessionFeature } from "./src/bootstrap/wiring/shared-test.ts";',
+  const result = await build({ stdin: { contents: `
+    export { mountSharedSessionFeature, stopSharedSessionFeature } from "./src/bootstrap/wiring/shared-test.ts";
+    export { registerCollaborationActions } from "./src/bootstrap/wiring/collaboration.ts";
+  `,
     resolveDir: fileURLToPath(new URL("../../", import.meta.url)), sourcefile: "shared-hook-build-entry.ts", loader: "ts" },
     bundle: true, write: false, format: "esm", platform: "browser", minify: true, treeShaking: true,
     define: { SPLITPAGE_TEST_HOOKS: String(enabled), SPLITPAGE_COLLAB_UI: String(enabled) }, logLevel: "silent" });
   const code = result.outputFiles[0]?.text; assert.ok(code);
   for (const text of ["__sharedTest", "nativePeer", "draft-not-kept", "The shared session did not start",
     "The draft writer did not detach", "app-stopped", "enterFrom", "enterRetained",
-    "splitpage-native-replica-log", "shared-copy-erase-failed", "invitationConnected", "invitationSettled", "Splitpage-Deployment"]) {
+    "splitpage-native-replica-log", "shared-copy-erase-failed", "invitationConnected", "invitationSettled", "Splitpage-Deployment",
+    "share-script", "share-script-modal", "Uploading script"]) {
     assert.equal(code.includes(text), enabled, text);
   }
   for (const text of ["ownershipScans", "appliedUpdates", "lateJoiner", "joinerType", "joinerUndo",

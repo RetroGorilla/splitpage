@@ -147,30 +147,34 @@ function connectionFor(
   database: IDBDatabase, name: string, release: () => Promise<void>, storage: BrowserLocalStorePorts["storage"]
 ): NativeReplicaConnection {
   let staged: Promise<undefined> | undefined;
-  async function writeMembership(token: string | null, signal?: AbortSignal): Promise<void> {
-    if (token === null) {
+  async function writeMembership(value: string | NativeMembershipRecord | null, signal?: AbortSignal): Promise<void> {
+    if (value === null) {
       await transaction(database, [MEMBERSHIPS, INVITATIONS], "readwrite", tx => {
         tx.objectStore(MEMBERSHIPS).delete(name);
         return tx.objectStore(INVITATIONS).delete(name);
       });
       return;
     }
+    const record = readNativeMembership(value);
+    if (!record) throw new TypeError("Invalid shared membership");
     await transaction(database, [MEMBERSHIPS, INVITATIONS], "readwrite", tx => {
       tx.objectStore(MEMBERSHIPS).put(true, name);
-      return tx.objectStore(INVITATIONS).put(token, name);
+      return tx.objectStore(INVITATIONS).put(record, name);
     }, signal);
+  }
+  async function readMembership() {
+    let member: IDBRequest | undefined;
+    const value: unknown = await transaction(database, [MEMBERSHIPS, INVITATIONS], "readonly", tx => {
+      member = tx.objectStore(MEMBERSHIPS).get(name);
+      return tx.objectStore(INVITATIONS).get(name);
+    });
+    return member?.result === true ? readNativeMembership(value) : null;
   }
   return {
     forget: () => erase(database, name),
     membership: {
-      async token() {
-        let member: IDBRequest | undefined;
-        const token: unknown = await transaction(database, [MEMBERSHIPS, INVITATIONS], "readonly", tx => {
-          member = tx.objectStore(MEMBERSHIPS).get(name);
-          return tx.objectStore(INVITATIONS).get(name);
-        });
-        return member?.result === true && typeof token === "string" ? token : null;
-      },
+      record: readMembership,
+      async token() { return (await readMembership())?.token ?? null; },
       join: writeMembership,
       async stageInvitation(token, previous, signal) {
         const disposition = deferred<undefined>();
@@ -234,3 +238,5 @@ export function createBrowserNativeLocalStore(ports: BrowserLocalStorePorts = {
     })
   };
 }
+import { readNativeMembership } from "../../../../shared/native-membership.ts";
+import type { NativeMembershipRecord } from "../../../../shared/native-replica.d.ts";

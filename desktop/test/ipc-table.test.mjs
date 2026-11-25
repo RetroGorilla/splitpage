@@ -365,11 +365,12 @@ test("in test mode, main.ts's real groups register every pair in the pinned orde
   assert.deepEqual(registerThroughMain({ testMode: true }), [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT]);
 });
 
-test("the build setting, independently of test mode, registers the five relay setup calls", () => {
+test("the build setting, independently of test mode, registers the relay setup and share calls", () => {
   const ordinary = registerThroughMain({ testMode: false });
   assert.deepEqual(registerThroughMain({ testMode: false, collabUi: true }), [...ordinary,
     "splitpage:relay-owner-status invoke", "splitpage:relay-owner-open invoke", "splitpage:relay-owner-test invoke",
-    "splitpage:relay-owner-clear invoke", "splitpage:relay-setup-save invoke"]);
+    "splitpage:relay-owner-clear invoke", "splitpage:relay-owner-share-create invoke",
+    "splitpage:relay-owner-share-abandon invoke", "splitpage:relay-owner-share-complete invoke", "splitpage:relay-setup-save invoke"]);
   assert.equal(channelsForOrigin(RELAY_SETUP_ORIGIN).length, 0);
   assert.deepEqual(channelsForOrigin(RELAY_SETUP_ORIGIN, true).map(row => row.name), ["splitpage:relay-setup-save"]);
 });

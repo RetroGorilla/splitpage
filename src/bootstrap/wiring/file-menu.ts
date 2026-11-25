@@ -27,6 +27,7 @@ import { importControls } from "./imports.ts";
 import { localFilesOwner } from "./local-files.ts";
 import { LONG_DEMO } from "../../starters/index.ts";
 import { documentEntry } from "./ports/document-entry.ts";
+import { collaborationMenuItem } from "./collaboration.ts";
 
 export function mountFileMenuDropdownFeature(): FileMenuDropdownMount {
   return fileMenu.replace(() => {
@@ -51,7 +52,8 @@ export function mountFileMenuDropdownFeature(): FileMenuDropdownMount {
       prepareDocument: (raw) => migrateRows(raw),
       syncIdentity: () => { documentIdentity.syncDocIdentity(); },
       longDemo: LONG_DEMO,
-      collaboration
+      collaboration,
+      collaborationItem: collaborationMenuItem()
     };
     return mountFileMenuDropdown(ports);
   });

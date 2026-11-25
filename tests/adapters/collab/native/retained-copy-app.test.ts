@@ -251,7 +251,7 @@ for (const result of ["delayed", "failed", "cancelled"] as const) {
         const database = await idbResult(window.indexedDB.open(DB_NAME));
         try {
           const current: unknown = await idbResult(database.transaction("invitations").objectStore("invitations").get(name));
-          assert.equal(current === previous, true);
+          assert.deepEqual(current, { token: previous, role: "guest" });
         } finally { database.close(); }
         assert.equal(JSON.stringify(currentDocument()), original);
         if (result === "cancelled") {
@@ -715,9 +715,9 @@ for (const retained of [false, true]) {
     const database = await idbResult(window.indexedDB.open(DB_NAME));
     try {
       const tx = database.transaction(["memberships", "invitations"]);
-      const [member, token] = await Promise.all(["memberships", "invitations"].map(key => idbResult(tx.objectStore(key).get(name))));
+      const [member, membership] = await Promise.all(["memberships", "invitations"].map(key => idbResult(tx.objectStore(key).get(name))));
       assert.equal(member, retained ? true : undefined);
-      assert.equal(token === (retained ? original.token : undefined), true);
+      assert.deepEqual(membership, retained ? { token: original.token, role: "guest" } : undefined);
     } finally { database.close(); }
     assert.deepEqual(await storedEntries(window.indexedDB, name), previous);
     assert.equal(connect.mock.callCount(), 0);

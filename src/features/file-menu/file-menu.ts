@@ -146,6 +146,22 @@ function refreshFileMenu() {
   });
 }
 
+function mountCollaborationItem(item: NonNullable<FileMenuDropdownPorts["collaborationItem"]>): HTMLElement | undefined {
+  const group = document.createElement("div");
+  group.className = "menu-group";
+  group.dataset.menuGroup = "collaborate";
+  group.setAttribute("role", "group");
+  group.setAttribute("aria-labelledby", "fm-g-collaboration");
+  group.innerHTML = '<div class="menu-group-head" id="fm-g-collaboration">' + escapeHtml(item.group) + '</div>' +
+    '<button type="button" role="menuitem" class="mi" data-file-action="' + escapeHtml(item.id) + '">' +
+    '<svg class="mi-icon" aria-hidden="true"><use href="#i-link"/></svg><span class="mi-text"><span class="mi-label">' +
+    escapeHtml(item.label) + '</span></span></button>';
+  const anchor = document.querySelector('#file-menu [data-menu-group="export"]');
+  if (!anchor) return;
+  anchor.before(group);
+  return group;
+}
+
 function refreshOpenFileMenu() {
   const menu = el("file-menu");
   if (menu && !menu.hidden) refreshFileMenu();
@@ -423,6 +439,15 @@ export function startFileMenu(given: FileMenuDropdownPorts): FileMenuDropdownMou
   ports = given;
   const mounted = {};
   activeMount = mounted;
+  const item = given.collaborationItem;
+  let collaborationGroup: HTMLElement | undefined;
+  const stopCollaboration = item && onFileMenuRefresh(() => {
+    if (item.available() && !given.collaboration.snapshot().active) collaborationGroup ??= mountCollaborationItem(item);
+    else {
+      collaborationGroup?.remove();
+      collaborationGroup = undefined;
+    }
+  });
   let withdrawHook: (() => void) | null = null;
   wireMenu(function (withdraw) { withdrawHook = withdraw; });
   let disposed = false;
@@ -442,6 +467,8 @@ export function startFileMenu(given: FileMenuDropdownPorts): FileMenuDropdownMou
       if (disposed) return;
       disposed = true;
       while (listeners.length) (listeners.pop() as () => void)();
+      stopCollaboration?.();
+      collaborationGroup?.remove();
       if (withdrawHook) withdrawHook();
       if (activeMount === mounted) {
         activeMount = null;

@@ -2,7 +2,7 @@
 
 import type * as NodeCrypto from "node:crypto";
 import type { Event, RenderProcessGoneDetails } from "electron";
-import type { NativeReplicaReply, NativeReplicaRequest } from "../shared/native-replica.d.ts";
+import type { NativeMembershipRecord, NativeReplicaReply, NativeReplicaRequest } from "../shared/native-replica.d.ts";
 import type { createNativeReplicaFiles, NativeReplicaFileSystem } from "./native-replica-files.ts";
 
 const { randomBytes }: typeof NodeCrypto = require("node:crypto");
@@ -17,6 +17,7 @@ const LEASE_ID = /^[a-f0-9]{32}(?![\s\S])/;
 const LOCKED = { kind: "failed", reason: "locked" } as const;
 const CLOSED = { kind: "failed", reason: "closed" } as const;
 const STORED = { kind: "stored" } as const;
+const MEMBERSHIP_PREFIX = "\0";
 
 type RendererEndListener = {
   (event: "destroyed", listener: () => void): unknown;
@@ -47,13 +48,26 @@ function isPayload(value: unknown): value is Uint8Array {
   return value instanceof Uint8Array && value.byteLength > 0 && value.buffer instanceof ArrayBuffer;
 }
 
+function membershipRecord(value: unknown): NativeMembershipRecord | null {
+  if (typeof value === "string") return value ? { token: value, role: "guest" } : null;
+  if (!value || typeof value !== "object") return null;
+  const { token, role, guestLinkToken } = value as Partial<NativeMembershipRecord>;
+  if (typeof token !== "string" || !token || (role !== "owner" && role !== "guest")) return null;
+  if (guestLinkToken === undefined) return { token, role };
+  return role === "owner" && typeof guestLinkToken === "string" && guestLinkToken ? { token, role, guestLinkToken } : null;
+}
+
+function decodeMembership(value: string): NativeMembershipRecord | null {
+  return membershipRecord(value.startsWith(MEMBERSHIP_PREFIX) ? JSON.parse(value.slice(1)) : value);
+}
+
 function isRequest(value: unknown): value is NativeReplicaRequest {
   if (!Array.isArray(value)) return false;
   const [op, name, lease, through, checkpoint, bytes, journal]: unknown[] = value;
   if (typeof name !== "string" || !SCRIPT_ID.test(name)) return false;
   if (op === "open" || op === "delete") return value.length === 2;
   if (typeof lease !== "string" || !LEASE_ID.test(lease)) return false;
-  if (op === "join") return value.length === 4 && typeof through === "string" && through.length > 0;
+  if (op === "join") return value.length === 4 && membershipRecord(through) !== null;
   if (op === "membership" || op === "forget" || op === "close" || op === "read-journal") return value.length === 3;
   if (op === "write-journal") return value.length === 4 && isPayload(through);
   if (op === "read") return value.length === 4 && (through === null || generation(through, 0));
@@ -152,11 +166,11 @@ function createNativeReplicaIpc(userData: string, disk?: NativeReplicaFileSystem
       if (request[0] === "membership") {
         const bytes = await replica.readMembership();
         if (bytes && !cipher) return { kind: "failed", reason: "io" };
-        return { kind: "membership", token: bytes && cipher ? cipher.decrypt(bytes) : null };
+        return { kind: "membership", record: bytes && cipher ? decodeMembership(cipher.decrypt(bytes)) : null };
       }
       if (request[0] === "join") {
         if (!cipher) return { kind: "failed", reason: "io" };
-        await replica.writeMembership(cipher.encrypt(request[3]));
+        await replica.writeMembership(cipher.encrypt(MEMBERSHIP_PREFIX + JSON.stringify(membershipRecord(request[3]))));
         return STORED;
       }
       if (request[0] !== "write") return CLOSED;

@@ -14,6 +14,11 @@ export function createDesktopNativeLocalStore(invoke: NativeReplicaInvoke): Nati
           const reply = await invoke(["close", name, lease]);
           if (reply.kind !== "stored") throw new DOMException("Native replica lease was closed", "InvalidStateError");
         };
+        const membership = async () => {
+          const reply = await invoke(["membership", name, lease]);
+          if (reply.kind !== "membership") throw new Error("Could not read shared membership.");
+          return reply.record;
+        };
         try {
           return await attachNativeLocalStore({
             async read(through) {
@@ -49,11 +54,8 @@ export function createDesktopNativeLocalStore(invoke: NativeReplicaInvoke): Nati
               if (reply.kind !== "stored") throw new Error("Could not remove the local copy.");
             },
             membership: {
-              async token() {
-                const reply = await invoke(["membership", name, lease]);
-                if (reply.kind !== "membership") throw new Error("Could not read shared membership.");
-                return reply.token;
-              },
+              record: membership,
+              async token() { return (await membership())?.token ?? null; },
               async join(token) {
                 const reply = await invoke(["join", name, lease, token]);
                 if (reply.kind !== "stored") throw new Error("Could not save shared membership.");

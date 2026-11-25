@@ -73,7 +73,7 @@ function bearerToken(request: IncomingMessage): string | null {
   return /^Bearer ([A-Za-z0-9_-]{1,512})$/.exec(request.headers.authorization ?? "")?.[1] ?? null;
 }
 
-export function ownerRequests(secret: string | undefined, limit: number, commands: Commands) {
+export function ownerRequests(secret: string | undefined, limit: number, commands: Commands, deployment?: string) {
   const authorize = managementAuthorizer(secret);
   return async (request: IncomingMessage, response: ServerResponse): Promise<boolean> => {
     const path = request.url?.split("?")[0] ?? "";
@@ -138,7 +138,9 @@ export function ownerRequests(secret: string | undefined, limit: number, command
         const actualHash = createHash("sha256").update(bytes).digest();
         if (Buffer.compare(actualHash, expectedHash) !== 0) throw new RequestError(422);
         if (existing === undefined) checkState(bytes, limit);
-        reply(200, commands.create(id, bytes, actualHash));
+        const created = commands.create(id, bytes, actualHash);
+        if (deployment !== undefined) response.setHeader("Splitpage-Deployment", deployment);
+        reply(200, created);
         return true;
       }
       if (method === "GET" && path === "/api/scripts") {

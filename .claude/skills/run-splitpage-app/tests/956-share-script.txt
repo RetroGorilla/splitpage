@@ -1,0 +1,50 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+click #btn-file
+expect !document.querySelector('#file-menu [data-file-action="share-script"]') || document.querySelector('#file-menu [data-file-action="share-script"]').closest('.menu-group').hidden
+eval document.getElementById('btn-file').click()
+eval (function(){window.D=window.__desktopTest;window.F=window.__splitpageFormats;window.B=D.makeFakeBackend();window.address=null;window.uploads=[];window.abandons=[];B.relayOwner={status:async()=>({address:window.address})};B.shareScript={create:(id)=>{uploads.push(id);return new Promise(resolve=>window.answerUpload=resolve);},abandon:async(id)=>{abandons.push(id);return true;}};D.setBackend(B);return true;})()
+click #btn-file
+expect document.querySelector('#fm-g-collaboration').textContent === 'Collaborate'
+click #file-menu [data-file-action="share-script"]
+wait document.getElementById('share-script-status').textContent === 'Sharing needs a relay.'
+expect document.querySelector('#share-script-setup button').textContent === 'Settings → Collaboration'
+expect document.querySelector('#share-script-setup a').textContent === 'relay setup guide'
+expect document.querySelector('#share-script-modal').classList.contains('modal-backdrop')
+click #share-script-setup button
+wait document.getElementById('settings-modal')?.hidden === false
+expect document.getElementById('share-script-modal') === null
+click #settings-modal [data-settings-action="close"]
+eval (async function(){var doc=JSON.parse(JSON.stringify(F.state()));doc.title='Original file';window.fileBytes=JSON.stringify(doc);var id=B._addFile('original.splitpage',fileBytes);window.handle=D.makeHandle({id:id,name:'original.splitpage'});await F.openFile(await handle.getFile(),handle);window.address='https://relay.example';return true;})()
+wait F.state().title === 'Original file'
+key ctrl KeyK
+wait document.activeElement.id === 'cmdk-input'
+eval (function(){var input=document.activeElement;input.value='share this script';input.dispatchEvent(new Event('input'));return true;})()
+wait document.querySelector('#cmdk [data-cmd="share-script"].is-active') !== null
+key Enter
+wait !document.querySelector('[data-share="start"]').hidden
+click [data-share="start"]
+wait uploads.length === 1
+expect document.getElementById('share-script-status').textContent === 'Uploading script…'
+click [data-share="close"]
+eval answerUpload({kind:'unreachable'})
+wait document.getElementById('share-script-modal') === null
+expect abandons.length === 1 && abandons[0] === uploads[0] && F.state().title === 'Original file'
+eval (async function(){window.fileUnchanged=(await (await handle.getFile()).text())===fileBytes;return true;})()
+expect fileUnchanged
+click #btn-file
+click #file-menu [data-file-action="share-script"]
+wait !document.querySelector('[data-share="start"]').hidden
+click [data-share="start"]
+wait uploads.length === 2
+eval answerUpload({kind:'unreachable'})
+wait document.getElementById('share-script-status').textContent.startsWith('Could not reach the relay')
+expect document.querySelector('[data-share="start"]').textContent === 'Try again'
+eval (async function(){window.fileUnchanged=(await (await handle.getFile()).text())===fileBytes;return true;})()
+expect fileUnchanged && F.state().title === 'Original file'
+click [data-share="start"]
+wait uploads.length === 3
+eval answerUpload({kind:'too-large'})
+wait document.getElementById('share-script-status').textContent === 'This script exceeds the 15 MB sharing limit.'
+expect document.querySelector('[data-share="start"]').hidden
+quit

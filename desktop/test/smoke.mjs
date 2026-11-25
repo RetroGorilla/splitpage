@@ -1,7 +1,8 @@
 "use strict";
 
-import { spawn, execFileSync } from "node:child_process";
+import { execFileSync, fork, spawn } from "node:child_process";
 import crypto from "node:crypto";
+import { once } from "node:events";
 import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
@@ -2859,7 +2860,7 @@ async function caseNativeReplicaKeyStore(target) {
     await waitForRows(app.cdp);
     const reopened = await call("const membership = await invoke(['membership', name, lease]); " +
       "const replica = await invoke(['read', name, lease, null]); " +
-      "return membership.kind === 'membership' && membership.token === credential && replica.kind === 'read' && " +
+      "return membership.kind === 'membership' && membership.record?.token === credential && membership.record.role === 'guest' && replica.kind === 'read' && " +
       "replica.entries.length === 1 && replica.entries[0].generation === 1 && " +
       "(await invoke(['forget', name, lease])).kind === 'stored';");
     record(tag + ": restart decrypts and restores, then erases under the writer lease", reopened === true && !fs.existsSync(directory));
@@ -2932,6 +2933,107 @@ async function caseRelayOwnerSetup(target) {
     }
     relay.close();
     rmrf(userDataDir);
+  }
+}
+
+async function caseShareScript(target, fixturesDir) {
+  const tag = target.name + " sharing a script";
+  const marker = path.join(DESKTOP_DIR, ".build", "collaboration.json");
+  const enabled = target.kind === "dev"
+    ? fs.existsSync(marker) && JSON.parse(fs.readFileSync(marker, "utf8")).collabUi
+    : target.variant === "test";
+  if (!enabled) return;
+  const fixture = writeFixture(fixturesDir, "share-original.splitpage", "Sharing fixture", [["Original visual", "Original narration"]]);
+  const original = fs.readFileSync(fixture);
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-share-relay-"));
+  const secret = crypto.randomBytes(32).toString("base64url");
+  const relay = fork(fileURLToPath(new URL("../../tests/adapters/collab/native/server-process.ts", import.meta.url)), {
+    env: {
+      ...process.env, SPLITPAGE_DATA_DIR: data, SPLITPAGE_PORT: "0", SPLITPAGE_ALLOWED_ORIGINS: "splitpage://app",
+      SPLITPAGE_DEPLOYMENT_ID: "desktop-smoke", SPLITPAGE_MANAGEMENT_SECRET: secret
+    },
+    stdio: ["ignore", "ignore", "ignore", "ipc"]
+  });
+  let app, setup;
+  try {
+    const [port] = await once(relay, "message", { signal: AbortSignal.timeout(10_000) });
+    if (typeof port !== "number") throw new Error("The test relay did not report its port.");
+    const address = "http://127.0.0.1:" + port;
+    app = await launchApp(target, { label: "share-script", fixtures: [fixture] });
+    const { cdp } = app;
+    await waitForRows(cdp);
+    await poll(cdp, "window.__splitpageFormats.state().title === 'Sharing fixture'");
+    await evalPage(cdp, "document.querySelector('#btn-file').click()");
+    const available = await evalPage(cdp, "!!document.querySelector('#file-menu [data-file-action=share-script]:not([hidden])')");
+    record(tag + ": standalone desktop has the Collaborate group and share action", available === true);
+    if (!available) return;
+    await evalPage(cdp, "document.querySelector('[data-file-action=share-script]').click()");
+    await poll(cdp, "document.querySelector('#share-script-status')?.textContent === 'Sharing needs a relay.'");
+    await evalPage(cdp, "document.querySelector('[data-share=settings]').click()");
+    await poll(cdp, "document.getElementById('settings-relay-setup') === document.activeElement");
+    record(tag + ": setup guidance opens Collaboration settings", true);
+    await evalPage(cdp, "document.getElementById('settings-relay-setup').click()");
+    setup = await connectTarget(await pollNode(async () => {
+      const { body } = await fetchJson("http://127.0.0.1:" + app.port + "/json");
+      return body.find(item => item.url === "splitpage://relay-setup/index.html" && item.webSocketDebuggerUrl);
+    }));
+    await poll(setup, "document.querySelector('#relay-secret')?.type === 'password'");
+    try {
+      await evalPage(setup, `document.querySelector('#relay-address').value = ${JSON.stringify(address)};
+        document.querySelector('#relay-secret').value = ${JSON.stringify(secret)};
+        document.querySelector('form').requestSubmit(); true`);
+    } catch { }
+    await poll(cdp, "document.querySelector('#settings-collaboration-address')?.textContent.startsWith('Relay configured')");
+    await evalPage(cdp, "document.querySelector('#settings-modal [data-settings-action=close]').click()");
+    await poll(cdp, "document.getElementById('settings-modal').hidden");
+    await evalPage(cdp, "document.querySelector('#btn-file').click(); document.querySelector('#menu-command').click()");
+    await poll(cdp, "document.querySelector('#cmdk [data-cmd=share-script]')?.textContent.includes('Share this script')");
+    await evalPage(cdp, "document.querySelector('#cmdk [data-cmd=share-script]').click()");
+    await poll(cdp, "document.querySelector('[data-share=start]:not([hidden])')");
+    await evalPage(cdp, "document.querySelector('[data-share=start]').click()");
+    await poll(cdp, "document.querySelector('[data-share=copy]:not([hidden])')", 40_000);
+    const link = new URL(await evalPage(cdp, "document.querySelector('#share-script-link input').value"));
+    record(tag + ": guest link has the relay origin, a script id and a fragment credential",
+      link.origin === address && /^[a-f0-9-]{36}$/.test(link.searchParams.get("join")) && /^#[A-Za-z0-9_-]{43}$/.test(link.hash));
+    record(tag + ": Copy link sends the displayed guest URL to the clipboard",
+      await evalPage(cdp, `(async function () {
+        let written = "";
+        Object.defineProperty(navigator, "clipboard", { value: { async writeText(value) { written = value; } } });
+        document.querySelector('[data-share=copy]').click();
+        await Promise.resolve();
+        return written === document.querySelector('#share-script-link input').value &&
+          document.querySelector('#share-script-status').textContent === "Link copied.";
+      })()`));
+    record(tag + ": the shared editor holds the original script", await evalPage(cdp,
+      "(() => { const script = window.__sharedTest.read().app; return script.title === 'Sharing fixture' && script.rows[0].audioText.includes('Original narration'); })()"));
+    await pollNode(async () => {
+      const { body } = await fetchJson(address + "/api/status", { headers: { Authorization: "Bearer " + secret } });
+      return body?.connections?.authenticated > 0;
+    }, 10_000);
+    record(tag + ": the shared editor connected to the relay under the desktop CSP", true);
+    const name = "desktop-smoke/" + link.searchParams.get("join");
+    const replica = path.join(app.userDataDir, "native-replicas", crypto.createHash("sha256").update(name).digest("hex"));
+    const journal = JSON.parse(fs.readFileSync(path.join(app.userDataDir, "relay-owner-shares.json"), "utf8"));
+    record(tag + ": the handoff completes with an encrypted membership and no pending creation",
+      fs.existsSync(path.join(replica, "membership")) && journal.pending.length === 0 &&
+      !fs.readFileSync(path.join(replica, "membership")).includes(link.hash.slice(1)));
+    record(tag + ": sharing left the source file byte-for-byte unchanged", fs.readFileSync(fixture).equals(original));
+    await evalPage(cdp, "document.querySelector('[data-share=close]').click(); document.querySelector('#btn-file').click()");
+    record(tag + ": the File menu hides sharing once the tab is shared",
+      await evalPage(cdp, "document.querySelector('[data-file-action=share-script]') === null"));
+  } finally {
+    setup?.close();
+    if (app) {
+      await teardown(app, tag, { expectExitCode: 0 });
+      record(tag + ": logs never contain the management secret", !app.getStdout().includes(secret) && !app.getStderr().includes(secret));
+      rmrf(app.userDataDir);
+    }
+    if (relay.connected) relay.send("stop", () => {});
+    if (!await waitForExit(relay, 5000)) {
+      relay.kill();
+      await waitForExit(relay, 5000);
+    }
+    rmrf(data);
   }
 }
 
@@ -6578,6 +6680,7 @@ async function runTargetSuite(target, groupFilter) {
     ["close check: a tab edited during a quit's copy wait is asked about again (#532)", () => caseTabEditedDuringCloseCheck(target, fixturesDir, "quit")],
     ["native replica OS key store", () => caseNativeReplicaKeyStore(target), { hookFree, windowsOnly: "Windows key store smoke" }],
     ["relay owner setup", () => caseRelayOwnerSetup(target), { hookFree, windowsOnly: "Windows key store smoke" }],
+    ["sharing a script", () => caseShareScript(target, fixturesDir), { windowsOnly: "Windows key store smoke" }],
     ["draft: power-cut mid-write keeps the first generation", () => caseDraftCrashMidWrite(target)],
     ["draft: both generations corrupt -> quarantined, seed boot", () => caseDraftCorrupt(target)],
     ["draft: ENOSPC pauses writes, one sticky toast, then resumes", () => caseDraftDiskFull(target)],
