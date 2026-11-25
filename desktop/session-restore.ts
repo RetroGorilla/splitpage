@@ -14,7 +14,7 @@ const { pathKey }: { pathKey: typeof FilePathKey } = require("./file-service.ts"
 function createSessionRestore({
   app, BrowserWindow, desktopState, draftStore, draftsList, tabs, windowsById, pathToTabId, claimRoutingKey,
   createTabWindow, createTab, activateTab, liveWindows, firstWindowRecord, payloadForSource, routeLaunchFile,
-  argvFilesToOpen, restoreNotice, persistShellState
+  argvFilesToOpen, restoreNotice, persistShellState, restoreShared
 }: DesktopSessionRestoreDependencies) {
   let hadPriorSession = false;
   let sessionRestoreInProgress = false;
@@ -50,6 +50,10 @@ function createSessionRestore({
 
       for (const { rec, pw } of built) {
         for (const pt of pw.tabs) {
+          if (restoreShared && pt.shared) {
+            const tab = createTab(rec.id, { tabId: pt.tabId, shared: pt.shared, source: { kind: "blank" }, launchIntent: { type: "blank" } });
+            if (tab?.shared) { placed.add(tab.id); continue; }
+          }
           const listing = draftByTab.get(pt.tabId);
 
           if (listing) {

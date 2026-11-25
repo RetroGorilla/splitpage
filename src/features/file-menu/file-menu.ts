@@ -146,16 +146,17 @@ function refreshFileMenu() {
   });
 }
 
-function mountCollaborationItem(item: NonNullable<FileMenuDropdownPorts["collaborationItem"]>): HTMLElement | undefined {
+function mountCollaborationItems(groupLabel: string,
+  items: NonNullable<FileMenuDropdownPorts["collaborationItem"]>["shared"]): HTMLElement | undefined {
   const group = document.createElement("div");
   group.className = "menu-group";
   group.dataset.menuGroup = "collaborate";
   group.setAttribute("role", "group");
   group.setAttribute("aria-labelledby", "fm-g-collaboration");
-  group.innerHTML = '<div class="menu-group-head" id="fm-g-collaboration">' + escapeHtml(item.group) + '</div>' +
-    '<button type="button" role="menuitem" class="mi" data-file-action="' + escapeHtml(item.id) + '">' +
+  group.innerHTML = '<div class="menu-group-head" id="fm-g-collaboration">' + escapeHtml(groupLabel) + '</div>' +
+    items.map(item => '<button type="button" role="menuitem" class="mi" data-file-action="' + escapeHtml(item.id) + '">' +
     '<svg class="mi-icon" aria-hidden="true"><use href="#i-link"/></svg><span class="mi-text"><span class="mi-label">' +
-    escapeHtml(item.label) + '</span></span></button>';
+    escapeHtml(item.label) + '</span></span></button>').join("");
   const anchor = document.querySelector('#file-menu [data-menu-group="export"]');
   if (!anchor) return;
   anchor.before(group);
@@ -441,12 +442,14 @@ export function startFileMenu(given: FileMenuDropdownPorts): FileMenuDropdownMou
   activeMount = mounted;
   const item = given.collaborationItem;
   let collaborationGroup: HTMLElement | undefined;
+  let sharedGroup: boolean | undefined;
   const stopCollaboration = item && onFileMenuRefresh(() => {
-    if (item.available() && !given.collaboration.snapshot().active) collaborationGroup ??= mountCollaborationItem(item);
-    else {
-      collaborationGroup?.remove();
-      collaborationGroup = undefined;
-    }
+    const shared = given.collaboration.snapshot().active;
+    const visible = shared || item.standalone.available();
+    if (sharedGroup === shared && !!collaborationGroup === visible) return;
+    sharedGroup = shared;
+    collaborationGroup?.remove();
+    collaborationGroup = visible ? mountCollaborationItems(item.group, shared ? item.shared : [item.standalone]) : undefined;
   });
   let withdrawHook: (() => void) | null = null;
   wireMenu(function (withdraw) { withdrawHook = withdraw; });

@@ -137,7 +137,11 @@ export interface FileMenuDropdownPorts {
   readonly syncIdentity: () => void;
   readonly longDemo: { readonly state: { readonly title: string; readonly rows: readonly unknown[] } };
   readonly collaboration: Pick<CollaborationReads, "snapshot">;
-  readonly collaborationItem?: { readonly id: string; readonly label: string; readonly group: string; readonly available: () => boolean } | undefined;
+  readonly collaborationItem?: {
+    readonly group: string;
+    readonly standalone: { readonly id: string; readonly label: string; readonly available: () => boolean };
+    readonly shared: readonly { readonly id: string; readonly label: string }[];
+  } | undefined;
 }
 
 export interface FileMenuActionPorts {
@@ -149,6 +153,7 @@ export interface FileMenuActionPorts {
   readonly desktop: () => boolean;
   readonly saves: Pick<SaveState, "busy">;
   readonly save: (options?: { saveAs?: boolean }) => Promise<void>;
+  readonly sharedCopy?: (() => (() => Promise<void>) | undefined) | undefined;
   readonly openFile: () => Promise<unknown>;
   readonly openImport: () => void;
 }

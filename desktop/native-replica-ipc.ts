@@ -3,7 +3,7 @@
 import type * as NodeCrypto from "node:crypto";
 import type { Event, RenderProcessGoneDetails } from "electron";
 import type { readNativeMembership as ReadNativeMembership } from "../shared/native-membership.ts";
-import type { NativeReplicaReply, NativeReplicaRequest } from "../shared/native-replica.d.ts";
+import type { NativeMembershipRecord, NativeReplicaReply, NativeReplicaRequest } from "../shared/native-replica.d.ts";
 import type { createNativeReplicaFiles, NativeReplicaFileSystem } from "./native-replica-files.ts";
 
 const { randomBytes }: typeof NodeCrypto = require("node:crypto");
@@ -69,8 +69,8 @@ function failure(error: unknown): NativeReplicaReply {
 }
 
 interface CredentialCipher {
-  readonly encrypt: (token: string) => Buffer;
-  readonly decrypt: (bytes: Buffer) => string;
+  readonly encrypt: (token: string) => Buffer | Promise<Buffer>;
+  readonly decrypt: (bytes: Buffer) => string | Promise<string>;
 }
 
 function createNativeReplicaIpc(userData: string, readNativeMembership: typeof ReadNativeMembership,
@@ -113,7 +113,8 @@ function createNativeReplicaIpc(userData: string, readNativeMembership: typeof R
     }
   }
 
-  async function handle(owner: Renderer, request: unknown): Promise<NativeReplicaReply> {
+  async function handle(owner: Renderer, request: unknown,
+    manage?: (record: NativeMembershipRecord) => Promise<NativeMembershipRecord>): Promise<NativeReplicaReply> {
     if (!isRequest(request, readNativeMembership)) throw new TypeError("Invalid native replica request");
     if (request[0] === "write") {
       if (request[5].buffer.byteLength > filesModule.MAX_REPLICA_UPDATE_BYTES) {
@@ -159,11 +160,16 @@ function createNativeReplicaIpc(userData: string, readNativeMembership: typeof R
       if (request[0] === "membership") {
         const bytes = await replica.readMembership();
         if (bytes && !cipher) return { kind: "failed", reason: "io" };
-        return { kind: "membership", record: bytes && cipher ? decodeMembership(cipher.decrypt(bytes)) : null };
+        const record = bytes && cipher ? decodeMembership(await cipher.decrypt(bytes)) : null;
+        if (!manage) return { kind: "membership", record };
+        if (!cipher || !record) return CLOSED;
+        const updated = await manage(record);
+        if (updated !== record) await replica.writeMembership(await cipher.encrypt(MEMBERSHIP_PREFIX + JSON.stringify(updated)));
+        return { kind: "membership", record: updated };
       }
       if (request[0] === "join") {
         if (!cipher) return { kind: "failed", reason: "io" };
-        await replica.writeMembership(cipher.encrypt(MEMBERSHIP_PREFIX + JSON.stringify(readNativeMembership(request[3]))));
+        await replica.writeMembership(await cipher.encrypt(MEMBERSHIP_PREFIX + JSON.stringify(readNativeMembership(request[3]))));
         return STORED;
       }
       if (request[0] !== "write") return CLOSED;

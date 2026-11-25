@@ -17,6 +17,8 @@ test("bootstrap preserves the complete action registration order when export def
   try {
     assert.equal(registry.has("recovery"), false);
     assert.equal(registry.has("share-script"), false);
+    assert.equal(registry.has("sharing-and-people"), false);
+    assert.equal(registry.has("leave-shared-script"), false);
     assert.deepEqual(registry.list().map((action) => action.id), [
       "toggle-hide-shot", "toggle-rundown-min", "history", "find",
       "save", "save-as", "open", "export", "command-menu", "close-file-menu",

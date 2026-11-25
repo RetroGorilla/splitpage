@@ -1,4 +1,4 @@
-import type { CollaborationState } from "../../application/collaboration/state.ts";
+import type { CollaborationReads, CollaborationState } from "../../application/collaboration/state.ts";
 import type { OfflineBeatReading, OfflineClashEntry } from "../../application/collaboration/offline-clashes.ts";
 import type { ShareAttemptResult } from "../../application/collaboration/share.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
@@ -17,6 +17,18 @@ export interface ShareDialogPorts {
   readonly share: (address: string, signal: AbortSignal, switching: () => void) => Promise<ShareAttemptResult>;
   readonly copy: (text: string) => Promise<void>;
   readonly settings: () => void;
+}
+
+export interface SharedPopoverPorts {
+  readonly collaboration: CollaborationReads;
+  readonly membership: () => { readonly role: "guest" | "owner"; readonly link: string | null } | null;
+  readonly canManage: () => Promise<boolean>;
+  readonly manage: (operation: "promote" | "reset" | "stop" | "check-link") => Promise<void>;
+  readonly saveCopy: () => void;
+  readonly copy: (link: string) => Promise<void>;
+  readonly leave: () => Promise<void>;
+  readonly open: () => void;
+  readonly confirm: (message: string) => boolean;
 }
 
 export interface ShareActionPorts {

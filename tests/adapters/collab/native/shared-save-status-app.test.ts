@@ -369,6 +369,41 @@ test("picture persist failure shows Could not save on this device, opens banner,
   assert.deepEqual(await hook().leave(), { ok: true });
 });
 
+test("changing the invitation rebinds pictures to the new credential on the same session", { timeout: 20_000 }, async t => {
+  const session = seedSession({ A: "Keep this session" });
+  const put = eventResult<string | null>();
+  const realFetch = globalThis.fetch;
+  t.mock.method(globalThis, "fetch", (input: string | URL | Request, init?: RequestInit) => {
+    if (init?.method === "PUT") {
+      put.resolve(new Headers(init.headers).get("Authorization"));
+      return Promise.resolve(new Response(null, { status: 201 }));
+    }
+    return realFetch(input, init);
+  });
+
+  const { createRetainedPictureBinding } = await import("../../../../src/bootstrap/wiring/retained-shared-script.ts");
+  const binding = createRetainedPictureBinding({
+    pictureOrigin: "http://127.0.0.1:19999",
+    script: NAME,
+    token: "guest-fixture",
+    sessionCurrent: () => true,
+    onLocalError: () => {}
+  });
+  t.after(() => { binding.detach(); session.close(); collaborationState().leave(); });
+  collaborationState().enter();
+  binding.bindCopy({ session });
+  binding.activate();
+  binding.replaceToken(session, "owner-fixture");
+
+  const picture = intern(png);
+  assert.ok(picture);
+  assert.deepEqual(await persist([picture.sha256]), []);
+  const row = session.document().rows[0];
+  assert.ok(row);
+  assert.equal(session.commands.setField({ kind: "gallery", id: row.id }, { imageRef: picture }).kind, "written");
+  assert.equal(await put.promise, "Bearer owner-fixture");
+});
+
 test("session-replaced rebinds picture session so subsequent pictures keep uploading", { timeout: 20_000 }, async t => {
   const firstSession = seedSession({ A: "Before replace" });
   const secondSession = openNativeSession({ kind: "state", state: firstSession.encodeState() }, { actor: "tester", sanitize: v => String(v ?? "") });

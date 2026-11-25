@@ -1,9 +1,14 @@
 import { createNativeShareSnapshot } from "../../adapters/collab/native/convert.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { createShareAttempt } from "../../application/collaboration/share.ts";
+import { registerAll } from "../../application/actions.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import { mintDocId } from "../../adapters/identity/ids.ts";
-import { shareScriptAction, SHARE_SCRIPT_COMMAND } from "../../features/collaboration/actions.ts";
+import { sharedScriptActions, shareScriptAction, SHARE_SCRIPT_COMMAND, SHARING_COMMAND, LEAVE_SHARED_COMMAND } from "../../features/collaboration/actions.ts";
+import { mountSharedPopover } from "../../features/collaboration/shared-popover.ts";
+import { confirmAndLeaveSharedSession, retainedSharingControls } from "./retained-shared-script.ts";
+import { collaboration } from "./ports/collaboration.ts";
+import { notices } from "./ports/effects.ts";
 import { mountShareDialog } from "../../features/collaboration/mount.ts";
 import { scriptCellOf } from "../richtext.ts";
 import { migrateRows } from "../document-ports.ts";
@@ -26,10 +31,14 @@ function canShareWith(address: string): boolean {
 }
 
 export const collaborationMenuItem = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI
-  ? () => ({ ...SHARE_SCRIPT_COMMAND, group: "Collaborate", available: () => !!desktopPort()?.shareScript })
+  ? () => ({
+    group: "Collaborate",
+    standalone: { ...SHARE_SCRIPT_COMMAND, available: () => !!desktopPort()?.shareScript },
+    shared: [SHARING_COMMAND, LEAVE_SHARED_COMMAND]
+  })
   : () => undefined;
 
-function registerShare(registry: Pick<ActionRegistry, "invoke" | "register">): () => void {
+function registerSharing(registry: ActionRegistry): () => void {
   let attempt: ReturnType<typeof createShareAttempt> | undefined;
   let dispose: (() => void) | undefined;
   const unregister = registry.register(shareScriptAction({
@@ -103,7 +112,29 @@ function registerShare(registry: Pick<ActionRegistry, "invoke" | "register">): (
       });
     }
   }));
-  return () => { unregister(); dispose?.(); };
+  async function leave(): Promise<void> {
+    const outcome = await confirmAndLeaveSharedSession();
+    if (!outcome.ok && outcome.reason !== "cancelled") notices.show("Could not leave the shared script right now.", "warn");
+  }
+  const popover = mountSharedPopover({
+    collaboration,
+    membership: retainedSharingControls,
+    canManage: () => retainedSharingControls()?.canManage() ?? Promise.resolve(false),
+    async manage(operation) {
+      const controls = retainedSharingControls();
+      if (!controls) throw new Error("The shared script is unavailable.");
+      await controls.manage(operation);
+    },
+    saveCopy: () => { registry.invoke("save-as", "button"); },
+    copy: text => navigator.clipboard.writeText(text),
+    leave,
+    open: () => { registry.invoke(SHARING_COMMAND.id, "button"); },
+    confirm: message => window.confirm(message)
+  });
+  const removeShared = registerAll(registry, sharedScriptActions({
+    screen, visible: () => collaboration.snapshot().active, open: popover.open, leave
+  }));
+  return () => { removeShared(); popover.dispose(); unregister(); dispose?.(); };
 }
 
-export const registerCollaborationActions = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI ? registerShare : () => () => {};
+export const registerCollaborationActions = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI ? registerSharing : () => () => {};

@@ -24,7 +24,8 @@ export function leakedHooks(text) {
 const COLLABORATION_MARKERS = [
   "settings-collaboration", "Set up relay…", "splitpageInvitation", "splitpage://relay-setup",
   "relayOwner", "splitpage:relay-owner-", "splitpage:relay-setup-",
-  "share-script", "Share this script…", "share-script-modal", "splitpage:relay-owner-share-create"
+  "share-script", "Share this script…", "share-script-modal", "splitpage:relay-owner-share-create",
+  "shared-pill", "shared-popover", "sharing-and-people", "leave-shared-script", "splitpage:relay-owner-sharing"
 ];
 
 export function leakedCollaboration(text) {

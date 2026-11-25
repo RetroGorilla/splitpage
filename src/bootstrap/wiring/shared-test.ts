@@ -213,6 +213,29 @@ function startSharedTestHook(): () => void {
     splitpageInvitation = null;
     void joinInvitation(invitation);
   }
+  async function resumeDesktop(): Promise<void> {
+    const read = desktopPort()?.sharedReference;
+    const ready = startupReady();
+    if (!read || !ready) return;
+    const reference = await read([]);
+    if (!reference || typeof reference !== "object") return;
+    const lifetime = invitationLifetime.signal;
+    await waitDuringLifetime(ready, lifetime);
+    await waitDuringLifetime(captureDocumentOpeningLifetime().settled, lifetime);
+    lifetime.throwIfAborted();
+    const endpoint = new URL(reference.address);
+    endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
+    const { deployment, script } = reference;
+    const outcome = await enter(undefined, { deployment, script, relayUrl: endpoint.href, signal: lifetime });
+    if (!outcome.ok && !lifetime.aborted) {
+      report(new Error("Could not resume the retained script: " + outcome.reason));
+      notices.show("Could not reopen the local shared script.", "warn", true);
+    }
+  }
+  if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI) {
+    void resumeDesktop().catch(error => { if (!invitationLifetime.signal.aborted) report(error); });
+  }
+
   const hook = {
     enter: () => enter(),
     enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),

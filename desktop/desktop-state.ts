@@ -3,6 +3,7 @@
 import type * as NodePath from "node:path";
 import type * as NodeFs from "node:fs";
 import type * as NodeCrypto from "node:crypto";
+import type { DesktopSharedScriptReference } from "../shared/desktop-contract.d.ts";
 import type { Rectangle } from "electron";
 import type { writeFileDurableSync as WriteDesktopStateFile } from "./drafts.ts";
 
@@ -32,6 +33,19 @@ function normalizeTabSource(src: unknown): DesktopStoredTab["source"] {
     }
   }
   return { kind: "blank" };
+}
+
+function normalizeSharedReference(value: unknown): DesktopSharedScriptReference | null {
+  if (!value || typeof value !== "object") return null;
+  const { deployment, script, address } = value as Partial<DesktopSharedScriptReference>;
+  const id = /^[A-Za-z0-9_-]{1,64}(?![\s\S])/;
+  if (typeof deployment !== "string" || !id.test(deployment) || typeof script !== "string" || !id.test(script)
+    || typeof address !== "string" || address.length > 2048) return null;
+  try {
+    const url = new URL(address);
+    if (url.origin !== address || !(url.protocol === "https:" || url.protocol === "http:" && url.hostname === "127.0.0.1")) return null;
+    return { deployment, script, address };
+  } catch { return null; }
 }
 
 function blankDesktopWindow(extra?: Partial<DesktopStoredWindow>): DesktopStoredWindow {
@@ -100,7 +114,9 @@ function normalizeDesktopStateV2(raw: unknown, pathKey: (path: string) => string
     const tabs: DesktopStoredTab[] = [];
     for (const t of Array.isArray(w.tabs) ? w.tabs as DesktopStateRaw[] : []) {
       if (!t || typeof t !== "object") continue;
+      const shared = normalizeSharedReference(t.shared);
       tabs.push({
+        ...(shared && { shared }),
         tabId: uniqueId(t.tabId),
         source: normalizeTabSource(t.source),
         lastKnownTitle: typeof t.lastKnownTitle === "string" ? t.lastKnownTitle.slice(0, LAST_KNOWN_TITLE_MAX) : ""
@@ -203,6 +219,7 @@ function createDesktopStateStore({ filePath, pathKey, onWriteError }: {
 
 type DesktopStateRaw = Record<string, unknown>;
 export interface DesktopStoredTab {
+  shared?: DesktopSharedScriptReference;
   tabId: string;
   source: { kind: "blank" } | { kind: "file"; absPath: string };
   lastKnownTitle: string;
@@ -223,7 +240,7 @@ export interface DesktopStoredState {
 type DesktopStateMutator = (state: DesktopStoredState) => unknown;
 export type {
   DESKTOP_STATE_VERSION, TAB_OR_WINDOW_ID_RE, LAST_KNOWN_TITLE_MAX, RECENTS_MAX,
-  mintTabOrWindowId, normalizeBounds, normalizeTabSource, blankDesktopWindow,
+  mintTabOrWindowId, normalizeBounds, normalizeTabSource, normalizeSharedReference, blankDesktopWindow,
   freshDesktopState, migrateDesktopStateV1, normalizeRecentsList, normalizeDesktopStateV2,
   createDesktopStateStore
 };
@@ -236,6 +253,7 @@ module.exports = {
   mintTabOrWindowId,
   normalizeBounds,
   normalizeTabSource,
+  normalizeSharedReference,
   blankDesktopWindow,
   freshDesktopState,
   migrateDesktopStateV1,

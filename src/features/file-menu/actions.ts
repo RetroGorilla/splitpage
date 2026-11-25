@@ -50,11 +50,19 @@ export function fileMenuActions(current: () => FileMenuControls | null, ports: F
       claimKeys: true,
       words: "save as duplicate copy another file",
       availability: () => {
+        if (ports.sharedCopy?.()) return current() ? availableUnless(["loading", "dialog", "launcher"], ports.screen()) : UNMOUNTED;
         const can = ports.capability.saveDestinations();
         if (!can.allowed) return { enabled: false, reason: can.reason };
         return current() ? availableUnless(["loading", "dialog", "launcher"], ports.screen()) : UNMOUNTED;
       },
       run: () => {
+        const copy = ports.sharedCopy?.();
+        if (copy) {
+          const owner = current();
+          if (!owner) return;
+          closeFileMenu(owner);
+          return copy();
+        }
         const can = ports.capability.saveDestinations();
         if (!can.allowed) { ports.notices.show(can.reason, "warn"); return; }
         const owner = current();

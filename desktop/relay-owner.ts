@@ -1,10 +1,13 @@
 "use strict";
 
+import type { NativeMembershipRecord } from "../shared/native-replica.d.ts";
 import type * as NodeFs from "node:fs";
 import type * as NodePath from "node:path";
+import type * as NodeChildProcess from "node:child_process";
 import type * as NodeCrypto from "node:crypto";
 import type { RelayConnectionCheck, RelaySetupSave, ShareScriptCreation } from "../shared/desktop-contract.d.ts";
 
+const { execFile }: typeof NodeChildProcess = require("node:child_process");
 const fs: typeof NodeFs = require("node:fs");
 const { join }: typeof NodePath = require("node:path");
 const { createHash, randomUUID }: typeof NodeCrypto = require("node:crypto");
@@ -31,6 +34,12 @@ function decodeCreation(data: unknown, address: string, deployment: string | nul
   return { kind: "created", address, deployment, scriptId, owner: owner.token, guest: guest.token };
 }
 
+async function invitationToken(response: Response): Promise<string> {
+  const data = await response.json() as { token?: unknown } | null;
+  if (typeof data?.token !== "string" || !TOKEN.test(data.token)) throw new Error("Invalid relay invitation.");
+  return data.token;
+}
+
 function relayOrigin(address: string, testBuild: boolean): string | null {
   if (address.length > 2048 || !/^https?:\/\/[^/?#\\]+\/?$/i.test(address) || address.includes("@")) return null;
   try {
@@ -47,6 +56,40 @@ function relayOrigin(address: string, testBuild: boolean): string | null {
 
 function validSecret(secret: string): boolean {
   return /^[\x20-\x7e]{1,4096}$/.test(secret) && secret.trim() === secret;
+}
+
+function windowsReplicaCipher(decryptLegacy: (bytes: Buffer) => string) {
+  if (process.platform !== "win32") return undefined;
+  const prefix = Buffer.from("DPAPI\0");
+  const system = process.env.SystemRoot || process.env.windir;
+  const powershell = system && join(system, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+
+  // why: a fresh Electron profile can lose its pending key-store preferences if it stops before Chromium writes them
+  function protect(operation: "Protect" | "Unprotect", bytes: Buffer): Promise<Buffer> {
+    if (!powershell) return Promise.reject(new Error("The Windows credential store is unavailable."));
+    const command = "$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Security; " +
+      "$bytes=[Convert]::FromBase64String([Console]::In.ReadToEnd()); " +
+      `$result=[Security.Cryptography.ProtectedData]::${operation}($bytes,$null,'CurrentUser'); ` +
+      "[Console]::Out.Write([Convert]::ToBase64String($result))";
+    return new Promise((resolve, reject) => {
+      const child = execFile(powershell, ["-NoProfile", "-NonInteractive", "-Command", command],
+        { windowsHide: true, timeout: 10_000, maxBuffer: 64_000 }, (error, stdout) => {
+          const encoded = stdout.trim();
+          if (error || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) reject(new Error("Could not use the Windows credential store."));
+          else resolve(Buffer.from(encoded, "base64"));
+        });
+      child.stdin?.on("error", () => {});
+      child.stdin?.end(bytes.toString("base64"));
+    });
+  }
+
+  return {
+    async encrypt(value: string) { return Buffer.concat([prefix, await protect("Protect", Buffer.from(value, "utf8"))]); },
+    async decrypt(bytes: Buffer) {
+      if (!bytes.subarray(0, prefix.length).equals(prefix)) return decryptLegacy(bytes);
+      return (await protect("Unprotect", bytes.subarray(prefix.length))).toString("utf8");
+    }
+  };
 }
 
 function createRelayOwner(userData: string, keyStore: {
@@ -132,7 +175,51 @@ function createRelayOwner(userData: string, keyStore: {
     return response.ok ? "connected" : "unreachable";
   }
 
-  return { save, clear, status: () => ({ address: read()?.address ?? null }), testConnection, ownerRequest };
+  async function manageSharing(operation: string, name: string, address: string, membership: NativeMembershipRecord) {
+    const origin = relayOrigin(address, testBuild);
+    const [deployment, script] = name.split("/");
+    if (!origin || !script || !ID.test(script)) throw new Error("Invalid shared script relay.");
+    const path = `/api/scripts/${script}`;
+    const send = (method: string, suffix: string, token: string) => request(new URL(path + suffix, origin), {
+      method, headers: { Authorization: "Bearer " + token }, credentials: "omit", redirect: "error",
+      signal: AbortSignal.timeout(5000)
+    });
+    if (operation === "promote" && membership.role === "guest") {
+      if (read()?.address !== origin) throw new Error("No management credential for this relay.");
+      const access = await send("HEAD", "/link", membership.token);
+      if (!access.ok || access.headers.get("Splitpage-Deployment") !== deployment) {
+        throw new Error("The guest invitation is no longer active for this relay.");
+      }
+      const result = await ownerRequest(path + "/invitations", {
+        address: origin, method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "owner", label: "Splitpage desktop" })
+      });
+      if (result.kind !== "response" || result.response.status !== 201) throw new Error("Could not issue owner invitation.");
+      return { ...membership, role: "owner" as const, token: await invitationToken(result.response) };
+    }
+    if (membership.role !== "owner") throw new Error("Owner membership required.");
+    if (operation === "reset") {
+      const response = await send("POST", "/reset", membership.token);
+      if (!response.ok) throw new Error("Could not reset guest invitation.");
+      return { ...membership, guestLinkToken: await invitationToken(response) };
+    }
+    if (operation === "stop") {
+      if ((await send("DELETE", "", membership.token)).status !== 204) throw new Error("Could not delete shared script.");
+      return membership;
+    }
+    if (operation === "check-link") {
+      if (!membership.guestLinkToken) return membership;
+      const response = await send("HEAD", "/link", membership.guestLinkToken);
+      if (response.headers.get("Splitpage-Deployment") === deployment && response.status === 403) {
+        return { role: membership.role, token: membership.token };
+      }
+      if (!response.ok) throw new Error("Could not check guest invitation.");
+      return membership;
+    }
+    throw new Error("Invalid sharing operation.");
+  }
+
+  return { manageSharing, save, clear, status: () => ({ address: read()?.address ?? null }), testConnection, ownerRequest };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -299,5 +386,5 @@ function createShareCreations(userData: string, owner: ReturnType<typeof createR
   return { create, abandon, complete, recover, retryAbandons };
 }
 
-export type { createRelayOwner, createShareCreations };
-module.exports = { createRelayOwner, createShareCreations };
+export type { createRelayOwner, createShareCreations, windowsReplicaCipher };
+module.exports = { createRelayOwner, createShareCreations, windowsReplicaCipher };

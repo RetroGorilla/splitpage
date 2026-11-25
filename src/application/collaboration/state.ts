@@ -55,6 +55,7 @@ export interface CollaborationState extends CollaborationReads {
   readonly setRelay: (relay: CollaborationRelayState) => void;
   readonly setPictures: (pictures: CollaborationPictureCounts) => void;
   readonly setRefusal: (reason: CollaborationPermanentRefusal) => void;
+  readonly clearRefusal: () => void;
   readonly setMergeTooLarge: (message: string) => void;
   readonly setOfflineClashes: (clashes: readonly OfflineClash[]) => void;
   readonly dismissOfflineClashes: () => void;
@@ -209,6 +210,7 @@ export function createCollaborationState(): CollaborationState {
       if (!current.active) return;
       update({ ...current, pictures: freezePictures(pictures) });
     },
+    clearRefusal() { if (current.refusal) update({ ...current, refusal: null }); },
     setRefusal(reason) {
       if (!current.active) return;
       update({

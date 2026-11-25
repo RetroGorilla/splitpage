@@ -1,8 +1,9 @@
-import type { NativeReplicaInvoke } from "../../../../shared/native-replica.d.ts";
+import type { NativeReplicaInvoke, NativeReplicaReply } from "../../../../shared/native-replica.d.ts";
 import { attachNativeLocalStore, nativeLocalStoreFailure } from "./local-store.ts";
 import type { NativeLocalStore } from "./local-store.ts";
 
-export function createDesktopNativeLocalStore(invoke: NativeReplicaInvoke): NativeLocalStore {
+export function createDesktopNativeLocalStore(invoke: NativeReplicaInvoke,
+  manage?: (operation: string, name: string, lease: string, address: string) => Promise<NativeReplicaReply>): NativeLocalStore {
   return {
     async open(name, options) {
       try {
@@ -55,6 +56,11 @@ export function createDesktopNativeLocalStore(invoke: NativeReplicaInvoke): Nati
             },
             membership: {
               record: membership,
+              ...(manage && { async manage(operation: string, address: string) {
+                const reply = await manage(operation, name, lease, address);
+                if (reply.kind !== "membership" || !reply.record) throw new Error("Could not update sharing.");
+                return reply.record;
+              } }),
               async token() { return (await membership())?.token ?? null; },
               async join(token) {
                 const reply = await invoke(["join", name, lease, token]);

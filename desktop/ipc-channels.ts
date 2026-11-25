@@ -45,6 +45,8 @@ const COLLABORATION_CHANNELS = [
   { name: "splitpage:relay-owner-clear", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
   { name: "splitpage:relay-owner-share-create", direction: "invoke", argsSchema: ["string", "sha256", "bytes", "string"], allowedOrigins: APP },
   { name: "splitpage:relay-owner-share-abandon", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
+  { name: "splitpage:relay-owner-resume", direction: "invoke", argsSchema: ["array"], allowedOrigins: APP },
+  { name: "splitpage:relay-owner-sharing", direction: "invoke", argsSchema: ["string", "string", "string", "string"], allowedOrigins: APP },
   { name: "splitpage:relay-owner-share-complete", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
   { name: "splitpage:relay-setup-save", direction: "invoke", argsSchema: ["string", "string"], allowedOrigins: [RELAY_SETUP_ORIGIN] }
 ] satisfies readonly DesktopChannelRow[];
