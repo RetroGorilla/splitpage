@@ -1016,6 +1016,54 @@ preparation. Reopening online resumes pending uploads from the existing local pi
 Shared exports list the unavailable pictures supported by the chosen output. This includes the script PDF,
 Word, both Markdown layouts, SplitShare and the Splitpage copy.
 
+### Relay version history (Stage 4 Part 11a)
+
+Approved 2026-11-24. Storage v5 upgrades v1–v4 in one startup transaction. The live document commits first. Its
+generation lets the relay resume a pending capture after restart. The first committed change is eligible immediately,
+including a new script's initial state. Later captures are at least five minutes apart. A timer catches a final edit
+without more traffic, and a SHA-256 comparison skips unchanged Yjs bytes.
+
+The relay compresses each independent snapshot asynchronously with Zstandard and stages it in SQLite in transactions
+of at most 512 KiB of payload each. Publication, retention and budget eviction change visibility in one transaction.
+The relay reclaims retired or interrupted chunks in separate yielding transactions. An hourly sweep keeps every
+capture for six hours, then the newest per UTC hour through seven days, per UTC day through 30 days, and per
+Monday-start UTC week through 90 days. The newest version always survives age-based thinning. Each script has a
+64 MiB budget for published compressed payloads. Oldest retained snapshots leave first. An oversized incoming
+snapshot leaves the existing history intact. Abandoning a creation or deleting a script retires its history in the
+same transaction and schedules prompt chunk reclamation.
+
+Capture and reclamation pause during backup or shutdown. Write failures retry at the capture interval. The running
+relay remembers the hash of an oversized snapshot and skips compression until the state changes. The private
+`GET /api/status` reports `versionBytes` and a process-local `lastVersionFailure` with a timestamp and fixed reason.
+`SPLITPAGE_VERSION_INTERVAL_MS`, `SPLITPAGE_VERSION_THIN_INTERVAL_MS` and `SPLITPAGE_VERSION_BUDGET_BYTES` set the
+operational limits. Backup verifies the two version tables, and restore preserves their history and revokes all invitations.
+
+Owner and guest invitations authorize `GET /api/scripts/:id/versions` and
+`GET /api/scripts/:id/versions/:versionId` for active scripts and clear the script's untouched flag. The list returns
+newest-first `id`, `createdAt` in Unix milliseconds, compressed `bytes`, and `names` (empty in Part 11a).
+The version endpoint returns exact Yjs bytes with `Cache-Control: no-store`. It limits decompression to 15,000,000
+bytes and allows four simultaneous snapshot reads. Both routes honor the relay origin allowlist. A saturated read
+or a request during shutdown receives `503` with `Retry-After`.
+
+Full-budget thinning measurement on Windows with Node 24.22.1 and SQLite 3.53.4. A 4,194,955-byte live Yjs script
+received edits over loopback with store debounce disabled. The sweep reduced published history from 67,108,864 to
+4,209,664 bytes. The measurement observed 119 retired chunks when it entered the reclamation loop and 3,506.066 ms
+through their removal and final live-state verification. Store timings cover Yjs encoding and the SQLite commit. Edit-to-commit
+timings also include WebSocket delivery and return of the commit signal over IPC.
+
+| Phase | Samples | Store p50 / p95 / max (ms) | Edit to commit p50 / p95 / max (ms) |
+| --- | ---: | --- | --- |
+| Before sweep | 15 | 19.302 / 26.816 / 26.816 | 20.517 / 29.739 / 29.739 |
+| Edit spanning the publication change | 1 | 22.373 | 29.041 |
+| During chunk reclamation | 132 | 23.148 / 25.171 / 30.086 | 26.297 / 29.376 / 33.752 |
+| During near-limit capture and parallel reads | 12 | 69.649 / 82.137 / 82.137 | 72.802 / 89.082 / 89.082 |
+
+The near-limit run used a 14,400,651-byte Yjs script, a 180 ms capture interval, and three loopback snapshot
+readers. They completed 21 reads during the run. The 12 sampled stores began while a snapshot was being staged
+and at least two version responses were in flight. They spanned four captures among 36 live commits.
+
+Reproduce with `node --test tests/adapters/collab/native/server-version-measurement.ts`.
+
 ## 9. Offline notice
 
 On reconnecting, a copy compares its own state with the merged result, per beat, and lists beats it changed that

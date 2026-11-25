@@ -58,10 +58,11 @@ export function scriptAccess(db: DatabaseSync) {
   const remove = db.prepare("UPDATE scripts SET status = 'deleted', untouched = 0 WHERE name = ?");
   const removeUntouched = db.prepare("UPDATE scripts SET status = 'deleted', untouched = 0 WHERE name = ? AND status = 'active' AND untouched = 1");
   const removeDocument = db.prepare("DELETE FROM documents WHERE name = ?");
+  const retireVersions = db.prepare("UPDATE versions SET status = 'retired' WHERE script = ? AND status <> 'retired'");
   const creation = db.prepare(`SELECT c.script, c.content_hash, s.status, s.untouched
     FROM creations c JOIN scripts s ON s.name = c.script WHERE c.id = ?`);
   const recordCreation = db.prepare("INSERT INTO creations (id, script, content_hash) VALUES (?, ?, ?)");
-  const initialize = db.prepare("INSERT INTO documents (name, state) VALUES (?, ?)");
+  const initialize = db.prepare("INSERT INTO documents (name, state, version_generation) VALUES (?, ?, 1)");
   const activate = db.prepare("UPDATE scripts SET status = 'active' WHERE name = ?");
   const list = db.prepare("SELECT id, label, role, revoked FROM invitations WHERE script = ? ORDER BY id");
   const listScriptsQuery = db.prepare("SELECT name, status, untouched FROM scripts ORDER BY name");
@@ -133,6 +134,7 @@ export function scriptAccess(db: DatabaseSync) {
           removeUntouched.run(row.script);
           revokeAll.run(row.script);
           removeDocument.run(row.script);
+          retireVersions.run(row.script);
           outcome = "deleted";
         }
         db.exec("COMMIT");
@@ -268,7 +270,16 @@ export function scriptAccess(db: DatabaseSync) {
       return revoke.run(id).changes !== 0;
     },
     deleteScript(name: string): boolean {
-      return remove.run(name).changes !== 0;
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const deleted = remove.run(name).changes !== 0;
+        if (deleted) retireVersions.run(name);
+        db.exec("COMMIT");
+        return deleted;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
     }
   };
 }

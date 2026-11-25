@@ -242,7 +242,7 @@ export function serverHarness(t: TestContext) {
     const state = session.encodeState();
     session.close();
     using db = openWriter(directory);
-    db.prepare("INSERT INTO documents VALUES (?, ?)").run(name, state);
+    db.prepare("INSERT INTO documents (name, state) VALUES (?, ?)").run(name, state);
     return state;
   }
 
