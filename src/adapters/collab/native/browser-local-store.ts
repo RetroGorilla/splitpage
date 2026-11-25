@@ -1,15 +1,18 @@
 import { readNativeMembership } from "../../../../shared/native-membership.ts";
 import type { NativeMembershipRecord } from "../../../../shared/native-replica.d.ts";
 import type { NativeReplicaEntry } from "../../../../shared/native-replica.d.ts";
+import { readSharedScriptCatalogueEntry, sharedScriptKey } from "../../../../shared/shared-script.ts";
+import type { SharedScriptCatalogueStorage } from "../../../application/collaboration/shared-script-catalogue.ts";
 import { attachNativeLocalStore, nativeLocalStoreFailure } from "./local-store.ts";
 import type { NativeLocalStore, NativeLocalStoreFailure, NativeLocalStoreOpen, NativeReplicaConnection } from "./local-store.ts";
 
 const DATABASE = "splitpage-native-replica-log";
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 4;
 const REPLICAS = "replicas";
 const MEMBERSHIPS = "memberships";
 const INVITATIONS = "invitations";
 const JOURNALS = "journals";
+const CATALOGUE = "shared-script-catalogue";
 const OPEN_TIMEOUT_MS = 2000;
 interface BrowserLocalStorePorts {
   readonly indexedDB?: IDBFactory;
@@ -59,6 +62,7 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase | NativeLocalSto
         request.result.createObjectStore(INVITATIONS);
       }
       if (event.oldVersion < 3) request.result.createObjectStore(JOURNALS);
+      if (event.oldVersion < 4) request.result.createObjectStore(CATALOGUE);
     };
     request.onerror = () => { clearTimeout(timer); reject(request.error); };
     request.onsuccess = () => {
@@ -137,12 +141,37 @@ async function requestPersistence(storage: BrowserLocalStorePorts["storage"]): P
 }
 
 function erase(database: IDBDatabase, name: string): Promise<undefined> {
-  return transaction(database, [REPLICAS, MEMBERSHIPS, INVITATIONS, JOURNALS], "readwrite", tx => {
+  return transaction(database, [REPLICAS, MEMBERSHIPS, INVITATIONS, JOURNALS, CATALOGUE], "readwrite", tx => {
     tx.objectStore(MEMBERSHIPS).delete(name);
     tx.objectStore(INVITATIONS).delete(name);
     tx.objectStore(JOURNALS).delete(name);
+    tx.objectStore(CATALOGUE).delete(name);
     return tx.objectStore(REPLICAS).delete(replicaRange(name));
   });
+}
+
+export function createBrowserSharedCatalogue(indexedDB = globalThis.indexedDB): SharedScriptCatalogueStorage {
+  async function catalogue<T>(mode: "readonly" | "readwrite", run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+    if (!indexedDB) throw new Error("Local storage is unavailable.");
+    const database = await openDatabase(indexedDB);
+    if ("kind" in database) throw new Error("Local storage is unavailable.");
+    try { return await transaction(database, [CATALOGUE], mode, tx => run(tx.objectStore(CATALOGUE))); }
+    finally { database.close(); }
+  }
+  return {
+    async list() {
+      const entries: unknown[] = await catalogue("readonly", store => store.getAll());
+      return entries.flatMap(raw => {
+        const entry = readSharedScriptCatalogueEntry(raw);
+        return entry ? [entry] : [];
+      });
+    },
+    async note(raw) {
+      const entry = readSharedScriptCatalogueEntry(raw);
+      if (!entry) throw new TypeError("Invalid shared script details.");
+      await catalogue("readwrite", store => store.put(entry, sharedScriptKey(entry)));
+    }
+  };
 }
 
 function connectionFor(

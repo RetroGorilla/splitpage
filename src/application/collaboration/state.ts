@@ -7,6 +7,7 @@ function savedContent({ narration, visual, fields, joined }: OfflineSavedBeat): 
 
 export type CollaborationPermanentRefusal =
   | "access-removed"
+  | "password-changed"
   | "invitation-revoked"
   | "script-deleted"
   | "script-unknown"
@@ -64,6 +65,7 @@ export interface CollaborationState extends CollaborationReads {
 
 export const PERMANENT_COLLABORATION_REFUSALS: readonly CollaborationPermanentRefusal[] = Object.freeze([
   "access-removed",
+  "password-changed",
   "invitation-revoked",
   "script-deleted",
   "script-unknown",

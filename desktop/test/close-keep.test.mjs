@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { checkFileGone, copyKept, holdKeep, releaseKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require(path.join(here, "..", "close-keep.ts"));
+const { createCloseQuit } = require(path.join(here, "..", "close-quit.ts"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -16,6 +17,32 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-close-keep-"));
 const file = path.join(dir, "script.splitpage");
 fs.writeFileSync(file, "{}", "utf8");
 const stat = (p) => fs.promises.stat(p);
+
+test("cancelling a close after a failed shared flush leaves the next successful close clean", async () => {
+  const tab = { id: "shared", windowId: "window", source: { kind: "shared" }, sharedAttached: true, dirty: false };
+  const window = { tabIds: [tab.id, "other"], win: { isDestroyed: () => false } };
+  let flushes = 0, prompts = 0;
+  const destroyed = [];
+  const { requestCloseTab } = createCloseQuit({
+    tabs: new Map([[tab.id, tab]]),
+    windowsById: new Map([[tab.windowId, window]]),
+    tabHasFile: () => false,
+    tabIsUnsaved: tab => tab?.dirty,
+    requestDraftFlush: async () => ({ ok: ++flushes > 1 }),
+    consumeTestDialogAnswer: () => { prompts++; return "cancel"; },
+    destroyTabView: id => { destroyed.push(id); }
+  });
+  requestCloseTab(tab.id);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(prompts, 1);
+  assert.equal(tab.dirty, false);
+  assert.deepEqual(destroyed, []);
+  requestCloseTab(tab.id);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(flushes, 2);
+  assert.equal(prompts, 1);
+  assert.deepEqual(destroyed, [tab.id]);
+});
 
 test("a file still in place is not gone", async () => {
   assert.equal(await checkFileGone(stat, file, 2000), false);

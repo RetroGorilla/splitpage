@@ -1,11 +1,15 @@
+import type { SharedScriptCatalogueEntry } from "./shared-script.ts";
+
 export interface NativeMembershipRecord {
   readonly token: string;
   readonly role: "owner" | "guest";
   readonly guestLinkToken?: string;
+  readonly linkPasswordRequired?: boolean;
 }
 
 export type NativeReplicaRequest =
-  | ["open" | "delete", name: string]
+  | ["open" | "delete" | "focus-shared", name: string]
+  | ["note-shared", name: string, entry: SharedScriptCatalogueEntry]
   | ["membership" | "forget" | "read-journal", name: string, lease: string]
   | ["join", name: string, lease: string, record: string | NativeMembershipRecord | null]
   | ["close", name: string, lease: string]

@@ -1,4 +1,5 @@
 import type { NativeReplicaReply, NativeReplicaRequest } from "./native-replica.d.ts";
+import type { SharedScriptCatalogueEntry } from "./shared-script.ts";
 
 export interface DesktopWireFile {
   id: string;
@@ -15,6 +16,7 @@ export interface DesktopWireStamp {
 }
 
 export interface DesktopWireRecent {
+  shared?: true;
   fileId: string;
   name: string;
   title: string;
@@ -23,6 +25,7 @@ export interface DesktopWireRecent {
 
 export interface DesktopWireLaunch {
   type: string;
+  shared?: SharedScriptCatalogueEntry;
 }
 
 export interface DesktopWireBoot {
@@ -289,8 +292,8 @@ export interface RelayOwnerControls {
 
 export type ShareScriptCreation =
   | { readonly kind: "created"; readonly address: string; readonly deployment: string; readonly scriptId: string;
-    readonly owner: string; readonly guest: string }
-  | { readonly kind: "not-configured" | "unreachable" | "failed" | "already-used" | "too-large" };
+    readonly owner: string; readonly guest: string; readonly passwordRequired?: true }
+  | { readonly kind: "not-configured" | "unreachable" | "failed" | "already-used" | "too-large" | "password-mismatch" };
 
 export interface DesktopSharedScriptReference {
   readonly deployment: string;
@@ -299,7 +302,7 @@ export interface DesktopSharedScriptReference {
 }
 
 export interface ShareScriptControls {
-  readonly create: (creationId: string, hash: string, snapshot: Uint8Array, address: string) => Promise<ShareScriptCreation>;
+  readonly create: (creationId: string, hash: string, snapshot: Uint8Array, address: string, password?: string) => Promise<ShareScriptCreation>;
   readonly abandon: (creationId: string) => Promise<boolean>;
   readonly complete: (creationId: string) => Promise<boolean>;
 }
@@ -312,7 +315,7 @@ export interface DesktopIpcContract {
   "splitpage:relay-owner-share-create": DesktopChannelCall<Parameters<ShareScriptControls["create"]>, ShareScriptCreation>;
   "splitpage:relay-owner-share-abandon": DesktopChannelCall<[creationId: string], boolean>;
   "splitpage:relay-owner-resume": DesktopChannelCall<[reference: [] | [DesktopSharedScriptReference | null] | [null, DesktopSharedScriptReference]], DesktopSharedScriptReference | null | boolean>;
-  "splitpage:relay-owner-sharing": DesktopChannelCall<[operation: string, name: string, lease: string, address: string], NativeReplicaReply>;
+  "splitpage:relay-owner-sharing": DesktopChannelCall<[operation: string, name: string, lease: string, address: string, password?: string], NativeReplicaReply>;
   "splitpage:relay-owner-share-complete": DesktopChannelCall<[creationId: string], boolean>;
   "splitpage:relay-setup-save": DesktopChannelCall<[address: string, secret: string], RelaySetupSave>;
   "splitpage:ipc-table-sync": DesktopChannelCall<[], readonly DesktopChannelRow[] | null>;
@@ -357,7 +360,7 @@ export interface DesktopIpcContract {
   "splitpage:voice-stop": DesktopChannelCall<[session?: number], { ok: true }>;
   "splitpage:set-document-state": DesktopChannelCall<[{ title?: string; dirty?: boolean; pristine?: boolean; docId?: string | null; fileId?: string | null }], void>;
   "splitpage:renderer-ready": DesktopChannelCall<[], void>;
-  "splitpage:route-open": DesktopChannelCall<[{ kind: "file"; fileId: string }], { where: DesktopRouteWhere }>;
+  "splitpage:route-open": DesktopChannelCall<[{ kind: "file" | "shared"; fileId: string }], { where: DesktopRouteWhere }>;
   "splitpage:draft-write": DesktopChannelCall<[unknown], DesktopWireDraftWrite>;
   "splitpage:draft-discard": DesktopChannelCall<[unknown], DesktopWireDraftDiscard>;
   "splitpage:draft-take": DesktopChannelCall<[], DesktopWireTakenDraft | null>;

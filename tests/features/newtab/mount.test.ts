@@ -8,7 +8,7 @@ import type { NewTabPorts } from "../../../src/features/newtab/ports.ts";
 import { NO_DESTINATION } from "../../../src/application/transitions/ports.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeActions, fakeNotices, fakeScreen } from "../fakes.ts";
+import { fakeActions, fakeNotices, fakeScreen, fakeSharedScriptCatalogue } from "../fakes.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -18,10 +18,33 @@ realm.document = win.document;
 function page() {
   win.document.body.innerHTML = '<div id="newtab-page" hidden><div id="newtab-cards">' +
     ['new', 'paste', 'open', 'gdoc', 'dismiss'].map((action) => '<button data-newtab-action="' + action + '">' + action + '</button>').join('') +
-    '</div><div id="newtab-drop"></div><div class="newtab-main"></div><div id="newtab-recents"><div id="newtab-recents-list"></div>' +
+    '</div><div id="newtab-drop"></div><div class="newtab-main"></div><div id="newtab-recents"><h3 id="newtab-recents-label">Recent</h3><div id="newtab-recents-list"></div>' +
     '<button id="newtab-recents-clear" data-newtab-action="clear-recents"></button></div><div id="newtab-continue">' +
     '<button id="newtab-continue-btn"><span id="newtab-continue-title"></span><span id="newtab-continue-when"></span></button></div></div>';
 }
+
+test("New Tab lists browser copies only when supplied, with storage guidance and a shared opener", async () => {
+  page();
+  const h = harness();
+  const catalogue = fakeSharedScriptCatalogue([{
+    deployment: "relay", script: "production", title: "Shared production", relayUrl: "wss://relay.example/", at: 5
+  }]);
+  const opened: string[] = [];
+  const mounted = startNewTab({ ...h.ports, browserSharedScripts: {
+    list: catalogue.list,
+    heading: "Shared scripts on this device",
+    storageNotice: "Your browser can clear local copies. To reopen one, you need to be able to load this app.",
+    open: async id => { opened.push(id); }
+  } });
+  try {
+    await settled();
+    assert.equal(win.document.getElementById("newtab-recents-label")?.textContent, "Shared scripts on this device");
+    assert.match(win.document.getElementById("newtab-recents-list")?.textContent ?? "", /Your browser can clear local copies.*load this app/);
+    assert.equal(win.document.getElementById("newtab-recents-clear")?.hidden, true);
+    click("open-recent");
+    assert.deepEqual(opened, ["relay/production"]);
+  } finally { mounted.dispose(); }
+});
 
 function click(action: string) {
   const button = win.document.querySelector('[data-newtab-action="' + action + '"]');

@@ -7,6 +7,7 @@ for (const enabled of [false, true]) test("shared hook build gate: release has n
   const result = await build({ stdin: { contents: `
     export { mountSharedSessionFeature, stopSharedSessionFeature } from "./src/bootstrap/wiring/shared-startup.ts";
     export { registerCollaborationActions } from "./src/bootstrap/wiring/collaboration.ts";
+    export { mountNewTabFeature } from "./src/bootstrap/wiring/newtab.ts";
   `,
     resolveDir: fileURLToPath(new URL("../../", import.meta.url)), sourcefile: "shared-hook-build-entry.ts", loader: "ts" },
     bundle: true, write: false, charset: "utf8", format: "esm", platform: "browser", minify: true, treeShaking: true,
@@ -16,7 +17,8 @@ for (const enabled of [false, true]) test("shared hook build gate: release has n
     "The draft writer did not detach", "app-stopped", "enterFrom", "enterRetained",
     "splitpage-native-replica-log", "shared-copy-erase-failed", "invitationConnected", "invitationSettled", "Splitpage-Deployment",
     "Could not reopen the local shared script.", "share-script", "share-script-modal", "Uploading script", "shared-pill", "shared-popover", "sharing-and-people", "leave-shared-script",
-    "join-script-modal", "Join a shared script…", "leave-script-modal"]) {
+    "join-script-modal", "Join a shared script…", "leave-script-modal",
+    "Shared scripts on this device", "note-shared", "focus-shared", "open-shared"]) {
     assert.equal(code.includes(text), enabled, text);
   }
   for (const text of ["ownershipScans", "appliedUpdates", "lateJoiner", "joinerType", "joinerUndo",

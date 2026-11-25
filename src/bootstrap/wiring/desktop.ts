@@ -14,7 +14,7 @@ import { startDesktopView as mountDesktop } from "../../features/desktop/desktop
 import type { DesktopMount, DesktopPorts } from "../../features/desktop/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
-import { awaitHandedDocument, handDesktopTo, handedDocumentSettled, legacyDesktopDocumentPorts, notifyDesktopDocumentState, startDesktopDocumentState } from "./desktop-owners.ts";
+import { awaitHandedDocument, flushSharedDesktopCopy, handDesktopTo, handedDocumentSettled, legacyDesktopDocumentPorts, notifyDesktopDocumentState, startDesktopDocumentState } from "./desktop-owners.ts";
 import { draftsTesting } from "./drafts.ts";
 import { flushDraftNow } from "./recovery-owners.ts";
 import { saveDoc } from "./save-owners.ts";
@@ -46,7 +46,7 @@ function desktopPorts(): DesktopPorts {
     documents: { open: (opening) => openDocument(opening) },
     saves: { unsaved: portSaves.unsaved, save: () => saveDoc() },
     startup: portStartup,
-    flushDraft: flushDraftNow,
+    flushDraft: options => flushSharedDesktopCopy() ?? flushDraftNow(options),
     reassignDocId: (toId, message) => documentIdentity.reassignDocId(toId, message),
     documentState: { notify: notifyDesktopDocumentState, settled: handedDocumentSettled, awaitHanded: awaitHandedDocument },
     menuCommands: { run: runMenuCommand }

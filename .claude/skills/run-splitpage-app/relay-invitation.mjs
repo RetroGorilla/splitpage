@@ -28,18 +28,6 @@ async function freePort() {
   return port;
 }
 
-function retainedEntryOpened(entry) {
-  const browser = globalThis;
-  browser.retainedAttempt ??= browser.__sharedTest.enterRetained(entry).then(result => {
-    if (!result.ok && ["opening-pending", "startup-pending"].includes(result.reason)) {
-      delete browser.retainedAttempt;
-    } else {
-      browser.retainedOpened = result.ok;
-    }
-  });
-  return browser.retainedOpened === true;
-}
-
 async function membershipAbsent(scope) {
   const idb = globalThis.indexedDB;
   const name = "splitpage-native-replica-log";
@@ -50,8 +38,8 @@ async function membershipAbsent(scope) {
   });
   const db = await read(idb.open(name));
   try {
-    const transaction = db.transaction(["memberships", "invitations", "replicas", "journals"], "readonly");
-    const records = await Promise.all(["memberships", "invitations"].map(store => read(transaction.objectStore(store).count(scope))));
+    const transaction = db.transaction(["memberships", "invitations", "replicas", "journals", "shared-script-catalogue"], "readonly");
+    const records = await Promise.all(["memberships", "invitations", "shared-script-catalogue"].map(store => read(transaction.objectStore(store).count(scope))));
     const replicas = await read(transaction.objectStore("replicas").count(IDBKeyRange.bound([scope, 0], [scope, Number.MAX_SAFE_INTEGER])));
     const journal = await read(transaction.objectStore("journals").count(scope));
     return records.every(count => count === 0) && replicas === 0 && journal === 0;
@@ -185,7 +173,6 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
   await writeFile(join(fixture, "invite.html"), `<!doctype html><title>Invitation fixture</title><a id="invite" href="${target}#${token}">Open invitation</a>`);
   const exactUrl = `location.href===${JSON.stringify(target)}`;
   const seeded = 'window.__sharedTest?.read().app?.rows[0]?.audioText==="word"';
-  const entry = { deployment, script };
   const suite = join(kit.directory, "join.txt");
   const pictureUrl = index => origin + "/api/scripts/" + script + "/pictures/" + pictures[index].ref.sha256;
   const resources = index => `performance.getEntriesByName(${JSON.stringify(pictureUrl(index))})`;
@@ -290,10 +277,14 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
     "expect history.state===null",
     ...(accepted ? [
       "eval location.reload();true",
-      "wait " + exactUrl + "&&performance.getEntriesByType('navigation')[0]?.type==='reload'&&!!window.__sharedTest&&!(" + seeded + ")",
+      "wait " + exactUrl + "&&performance.getEntriesByType('navigation')[0]?.type==='reload'&&(" + seeded + ")",
       "expect !document.querySelector('#join-script-modal')",
-      "wait " + browserExpression(retainedEntryOpened, entry),
-      "expect " + seeded,
+      "eval window.__newTab.open();true",
+      "wait document.querySelector('#newtab-recents-label')?.textContent==='Shared scripts on this device'",
+      "expect document.querySelector('#newtab-recents-list')?.textContent.includes('Your browser can clear local copies.')",
+      "expect document.querySelector('#newtab-recents-list')?.textContent.includes('you need to be able to load this app')",
+      "expect !!document.querySelector('#newtab-recents-list button[data-shared]')",
+      "eval window.__newTab.isOpen() && document.querySelector('[data-newtab-action=dismiss]').click();true",
       ...leave,
       "wait !document.querySelector('#leave-script-modal')",
       "expect " + browserExpression(membershipAbsent, deployment + "/" + script)
@@ -376,4 +367,114 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
   if (variant === "pictures") assert.ok(run.messages.includes("picture-stream-started"));
   assert.match(result.stdout, /RESULT: \d+\/\d+ checks passed/);
   assert.ok(run.messages.filter(message => message === "authentication-attempted").length >= (accepted ? 2 : variant === "deleted" ? 0 : 1));
+});
+
+test("a browser joins a passworded relay, re-enters after a live change and a restart, and loses access after reset", { timeout: 60_000 }, async t => {
+  const kit = serverHarness(t, 55_000);
+  const port = await freePort();
+  const origin = "http://127.0.0.1:" + port;
+  const deployment = randomUUID();
+  const passwords = ["Initial", "Changed", "After reload"].map(prefix => prefix + " " + randomUUID());
+  const [initial, changed, restarted] = passwords;
+  await writeFile(join(kit.directory, "index.html"), build(true));
+  const run = kit.launch({
+    SPLITPAGE_PORT: String(port), SPLITPAGE_ALLOWED_ORIGINS: origin, SPLITPAGE_DEPLOYMENT_ID: deployment,
+    SPLITPAGE_APP_DIR: kit.directory, SPLITPAGE_TEST_REPORT_AUTH: "1"
+  });
+  const { scriptId: script, owner, guest } = await run.createScriptWithCredentials(randomUUID(), kit.seed(), undefined, initial);
+  const target = origin + "/?join=" + script;
+  await writeFile(join(kit.directory, "invite.html"), `<!doctype html><a id="invite" href="${target}#${guest.token}">Open invitation</a>`);
+  const banner = "document.getElementById('collab-access-banner')";
+  const recovery = "#collab-access-reenter-password";
+  const reentryInput = "#link-password-modal input[type=password]";
+  const joinSubmit = "click #join-script-modal [type=submit]";
+  const connected = "window.__sharedTest?.read().app?.rows[0]?.audioText==='word' && " +
+    "document.getElementById('shared-pill')?.getAttribute('aria-label')==='Shared · Connected'";
+  const standalone = `window.__splitpageFormats.openFile(new File([JSON.stringify({
+    schema: 2, title: "Separate script", paragraphsDecided: true, rows: [{ id: "separate", audioText: "Separate narration" }]
+  })], "separate.splitpage"))`.replaceAll(/\s*\r?\n\s*/g, " ");
+  const fill = (selector, value) => `eval {document.querySelector(${JSON.stringify(selector)}).value=${JSON.stringify(value)};}true`;
+  const reenter = password => [
+    "click " + recovery, "wait document.querySelector(" + JSON.stringify(reentryInput + ":not(:disabled)") + ")",
+    fill(reentryInput, password), "click #link-password-modal [type=submit]",
+    "wait " + connected, "expect !document.querySelector('#link-password-modal') && " + banner + ".hidden"
+  ];
+  const commands = [
+    "open /invite.html", "click #invite", "wait location.href===" + JSON.stringify(target),
+    "wait document.querySelector('#join-script-password-label')?.hidden===false",
+    "expect document.activeElement.id==='join-script-password'",
+    fill("#join-script-password", "wrong password"), joinSubmit,
+    "wait document.querySelector('#join-script-status')?.textContent.startsWith('The password is incorrect')",
+    "expect document.querySelector('#join-script-password').value===''",
+    fill("#join-script-password", initial), joinSubmit,
+    "wait document.querySelector('#join-script-summary')?.hidden===false",
+    fill("#join-script-name", "Guest"), joinSubmit, "wait " + connected,
+    'eval "change-live"', "wait !" + banner + ".hidden && !document.querySelector('" + recovery + "').hidden",
+    ...reenter(changed),
+    "eval location.reload();true",
+    "wait performance.getEntriesByType('navigation')[0]?.type==='reload' && (" + connected + ")",
+    "open /invite.html", "wait location.pathname==='/invite.html'",
+    'eval "change-offline"', "wait fetch('/offline-ready.txt', {cache:'no-store'}).then(response=>response.ok)",
+    "goto " + origin + "/", "wait window.__splitpageFormats",
+    "eval " + standalone,
+    "wait window.__splitpageFormats.state().title==='Separate script' && !document.getElementById('shared-pill')",
+    "eval window.__newTab.open();true",
+    "wait document.querySelector('#newtab-recents-list button[data-shared]')",
+    "click #newtab-recents-list button[data-shared]",
+    "wait document.querySelector('#newtab-page')?.hidden === true",
+    "wait window.__sharedTest?.read().app?.rows[0]?.audioText==='word'",
+    "wait !" + banner + ".hidden && !document.querySelector('" + recovery + "').hidden",
+    'eval "start-retry-check"', "eval new Promise(resolve=>setTimeout(()=>resolve(true), 2300))", 'eval "check-no-retry"',
+    ...reenter(restarted),
+    'eval "reset-link"', "wait !" + banner + ".hidden && document.querySelector('" + recovery + "').hidden",
+    "expect !document.querySelector('#collab-access-export').hidden && !document.querySelector('#collab-access-leave').hidden",
+    "quit"
+  ];
+  const suite = join(kit.directory, "password-join.txt");
+  await writeFile(suite, commands.join("\n"));
+  const change = async password => {
+    const response = await run.owner(`scripts/${script}/password`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password })
+    }, owner.token);
+    assert.equal(response.status, 204);
+  };
+  const attempts = () => run.messages.filter(message => message === "authentication-attempted").length;
+  let before = 0;
+  const actions = new Map([
+    ["change-live", () => change(changed)],
+    ["change-offline", async () => {
+      await change(restarted);
+      await writeFile(join(kit.directory, "offline-ready.txt"), "ready");
+    }],
+    ["start-retry-check", () => { before = attempts(); }],
+    ["check-no-retry", () => { assert.equal(attempts(), before); }],
+    ["reset-link", async () => {
+      assert.equal((await run.owner(`scripts/${script}/reset`, { method: "POST" }, owner.token)).status, 200);
+    }]
+  ]);
+  const running = exec(process.execPath, [driver, "--script", suite, "--port", "0", "--cdp-port", String(await freePort()),
+    "--root", kit.directory, "--shot-dir", kit.directory, "--log-console"], { timeout: 45_000, signal: t.signal });
+  let seen = "";
+  let work = Promise.resolve();
+  let actionFailure;
+  running.child.stdout.on("data", chunk => {
+    seen += chunk;
+    for (const [marker, action] of actions) {
+      if (!seen.split(/\r?\n/).includes(marker)) continue;
+      actions.delete(marker);
+      work = work.then(action);
+      void work.catch(error => { actionFailure = error; running.child.kill(); });
+    }
+  });
+  const result = await running.catch(error => error);
+  await work;
+  await run.stop("clean");
+  const logs = [result.stdout, result.stderr, run.output(), run.errors()].join("\n");
+  for (const secret of [...passwords, guest.token, owner.token]) {
+    assert.equal(logs.includes(secret), false, "captured logs must exclude passwords and invitations");
+  }
+  if (actionFailure) throw actionFailure;
+  assert.ok(!result.code && !result.killed, logs);
+  assert.equal(actions.size, 0);
+  assert.match(result.stdout, /RESULT: \d+\/\d+ checks passed/);
 });

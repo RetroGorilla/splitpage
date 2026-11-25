@@ -17,6 +17,7 @@ import type { NativeRelayEvent } from "../../../../src/adapters/collab/native/re
 import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
 import type { NativeSessionSource } from "../../../../src/adapters/collab/native/session.ts";
 import { seedRelaySession } from "./relay-harness.ts";
+import { PASSWORD_SHARE_TYPE } from "../../../../shared/link-password.ts";
 
 export const NAME = "test-script";
 export const ORIGIN = "splitpage://app";
@@ -139,11 +140,20 @@ export function serverHarness(t: TestContext, timeout = 25_000) {
         if (secret !== null) headers.set("Authorization", `Bearer ${secret}`);
         return fetch(`http://127.0.0.1:${await run.port()}/api/${path}`, { ...init, headers, signal });
       },
-      async createScriptWithCredentials(creationId: string, state: Uint8Array, secret = managementSecret): Promise<CreatedScript> {
+      async createScriptWithCredentials(creationId: string, state: Uint8Array, secret = managementSecret, password?: string): Promise<CreatedScript> {
+        let bytes = Buffer.from(state);
+        if (password !== undefined) {
+          redact(password);
+          const encoded = Buffer.from(password);
+          const length = Buffer.alloc(2);
+          length.writeUInt16BE(encoded.length);
+          bytes = Buffer.concat([length, encoded, bytes]);
+        }
         const reply = await run.owner("scripts", {
           method: "POST",
-          headers: { "Idempotency-Key": creationId, "Splitpage-Content-SHA256": contentHash(state) },
-          body: Buffer.from(state)
+          headers: { "Idempotency-Key": creationId, "Splitpage-Content-SHA256": contentHash(state),
+            ...(password !== undefined && { "Content-Type": PASSWORD_SHARE_TYPE }) },
+          body: bytes
         }, secret);
         assert.equal(reply.status, 200);
         const raw = await reply.text();
@@ -172,7 +182,8 @@ export function serverHarness(t: TestContext, timeout = 25_000) {
           return { scriptId };
         }
         assert.equal(
-          keys.join(",") === "guest,owner,scriptId" && hasId &&
+          (password === undefined ? keys.join(",") === "guest,owner,scriptId"
+            : keys.join(",") === "guest,owner,passwordRequired,scriptId" && record?.passwordRequired === true) && hasId &&
           isIssued(record?.owner, "owner") && isIssued(record?.guest, "guest"),
           true,
           "script creation response must contain scriptId and optional owner/guest credentials"
@@ -180,7 +191,7 @@ export function serverHarness(t: TestContext, timeout = 25_000) {
         const owner = record?.owner as IssuedInvitation;
         const guest = record?.guest as IssuedInvitation;
         redact(owner.token, guest.token);
-        return { scriptId: scriptId as string, owner, guest };
+        return { scriptId: scriptId as string, owner, guest, ...(password !== undefined && { passwordRequired: true }) };
       },
       async createScript(creationId: string, state: Uint8Array, secret = managementSecret) {
         return (await run.createScriptWithCredentials(creationId, state, secret)).scriptId;

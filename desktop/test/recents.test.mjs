@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { sharedScriptKey } from "../../shared/shared-script.ts";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -14,9 +15,9 @@ const test = (name, fn) => cases.push({ name, fn });
 
 const pathKey = (p) => p.toLowerCase();
 
-function harness(saved) {
+function harness(saved, sharedScripts, shared) {
   const writes = [];
-  let state = { recents: saved || [] };
+  let state = { recents: saved || [], sharedScripts };
   const store = {
     read: () => structuredClone(state),
     write: (mutator) => {
@@ -27,9 +28,27 @@ function harness(saved) {
     }
   };
   const fileIds = createFileRegistry();
-  const recents = createRecents({ store, pathKey, fileIds });
+  const recents = createRecents({ store, pathKey, fileIds, shared: shared && sharedScriptKey });
   return { recents, writes, fileIds, state: () => state };
 }
+
+test("shared Recent is ordered with files and can be hidden without removing its catalogue entry", async () => {
+  const entry = { deployment: "relay", script: "script", title: "Shared production", relayUrl: "wss://relay.example/", at: 10 };
+  const files = [{ absPath: "/docs/One.splitpage", title: "One", at: 5 }];
+  const enabled = harness(files, [entry], true);
+  const release = harness(files, [entry], false);
+  enabled.recents.load();
+  release.recents.load();
+  const [shared, file] = enabled.recents.forRenderer();
+  assert.deepEqual(shared, { fileId: "shared:relay/script", shared: true, name: entry.title, title: entry.title, at: 10 });
+  assert.equal(file.title, "One");
+  assert.deepEqual(enabled.recents.findSharedRecent(shared.fileId), entry);
+  assert.equal(release.recents.forRenderer().length, 1);
+  assert.equal(release.recents.findSharedRecent(shared.fileId), undefined);
+  await enabled.recents.hideSharedRecents(shared.fileId);
+  assert.equal(enabled.recents.forRenderer().length, 1);
+  assert.deepEqual(enabled.state().sharedScripts, [{ ...entry, recent: false }]);
+});
 
 test("recents load from the store and are described for the renderer by file id, name and title", () => {
   const h = harness([{ absPath: "/docs/One.splitpage", title: "One", at: 5 }]);

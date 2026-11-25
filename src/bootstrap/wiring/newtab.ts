@@ -26,6 +26,7 @@ import { screen } from "./ports/screen.ts";
 import { documentEntry } from "./ports/document-entry.ts";
 
 import { JOIN_SCRIPT_COMMAND } from "../../features/collaboration/actions.ts";
+import { browserScriptsOnThisDevice, openBrowserSharedScript } from "./ports/shared-scripts.ts";
 
 declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 
@@ -44,6 +45,14 @@ export function mountNewTabFeature(): NewTabMount {
       place,
       desktop: presence.running,
       recents,
+      ...(typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && !presence.running() && {
+        browserSharedScripts: {
+          heading: "Shared scripts on this device",
+          storageNotice: "Your browser can clear local copies. To reopen one, you need to be able to load this app.",
+          list: browserScriptsOnThisDevice,
+          open: openBrowserSharedScript
+        }
+      }),
       launch,
       lastFile,
       seedCheck,

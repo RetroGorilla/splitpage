@@ -1,5 +1,6 @@
 import type { SharedPopoverPorts } from "./ports.ts";
 import type { PresencePeer } from "../../application/collaboration/presence.ts";
+import { mountPasswordDialog } from "./password-dialog.ts";
 
 function avatar(person: PresencePeer): HTMLElement {
   const element = document.createElement("span");
@@ -47,6 +48,7 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
       <button type="button" class="mi" data-sharing="copy" aria-describedby="shared-copy-hint">Copy link</button>
       <p class="modal-hint" id="shared-copy-hint" hidden>Use Reset link to create a copyable link on this computer.</p>
       <button type="button" class="mi" data-sharing="reset">Reset link</button>
+      <button type="button" class="mi" data-sharing="password">Require a password</button>
       <button type="button" class="mi" data-sharing="promote" hidden>Manage sharing on this computer</button>
       <button type="button" class="mi" data-sharing="save">Save a copy…</button>
       <button type="button" class="mi" data-sharing="leave">Leave</button>
@@ -78,6 +80,7 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
   let busy = false;
   let promotionAvailable = false;
   let opening = 0;
+  let passwordDialog: ReturnType<typeof mountPasswordDialog> | undefined;
 
   function close(): void {
     if (panel.matches(":popover-open")) panel.hidePopover();
@@ -128,6 +131,7 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     if (!snapshot.active) {
       syncPeople(false);
       opening++;
+      passwordDialog?.dispose();
       close();
       panel.remove();
       pill.remove();
@@ -147,12 +151,15 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     connection.textContent = summary;
     const membership = ports.membership();
     const owner = membership?.role === "owner" && !snapshot.refusal;
-    for (const action of ["copy", "reset", "stop"]) button(action).hidden = !owner;
+    if (!owner) passwordDialog?.dispose();
+    for (const action of ["copy", "reset", "password", "stop"]) button(action).hidden = !owner;
+    button("password").textContent = membership?.passwordRequired ? "Change password…" : "Require a password";
     button("promote").hidden = membership?.role !== "guest" || !promotionAvailable || !!snapshot.refusal;
     copyHint.hidden = !owner || !!membership?.link;
     stopHint.hidden = !owner || online;
     button("copy").disabled = busy || !membership?.link || !!snapshot.refusal;
     button("reset").disabled = busy || !online;
+    button("password").disabled = busy || !online;
     button("stop").disabled = busy || !online;
     button("promote").disabled = busy;
     button("leave").disabled = busy;
@@ -180,7 +187,7 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     panel.style.left = Math.max(8, Math.min(anchor.right - panel.offsetWidth, window.innerWidth - panel.offsetWidth - 8)) + "px";
     panel.style.top = Math.min(anchor.bottom + 8, Math.max(8, window.innerHeight - panel.offsetHeight - 8)) + "px";
     sync();
-    if (ports.membership()?.role === "owner" && ports.membership()?.link && ports.collaboration.snapshot().relay.connected) {
+    if (ports.membership()?.role === "owner" && ports.collaboration.snapshot().relay.connected) {
       void run(() => ports.manage("check-link"), "Could not check the guest link.");
     } else {
       void ports.canManage().then(available => {
@@ -217,6 +224,19 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
       status.textContent = "Guest link reset.";
     }, "Could not reset the guest link.");
   };
+  button("password").onclick = () => {
+    if (button("password").disabled) return;
+    const required = ports.membership()?.passwordRequired;
+    close();
+    pill.focus();
+    passwordDialog?.dispose();
+    const title = required ? "Change password" : "Require a password";
+    passwordDialog = mountPasswordDialog({
+      title, submit: required ? "Save password" : "Require password",
+      async save(password) { await ports.manage("set-password", password); return null; },
+      ...(required && { async remove() { await ports.manage("remove-password"); return null; } })
+    });
+  };
   button("promote").onclick = () => {
     void run(() => ports.manage("promote"), "Could not manage sharing on this computer. Check the relay setup and try again.");
   };
@@ -227,5 +247,16 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
   const unsubscribe = ports.collaboration.onChange(sync);
   const unsubscribePeople = ports.presence.onChange(sync);
   sync();
-  return { open, dispose() { disposed = true; unsubscribe(); unsubscribePeople(); close(); panel.remove(); pill.remove(); } };
+  return {
+    open,
+    dispose() {
+      disposed = true;
+      unsubscribe();
+      unsubscribePeople();
+      passwordDialog?.dispose();
+      close();
+      panel.remove();
+      pill.remove();
+    }
+  };
 }

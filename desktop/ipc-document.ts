@@ -19,7 +19,7 @@ function createDocumentIpc({
   tabOf, fileIds, unindexTabSource, indexTabSource, recents, windowsById, applyWindowTitle,
   pushShellState, persistShellState, docClaims, testMode: TEST_MODE, flushPendingPayload, restoreNotice,
   routeOpenPath, draftStore, draftFiniteNumber, draftBodyTooLarge, buildDraftHeader, draftsPreviousSession,
-  pendingDraftFlushes, nativeReplicaForDevice
+  pendingDraftFlushes, nativeReplicaForDevice, routeSharedRecent
 }: DesktopDocumentIpcDependencies) {
   function registerDocumentIpc({ ipcHandle, ipcOn }: Parameters<DesktopRegisterIpcGroup>[0]) {
     ipcHandle("splitpage:native-replica", (event, request) => nativeReplicaForDevice(event.sender, request));
@@ -37,9 +37,11 @@ function createDocumentIpc({
       const absPath = hasFileId && typeof s.fileId === "string" ? fileIds.pathOf(s.fileId) || null : null;
       if (hasFileId) {
         tab.fileId = absPath ? s.fileId : null;
-        unindexTabSource(tab);
-        tab.source = absPath ? { kind: "file", absPath } : { kind: "blank" };
-        indexTabSource(tab);
+        if (!tab.sharedAttached && (tab.source.kind !== "shared" || absPath)) {
+          unindexTabSource(tab);
+          tab.source = absPath ? { kind: "file", absPath } : { kind: "blank" };
+          indexTabSource(tab);
+        }
       }
 
       if (tab.source.kind === "file") recents.note(tab.source.absPath, tab.title);
@@ -66,6 +68,11 @@ function createDocumentIpc({
       const tab = tabOf(event);
       if (!tab) throw new Error("unknown tab");
       const p = payload || {};
+      if (p.kind === "shared") {
+        const result = routeSharedRecent(tab, p.fileId);
+        if (!result) throw new Error("This shared script is unavailable.");
+        return result;
+      }
       if (p.kind === "file") {
         const absPath = fileIds.pathOf(p.fileId);
         if (!absPath) throw new Error("ENOENT: unknown file id");
@@ -106,7 +113,7 @@ function createDocumentIpc({
 
     ipcHandle("splitpage:draft-take", async (event) => {
       const tab = tabOf(event);
-      if (!tab || !draftStore()) return null;
+      if (!tab || tab.source.kind === "shared" || !draftStore()) return null;
       const taken = await (draftStore() as ReturnType<typeof createDraftStore>).take(tab.id);
       if (!taken || taken.corrupt || taken.unsupported) return taken || null;
 

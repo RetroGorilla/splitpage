@@ -624,7 +624,7 @@ function seedLegacyDatabase(directory: string, version: 1 | 2 | 3 | 4, options: 
   assert.equal(verifyDatabase(db), version);
 }
 
-test("storage v4 upgrades all populated tables to v5 atomically", async t => {
+test("storage v4 upgrades all populated tables to v7 atomically", async t => {
   const kit = serverHarness(t);
   const state = kit.seed();
   const dir = join(kit.directory, "atomic-v4");
@@ -642,16 +642,20 @@ test("storage v4 upgrades all populated tables to v5 atomically", async t => {
   using before = new DatabaseSync(path);
   before.exec(`INSERT INTO invitations (id, script, label, token_hash) VALUES ('guest-link', 'original', 'Guest', zeroblob(32));
     CREATE TABLE version_chunks (conflict TEXT)`);
-  const tables = ["invitations", "creations", "scripts", "script_pictures"];
-  const expected = tables.map(table => before.prepare(`SELECT * FROM ${table} ORDER BY 1`).all());
+  const orderedRows = () => [
+    before.prepare("SELECT id, script, label, token_hash, revoked, role, creation_id FROM invitations ORDER BY id").all(),
+    ...["creations", "scripts", "script_pictures"].map(table => before.prepare(`SELECT * FROM ${table} ORDER BY 1`).all())
+  ];
+  const expected = orderedRows();
   assert.throws(() => openWriter(dir).close(), /could not be opened or initialized/);
   assert.equal(verifyDatabase(before), 4);
   assert.equal(before.prepare("SELECT sql FROM sqlite_schema WHERE name = 'versions'").get(), undefined);
   before.exec("DROP TABLE version_chunks");
   const run = kit.launch({ SPLITPAGE_DATA_DIR: dir }, new URL("./server-process.ts", import.meta.url));
   await run.port();
-  assert.equal(verifyDatabase(before), 5);
-  assert.deepEqual(tables.map(table => before.prepare(`SELECT * FROM ${table} ORDER BY 1`).all()), expected);
+  assert.equal(verifyDatabase(before), 7);
+  assert.deepEqual(orderedRows(), expected);
+  assert.equal(before.prepare("SELECT kind FROM invitations WHERE id = 'guest-link'").get()?.kind, "link");
   assert.deepEqual(storedState(dir, "created"), state);
   assert.deepEqual(storedState(dir, "original"), state);
   assert.equal(before.prepare("SELECT count(*) AS count FROM versions").get()?.count, 0);
@@ -719,7 +723,7 @@ for (const version of [1, 2, 3] as const) {
     }
     assert.deepEqual(storedState(legacyDir, restored.scriptId), tempSession);
     const currentBackup = await backupRelay(env);
-    for (const [file, expectedVersion] of [[previousBackup, version], [currentBackup, 5]] as const) {
+    for (const [file, expectedVersion] of [[previousBackup, version], [currentBackup, 7]] as const) {
       using copy = new DatabaseSync(join(legacyDir, "backups", file, DB_NAME), { readOnly: true });
       assert.equal(verifyDatabase(copy), expectedVersion);
       if (expectedVersion >= 2) {
@@ -727,7 +731,7 @@ for (const version of [1, 2, 3] as const) {
       }
     }
     using live = new DatabaseSync(join(legacyDir, DB_NAME), { readOnly: true });
-    assert.equal(verifyDatabase(live), 5);
+    assert.equal(verifyDatabase(live), 7);
     assert.equal(live.prepare("SELECT count(*) AS count FROM script_pictures").get()?.count, version === 3 ? 1 : 0);
   });
 }
@@ -877,7 +881,7 @@ test("guest refusal, reset link preserving two owners, old/new guest tokens, own
 
     const oldGuestRetry = kit.copy(port, { kind: "empty" }, scriptId, created.guest.token);
     const oldGuestRefused = await kit.until(() => oldGuestRetry.events.find(event => event.kind === "authentication-failed"));
-    assert.equal(oldGuestRefused.reason, "invitation-revoked");
+    assert.equal(oldGuestRefused.reason, "access-removed");
     assert.equal((await run.owner(picturePath, {}, created.guest.token)).status, 403);
 
     const newGuestConn = kit.copy(port, { kind: "empty" }, scriptId, newGuest.token);
