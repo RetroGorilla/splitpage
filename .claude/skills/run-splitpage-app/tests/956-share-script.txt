@@ -15,6 +15,13 @@ click #share-script-setup button
 wait document.getElementById('settings-modal')?.hidden === false
 expect document.getElementById('share-script-modal') === null
 click #settings-modal [data-settings-action="close"]
+eval window.address='http://localhost:8765'
+click #btn-file
+click #file-menu [data-file-action="share-script"]
+wait document.getElementById('share-script-status').textContent === 'Sharing needs a relay.'
+expect document.querySelector('#share-script-setup button').textContent === 'Settings → Collaboration'
+expect document.querySelector('[data-share="start"]').hidden && uploads.length === 0
+click [data-share="close"]
 eval (async function(){var doc=JSON.parse(JSON.stringify(F.state()));doc.title='Original file';window.fileBytes=JSON.stringify(doc);var id=B._addFile('original.splitpage',fileBytes);window.handle=D.makeHandle({id:id,name:'original.splitpage'});await F.openFile(await handle.getFile(),handle);window.address='https://relay.example';return true;})()
 wait F.state().title === 'Original file'
 key ctrl KeyK

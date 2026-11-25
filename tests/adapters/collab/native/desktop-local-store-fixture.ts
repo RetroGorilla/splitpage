@@ -8,6 +8,7 @@ import { basename, join } from "node:path";
 import type { TestContext } from "node:test";
 import type { createNativeReplicaIpc as CreateReplicaIpc } from "../../../../desktop/native-replica-ipc.ts";
 import type { NativeReplicaFileSystem } from "../../../../desktop/native-replica-files.ts";
+import { readNativeMembership } from "../../../../shared/native-membership.ts";
 import type { NativeReplicaInvoke } from "../../../../shared/native-replica.d.ts";
 import { createDesktopNativeLocalStore } from "../../../../src/adapters/collab/native/desktop-local-store.ts";
 
@@ -33,8 +34,8 @@ export function desktopTestCipher(key: Buffer) {
   };
 }
 
-export function replicasAt(userData: string, fs?: NativeReplicaFileSystem, cipher?: Parameters<typeof createNativeReplicaIpc>[2]) {
-  const handle = createNativeReplicaIpc(userData, fs, cipher);
+export function replicasAt(userData: string, fs?: NativeReplicaFileSystem, cipher?: Parameters<typeof createNativeReplicaIpc>[3]) {
+  const handle = createNativeReplicaIpc(userData, readNativeMembership, fs, cipher);
   return {
     window() {
       const sender = new Renderer();

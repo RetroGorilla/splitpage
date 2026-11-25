@@ -27,7 +27,7 @@ if (SPLITPAGE_COLLAB_UI && location.origin === "splitpage://relay-setup" && loca
         const result = await ipcRenderer.invoke("splitpage:relay-setup-save", address.value, secret.value);
         if (result === "saved") { close(); return; }
         feedback.textContent = {
-          "invalid-address": "Enter an HTTPS relay address. HTTP is available for loopback addresses.",
+          "invalid-address": "Enter an HTTPS relay address. Test builds also accept HTTP at 127.0.0.1 with a port.",
           "invalid-secret": "Check the management secret for unsupported characters or extra spaces.",
           "key-store-unavailable": "Could not access the operating system key store.",
           "save-failed": "Could not save the relay settings. Check that Splitpage can write to this device."

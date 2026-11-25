@@ -20,7 +20,7 @@ export function mountShareDialog(ports: ShareDialogPorts) {
       <div class="modal-header"><h2 id="share-script-title">${SHARE_SCRIPT_COMMAND.label}</h2></div>
       <p class="modal-hint">Sharing uploads a copy to your relay. Anyone with the link can edit the shared script. Your original file stays as it is.</p>
       <p class="modal-hint" role="status" id="share-script-status"></p>
-      <p class="modal-hint" id="share-script-setup" hidden>Set up a relay in <button type="button" class="btn" data-share="settings">Settings → Collaboration</button>
+      <p class="modal-hint" id="share-script-setup" hidden>Enter a supported relay address in <button type="button" class="btn" data-share="settings">Settings → Collaboration</button>
         or follow the <a href="https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/native-adapter-design.md#stage-3-bounded-container-limits-and-status-endpoint" target="_blank" rel="noopener noreferrer">relay setup guide</a>.</p>
       <label class="modal-hint" id="share-script-link" hidden>Guest link <input readonly type="text"></label>
       <div class="modal-footer">

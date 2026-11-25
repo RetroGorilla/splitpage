@@ -18,6 +18,12 @@ import { holdDesktopDocumentPublication } from "./desktop-owners.ts";
 import { autoSavePolicy, saveBusy, scheduleAutoSave } from "./save-owners.ts";
 
 declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
+
+function canShareWith(address: string): boolean {
+  return address.startsWith("https://") || (typeof SPLITPAGE_TEST_HOOKS !== "undefined" && SPLITPAGE_TEST_HOOKS
+    && /^http:\/\/127\.0\.0\.1:[0-9]+$/.test(address));
+}
 
 export const collaborationMenuItem = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI
   ? () => ({ ...SHARE_SCRIPT_COMMAND, group: "Collaborate", available: () => !!desktopPort()?.shareScript })
@@ -76,8 +82,9 @@ function registerShare(registry: Pick<ActionRegistry, "invoke" | "register">): (
       });
       dispose?.();
       dispose = mountShareDialog({
-        address: () => owner.status().then(status => status.address),
+        address: () => owner.status().then(({ address }) => address && canShareWith(address) ? address : null),
         share: async (...args) => {
+          if (!canShareWith(args[0])) return { kind: "not-configured" };
           const autosave = autoSavePolicy();
           const pending = autosave.pending();
           const reason = "Sharing script…";

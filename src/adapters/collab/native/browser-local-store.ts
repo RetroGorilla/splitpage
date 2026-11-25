@@ -1,3 +1,5 @@
+import { readNativeMembership } from "../../../../shared/native-membership.ts";
+import type { NativeMembershipRecord } from "../../../../shared/native-replica.d.ts";
 import type { NativeReplicaEntry } from "../../../../shared/native-replica.d.ts";
 import { attachNativeLocalStore, nativeLocalStoreFailure } from "./local-store.ts";
 import type { NativeLocalStore, NativeLocalStoreFailure, NativeLocalStoreOpen, NativeReplicaConnection } from "./local-store.ts";
@@ -238,5 +240,3 @@ export function createBrowserNativeLocalStore(ports: BrowserLocalStorePorts = {
     })
   };
 }
-import { readNativeMembership } from "../../../../shared/native-membership.ts";
-import type { NativeMembershipRecord } from "../../../../shared/native-replica.d.ts";

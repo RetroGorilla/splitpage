@@ -1,16 +1,23 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import type { createRelayOwner as RelayOwner, createShareCreations as ShareCreations } from "../../../../desktop/relay-owner.ts";
 import type { createNativeReplicaFiles as ReplicaFiles } from "../../../../desktop/native-replica-files.ts";
 import { createShareAttempt } from "../../../../src/application/collaboration/share.ts";
+import type { ShareAttemptPorts } from "../../../../src/application/collaboration/share.ts";
+import { createMemoryBackend, intern, persist, setBackend } from "../../../../src/adapters/storage/02c-blobs.ts";
 import { createOperations } from "../../../../src/application/session/operation.ts";
+import { sharedSession } from "../../../../src/bootstrap/wiring/session-owner.ts";
+import { enterCreatedSharedScript } from "../../../../src/bootstrap/wiring/shared-test.ts";
+import type { SharedSwitchOutcome } from "../../../../src/bootstrap/wiring/shared-session.ts";
 import { enterSharedDocument } from "../../../../src/core/migrate.ts";
+import { bootApp, closeApp } from "../../../../src/test/_app-boot.mjs";
 import { seedRelaySession } from "./relay-harness.ts";
 import { appendText, contentHash, serverHarness, storedText } from "./server-harness.ts";
 import { desktopTestCipher, replicasAt } from "./desktop-local-store-fixture.ts";
@@ -28,7 +35,7 @@ function deferred() {
   return { ready, resolve };
 }
 
-async function fixture(t: TestContext) {
+async function fixture(t: TestContext, enter?: ShareAttemptPorts["enter"]) {
   const relay = serverHarness(t);
   const secret = randomBytes(32).toString("base64url");
   const run = relay.launch({ SPLITPAGE_MANAGEMENT_SECRET: secret, SPLITPAGE_DEPLOYMENT_ID: "local" });
@@ -69,7 +76,7 @@ async function fixture(t: TestContext) {
       abandons.push({ id, status: response.status });
     }
     return response;
-  });
+  }, true);
   assert.equal(owner.save(address, secret), "saved");
   const files = createNativeReplicaFiles(directory);
   const start = () => createShareCreations(directory, owner, files.remove);
@@ -98,8 +105,9 @@ async function fixture(t: TestContext) {
       complete: id => main.complete("tab", id)
     },
     link: created => created.address + "/?join=" + created.scriptId + "#" + created.guest,
-    async enter(created, bytes, owns, _release, complete) {
+    async enter(created, bytes, owns, release, complete) {
       assert.equal(held && owns() && contentHash(bytes) === creates.at(-1)?.hash, true);
+      if (enter) return enter(created, bytes, owns, release, complete);
       if (refuseEntry) return false;
       const name = created.deployment + "/" + created.scriptId;
       const copy = await replicaStore().open(name, STORE_OPTIONS);
@@ -129,6 +137,90 @@ async function fixture(t: TestContext) {
     }
   };
 }
+
+test("sharing uploads pictures from the original in the background and clears the save status", { timeout: 20_000 }, async t => {
+  const releasePut = deferred();
+  Reflect.set(globalThis, "SPLITPAGE_COLLAB_UI", true);
+  try {
+    await bootApp();
+    window.Element.prototype.scrollBy = () => {};
+    window.Element.prototype.scrollIntoView = () => {};
+    setBackend({ ...createMemoryBackend(), persistent: true });
+    const f = await fixture(t, (created, state, owns, release, complete) => enterCreatedSharedScript({
+      deployment: created.deployment,
+      script: created.scriptId,
+      relayUrl: "ws://" + new URL(created.address).host,
+      created: { state, membership: { token: created.owner, role: "owner", guestLinkToken: created.guest }, complete }
+    }, { owns, release }));
+    const png = Uint8Array.from(Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/Z7cAAAAASUVORK5CYII=", "base64"
+    ));
+    const picture = intern(png);
+    assert.ok(picture);
+    assert.deepEqual(await persist([picture.sha256]), []);
+    const row = f.source.document().rows[0];
+    assert.ok(row);
+    assert.equal(f.source.commands.setField({ kind: "gallery", id: row.id }, { imageRef: picture }).kind, "written");
+
+    const realFetch = globalThis.fetch;
+    let putStarted = false;
+    t.mock.method(globalThis, "fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === "PUT" && String(input).endsWith("/pictures/" + picture.sha256)) {
+        putStarted = true;
+        await releasePut.ready;
+      }
+      return realFetch(input, init);
+    });
+    const saveButton = document.getElementById("btn-save");
+    assert.ok(saveButton);
+    const waitForStatus = async (label: string, state: string) => {
+      for (let i = 0; i < 400 && (!putStarted || saveButton.textContent !== label); i++) {
+        await delay(10, undefined, { signal: t.signal });
+      }
+      assert.equal(putStarted, true);
+      assert.equal(saveButton.textContent, label);
+      assert.equal(saveButton.getAttribute("data-state"), state);
+    };
+    assert.equal((await f.share()).kind, "shared");
+    await waitForStatus("Saved on this device · uploading pictures", "pending");
+    releasePut.resolve();
+    await waitForStatus("Saved on this device", "ok");
+    const created = f.creates[0];
+    assert.ok(created?.guest);
+    const response = await realFetch(f.address + "/api/scripts/" + created.scriptId + "/pictures/" + picture.sha256, {
+      headers: { Authorization: "Bearer " + created.guest }
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), png);
+  } finally {
+    releasePut.resolve();
+    try {
+      if (sharedSession()) {
+        const { __sharedTest } = window as unknown as { __sharedTest: { leave: () => Promise<SharedSwitchOutcome> } };
+        assert.deepEqual(await __sharedTest.leave(), { ok: true });
+      }
+    } finally {
+      Reflect.deleteProperty(globalThis, "SPLITPAGE_COLLAB_UI");
+      closeApp();
+    }
+  }
+});
+
+test("startup quarantines invalid share journals and allows a fresh share", async t => {
+  const f = await fixture(t);
+  const journalFile = join(f.directory, "relay-owner-shares.json");
+  const malformed = ["{", "null", "{}", '{"pending":[{"replica":"../outside"}],"abandon":{}}',
+    '{"pending":[],"abandon":{"bad":["creation"]}}'];
+  for (const raw of malformed) {
+    await writeFile(journalFile, raw);
+    await f.start().recover();
+  }
+  const backups = (await readdir(f.directory)).filter(name => name.startsWith("relay-owner-shares.json.corrupt-"));
+  assert.equal(backups.length, malformed.length);
+  assert.deepEqual((await Promise.all(backups.map(name => readFile(join(f.directory, name), "utf8")))).sort(), malformed.sort());
+  assert.equal((await f.share()).kind, "shared");
+  assert.deepEqual(await f.journal(), { pending: [], abandon: {} });
+});
 
 test("lost share reply with unchanged content reuses the id and snapshot and keeps fresh owner and guest credentials", async t => {
   const f = await fixture(t);

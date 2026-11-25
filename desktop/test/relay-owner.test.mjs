@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 const require = createRequire(import.meta.url);
-const { createRelayOwner } = require("../relay-owner.ts");
+const { createRelayOwner, createShareCreations } = require("../relay-owner.ts");
 
 function store(t) {
   const dir = mkdtempSync(join(tmpdir(), "splitpage-relay-owner-"));
@@ -89,7 +89,7 @@ test("owner HTTP sends a bearer on GET /api/status, answers 401, and masks respo
     seen.push([req.method, req.url, matches, req.headers.cookie]);
     res.writeHead(matches ? 200 : 401).end(secret);
   });
-  const owner = createRelayOwner(dir, keyStore);
+  const owner = createRelayOwner(dir, keyStore, fetch, true);
   assert.equal(owner.save(address, secret), "saved");
   assert.equal(await owner.testConnection(), "connected");
   assert.equal(owner.save(address, randomBytes(32).toString("base64url")), "saved");
@@ -102,9 +102,41 @@ test("the main client refuses cross-origin paths and follows no redirects", asyn
   let forwarded = 0;
   const other = await serve(t, (_req, res) => { forwarded++; res.end(); });
   const address = await serve(t, (_req, res) => res.writeHead(302, { Location: other + "/api/status" }).end());
-  const owner = createRelayOwner(dir, keyStore);
+  const owner = createRelayOwner(dir, keyStore, fetch, true);
   assert.equal(owner.save(address, secret), "saved");
   assert.equal(await owner.testConnection(), "unreachable");
   assert.deepEqual(await owner.ownerRequest(other + "/api/status", { method: "GET" }), { kind: "unreachable" });
   assert.equal(forwarded, 0);
+});
+
+test("addresses blocked for sharing are refused before a relay request, including saved settings", async t => {
+  const { dir, keyStore, secret } = store(t);
+  const bytes = Uint8Array.of(1);
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const requests = [];
+  const request = (url, init) => {
+    requests.push([url.href, init.method]);
+    return Promise.resolve(new Response(null, { status: 403 }));
+  };
+  for (const testBuild of [false, true]) {
+    const owner = createRelayOwner(dir, keyStore, request, testBuild);
+    const shares = createShareCreations(dir, owner, async () => {});
+    const allowed = testBuild ? ["https://relay.example", "http://127.0.0.1:8765", "http://127.0.0.1:80"] : ["https://relay.example"];
+    for (const address of allowed) {
+      assert.equal(owner.save(address, secret), "saved");
+      assert.deepEqual(owner.status(), { address });
+    }
+    const blocked = ["http://relay.example:8765", "http://localhost:8765", "http://[::1]:8765", "http://127.0.0.1"];
+    if (!testBuild) blocked.push("http://127.0.0.1:8765");
+    for (const address of blocked) {
+      assert.equal(owner.save(address, secret), "invalid-address");
+      assert.deepEqual(await shares.create("tab", "attempt", hash, bytes, address), { kind: "not-configured" });
+    }
+    for (const address of blocked) {
+      writeFileSync(join(dir, "relay-owner.enc"), keyStore.encryptString(JSON.stringify({ address, secret })));
+      assert.deepEqual(owner.status(), { address: null });
+      assert.deepEqual(await shares.create("tab", "attempt", hash, bytes, address), { kind: "not-configured" });
+    }
+  }
+  assert.deepEqual(requests, []);
 });

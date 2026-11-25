@@ -38,6 +38,7 @@ import type * as IpcHistoryBlob from "./ipc-history-blob.ts";
 import type * as IpcTabstrip from "./ipc-tabstrip.ts";
 import type * as IpcTestMode from "./ipc-test-mode.ts";
 import type * as IpcPrint from "./ipc-print.ts";
+import type { readNativeMembership as ReadNativeMembership } from "../shared/native-membership.ts";
 import type { createNativeReplicaIpc as CreateNativeReplicaIpc } from "./native-replica-ipc.ts";
 import type * as PrintPdf from "./print-pdf.ts";
 import type * as HistoryPolicy from "../shared/history-policy.ts";
@@ -187,6 +188,7 @@ const COLLAB_UI = (() => {
   }
 })();
 const SHARED_ROOT = path.join(APP_ROOT, "shared");
+const { readNativeMembership }: { readNativeMembership: typeof ReadNativeMembership } = require(path.join(SHARED_ROOT, "native-membership.ts"));
 const historyPolicy: typeof HistoryPolicy = require(path.join(SHARED_ROOT, "history-policy.ts"));
 const { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE } = historyPolicy;
 const { createHistoryStore, projectHistoryBucket }: typeof HistoryStore = require(path.join(SHARED_ROOT, "history-store.ts"));
@@ -1859,7 +1861,8 @@ const relaySetup = COLLAB_UI ? (() => {
   const { createNativeReplicaFiles }: { createNativeReplicaFiles: typeof CreateNativeReplicaFiles } = require("./native-replica-files.ts");
   const setupWindow = createRelaySetupWindow(BrowserWindow, root, RELAY_SETUP_ORIGIN);
   const userData = app.getPath("userData");
-  const owner = createRelayOwner(userData, safeStorage);
+  // why: desktop staging and the dev build enable collaboration with the same flag that grants loopback WebSocket access
+  const owner = createRelayOwner(userData, safeStorage, fetch, COLLAB_UI);
   const shares = createShareCreations(userData, owner, createNativeReplicaFiles(userData).remove);
   function tabWindow(event: DesktopIpcEvent) {
     const tab = tabOf(event);
@@ -1941,7 +1944,7 @@ function nativeReplicaForDevice(sender: Electron.WebContents, request: unknown) 
   if (!Array.isArray(request) || typeof request[1] !== "string" || !request[1].includes("/")) {
     throw new TypeError("Native replica requests require deployment and script identities.");
   }
-  handleReplica ??= createNativeReplicaIpc(app.getPath("userData"), undefined, {
+  handleReplica ??= createNativeReplicaIpc(app.getPath("userData"), readNativeMembership, undefined, {
     encrypt(token) {
       if (!safeStorage.isEncryptionAvailable() || safeStorage.getSelectedStorageBackend?.() === "basic_text") {
         throw new Error("The operating system key store is unavailable.");

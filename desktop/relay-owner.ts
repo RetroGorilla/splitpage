@@ -7,9 +7,10 @@ import type { RelayConnectionCheck, RelaySetupSave, ShareScriptCreation } from "
 
 const fs: typeof NodeFs = require("node:fs");
 const { join }: typeof NodePath = require("node:path");
-const { createHash }: typeof NodeCrypto = require("node:crypto");
+const { createHash, randomUUID }: typeof NodeCrypto = require("node:crypto");
 const ID = /^[A-Za-z0-9_-]{1,64}(?![\s\S])/;
-const HASH = /^[a-f0-9]{64}$/;
+const HASH = /^[a-f0-9]{64}(?![\s\S])/;
+const REPLICA = /^[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{1,64}(?![\s\S])/;
 const TOKEN = /^[A-Za-z0-9_-]{43}(?![\s\S])/;
 const MAX_SNAPSHOT_BYTES = 15_000_000;
 
@@ -30,12 +31,15 @@ function decodeCreation(data: unknown, address: string, deployment: string | nul
   return { kind: "created", address, deployment, scriptId, owner: owner.token, guest: guest.token };
 }
 
-function relayOrigin(address: string): string | null {
+function relayOrigin(address: string, testBuild: boolean): string | null {
   if (address.length > 2048 || !/^https?:\/\/[^/?#\\]+\/?$/i.test(address) || address.includes("@")) return null;
   try {
     const url = new URL(address);
-    const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-    return url.protocol === "https:" || loopback ? url.origin : null;
+    if (url.protocol === "https:") return url.origin;
+    if (testBuild && /^http:\/\/127\.0\.0\.1:[0-9]+\/?$/i.test(address)) {
+      return url.port ? url.origin : url.origin + ":80";
+    }
+    return null;
   } catch {
     return null;
   }
@@ -50,7 +54,7 @@ function createRelayOwner(userData: string, keyStore: {
   decryptString: (data: Buffer) => string;
   isEncryptionAvailable: () => boolean;
   getSelectedStorageBackend?: () => string;
-}, request: typeof fetch = fetch) {
+}, request: typeof fetch = fetch, testBuild = false) {
   const file = join(userData, "relay-owner.enc");
   const pending = file + ".new";
 
@@ -64,7 +68,7 @@ function createRelayOwner(userData: string, keyStore: {
       if (!keyStoreAvailable()) return null;
       const record = JSON.parse(keyStore.decryptString(bytes)) as { address?: unknown; secret?: unknown } | null;
       if (typeof record?.address !== "string" || typeof record.secret !== "string") return null;
-      if (relayOrigin(record.address) !== record.address || !validSecret(record.secret)) return null;
+      if (relayOrigin(record.address, testBuild) !== record.address || !validSecret(record.secret)) return null;
       return { address: record.address, secret: record.secret };
     } catch {
       return null;
@@ -72,7 +76,7 @@ function createRelayOwner(userData: string, keyStore: {
   }
 
   function save(address: string, secret: string): RelaySetupSave {
-    const origin = relayOrigin(address.trim());
+    const origin = relayOrigin(address.trim(), testBuild);
     if (!origin) return "invalid-address";
     if (!validSecret(secret)) return "invalid-secret";
     try {
@@ -104,7 +108,7 @@ function createRelayOwner(userData: string, keyStore: {
     if (!record || (options.address && record.address !== options.address)) return { kind: "not-configured" as const };
     try {
       const url = new URL(pathname, record.address);
-      if (url.origin !== record.address || !url.pathname.startsWith("/api/") || url.username || url.password || url.hash) {
+      if (url.origin !== new URL(record.address).origin || !url.pathname.startsWith("/api/") || url.username || url.password || url.hash) {
         return { kind: "unreachable" as const };
       }
       const headers = new Headers(options.headers);
@@ -131,6 +135,21 @@ function createRelayOwner(userData: string, keyStore: {
   return { save, clear, status: () => ({ address: read()?.address ?? null }), testConnection, ownerRequest };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isShareJournal(value: unknown): value is ShareJournal {
+  return isRecord(value) && Array.isArray(value.pending) && isRecord(value.abandon)
+    && value.pending.every((entry: unknown) => isRecord(entry)
+      && typeof entry.creationId === "string" && ID.test(entry.creationId)
+      && typeof entry.contentHash === "string" && HASH.test(entry.contentHash)
+      && typeof entry.relay === "string" && HASH.test(entry.relay)
+      && (entry.replica === undefined || (typeof entry.replica === "string" && REPLICA.test(entry.replica))))
+    && Object.entries(value.abandon).every(([relay, ids]) => HASH.test(relay) && Array.isArray(ids)
+      && ids.every((id: unknown) => typeof id === "string" && ID.test(id)));
+}
+
 function createShareCreations(userData: string, owner: ReturnType<typeof createRelayOwner>, eraseReplica: (name: string) => Promise<void>) {
   const file = join(userData, "relay-owner-shares.json");
   const tabs = new Map<string, string>();
@@ -142,11 +161,17 @@ function createShareCreations(userData: string, owner: ReturnType<typeof createR
   }
 
   function readJournal(): ShareJournal {
-    try { return JSON.parse(fs.readFileSync(file, "utf8")) as ShareJournal; }
+    let json: string;
+    try { json = fs.readFileSync(file, "utf8"); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       return { pending: [], abandon: {} };
     }
+    let journal: unknown;
+    try { journal = JSON.parse(json); } catch { }
+    if (isShareJournal(journal)) return journal;
+    fs.renameSync(file, file + ".corrupt-" + randomUUID());
+    return { pending: [], abandon: {} };
   }
 
   function writeJournal(journal: ShareJournal): void {

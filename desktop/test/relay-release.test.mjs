@@ -32,7 +32,7 @@ test("a release stage following a test stage removes the setup code, assets, ori
   assert.ok(leakedCollaboration(enabledHtml).includes("share-script"));
   assert.ok(leakedCollaboration(enabledHtml).includes("share-script-modal"));
   assert.ok(leakedCollaboration(enabledPreload).includes("splitpage:relay-owner-share-create"));
-  assert.match(enabledHtml, /connect-src 'self' https: wss: ws:\/\/127\.0\.0\.1:\* http:\/\/127\.0\.0\.1:\*;/);
+  assert.match(enabledHtml, /connect-src 'self' https: http: wss: ws:\/\/127\.0\.0\.1:\*;/);
   assert.deepEqual(readdirSync(join(variant, "relay-setup")).sort(), ["index.html", "preload.js", "setup.css"]);
   assert.deepEqual(readdirSync(code).sort(), ["collaboration.json", "relay-owner.ts", "relay-setup-window.ts"]);
   stageBuild();
@@ -41,7 +41,7 @@ test("a release stage following a test stage removes the setup code, assets, ori
   assert.ok(release === build(false));
   assert.deepEqual(leakedCollaboration(release), []);
   assert.deepEqual(leakedCollaboration(preload), []);
-  assert.match(release, /connect-src 'self' https: wss:;/);
+  assert.match(release, /connect-src 'self' https: http: wss:;/);
   assert.deepEqual(readdirSync(variant), []);
   assert.equal(read(join(code, "collaboration.json")).trim(), '{"collabUi":false}');
   assert.deepEqual(readdirSync(code), ["collaboration.json"]);
@@ -63,6 +63,6 @@ test("test hooks and invitation handling are selected independently", () => {
   assert.ok(leakedCollaboration(collaborationOnly).includes("splitpageInvitation"));
   assert.ok(leakedCollaboration(collaborationOnly).includes("settings-collaboration"));
   assert.ok(leakedCollaboration(collaborationOnly).includes("share-script-modal"));
-  assert.match(collaborationOnly, /connect-src 'self' https: wss:;/);
+  assert.match(collaborationOnly, /connect-src 'self' https: http: wss:;/);
   assert.ok(!leakedHooks(collaborationOnly).includes("__sharedTest"));
 });

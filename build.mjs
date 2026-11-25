@@ -265,7 +265,7 @@ const CSP_DIRECTIVES = (scriptHash, testBuild) => [
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
-  "connect-src 'self' https: wss:" + (testBuild ? " ws://127.0.0.1:* http://127.0.0.1:*" : ""),
+  "connect-src 'self' https: http: wss:" + (testBuild ? " ws://127.0.0.1:*" : ""),
   "object-src 'none'",
   "frame-src 'self' https://www.youtube-nocookie.com https://player.vimeo.com",
   "worker-src 'self'",
