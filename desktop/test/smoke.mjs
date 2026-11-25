@@ -2500,7 +2500,7 @@ async function caseRecentDocuments(target, fixturesDir) {
   const winIdB = newHexId(), tabIdB = newHexId();
   const many = [];
   for (let i = 0; i < 25; i++) {
-    many.push({ absPath: path.join(fixturesDir, "many-" + i + ".splitpage"), title: "Many " + i, at: 1000 + i });
+    many.push({ absPath: path.join(fixturesDir, "many-" + i + ".splitpage"), title: "Many " + i, at: 2000 - i });
   }
   many.splice(3, 0, { absPath: many[0].absPath, title: "Duplicate", at: 9999 });
   many.push({ absPath: "not-absolute.splitpage", title: "Relative", at: 9999 });
