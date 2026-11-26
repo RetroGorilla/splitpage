@@ -191,7 +191,12 @@ for (const code of bash ? ["true", "false"] : []) {
 if (bash) {
   const shardJobs = (label, count) => Array.from({ length: count }, (_, index) => `${label} (${index + 1}/${count})\t1\tsuccess`);
   const rootJobs = shardJobs("Tests", shardCount);
-  for (const { jobs, apiStatus = "0", pass } of [
+  const unsettled = rootJobs.map((job, index) => index === 1 ? job.replace("\tsuccess", "\t") : job);
+  for (const { jobs, later, apiStatus = "0", pass } of [
+    { jobs: unsettled, later: rootJobs, pass: true },
+    { jobs: [rootJobs[0], ...rootJobs.slice(2)], later: rootJobs, pass: true },
+    { jobs: unsettled, pass: false },
+    { jobs: [...rootJobs.slice(1), rootJobs[0].replace("success", "failure")], later: rootJobs, pass: false },
     { jobs: rootJobs, pass: true },
     { jobs: [rootJobs[0].replace("\t1\tsuccess", "\t2\tsuccess"), ...rootJobs], pass: true },
     { jobs: [...rootJobs, rootJobs[0].replace("\t1\tsuccess", "\t2\tcancelled")], pass: false },
@@ -202,17 +207,17 @@ if (bash) {
     })),
     { jobs: rootJobs, apiStatus: "1", pass: false }
   ]) {
-    const mock = 'gh() { printf "%s\\n" "$MOCK_JOBS"; return "$MOCK_STATUS"; }\n';
+    const mock = 'gh() { printf "%s\\n" "$MOCK_JOBS"; return "$MOCK_STATUS"; }\nsleep() { MOCK_JOBS=${MOCK_LATER-$MOCK_JOBS}; }\n';
     const result = spawnSync(bash, ["-e", "-c", mock + individual.run], {
       env: {
-        ...process.env, MOCK_JOBS: jobs.join("\n"), MOCK_STATUS: apiStatus,
+        ...process.env, MOCK_JOBS: jobs.join("\n"), MOCK_STATUS: apiStatus, ...(later && { MOCK_LATER: later.join("\n") }),
         ROOT_TESTS: "true", ROOT_SHARDS: String(shardCount)
       },
       encoding: "utf8",
       timeout: 5000
     });
     assert.equal(result.error, undefined);
-    assert.equal(result.status === 0, pass, JSON.stringify({ jobs, apiStatus, output: result.stdout, error: result.stderr }));
+    assert.equal(result.status === 0, pass, JSON.stringify({ jobs, later, apiStatus, output: result.stdout, error: result.stderr }));
     cases++;
   }
   const manifestsRunBy = (script) => {

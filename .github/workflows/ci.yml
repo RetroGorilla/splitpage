@@ -246,8 +246,7 @@ jobs:
       - name: Every required matrix shard passed
         if: needs.changes.outputs.root_due == 'true'
         run: |
-          jobs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" --jq '.jobs[] | [.name, .run_attempt, .conclusion] | @tsv')
-          verify_shards() {
+          first_problem() {
             local label=$1 count=$2 shard name result
             for ((shard = 1; shard <= count; shard++)); do
               name="$label ($shard/$count)"
@@ -257,15 +256,27 @@ jobs:
                   if (attempt > latest) { latest = attempt; count = 0 }
                   if (attempt == latest) { count++; conclusion = $3 }
                 }
-                END { if (count == 1) print conclusion; else if (count > 1) print "duplicate" }
+                END { if (count == 1) print (conclusion == "" ? "pending" : conclusion); else if (count > 1) print "duplicate" }
               ' <<< "$jobs")
               if [ "$result" != success ]; then
-                echo "::error::$name must have exactly one successful job (found: ${result:-missing})"
-                return 1
+                echo "$name|${result:-missing}"
+                return
               fi
             done
           }
-          if [ "$ROOT_TESTS" = true ]; then verify_shards "Tests" "$ROOT_SHARDS"; fi
+          [ "$ROOT_TESTS" = true ] || exit 0
+          for ((try = 1; ; try++)); do
+            jobs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" --jq '.jobs[] | [.name, .run_attempt, .conclusion] | @tsv')
+            problem=$(first_problem "Tests" "$ROOT_SHARDS")
+            [ -n "$problem" ] || exit 0
+            # why: the jobs API can lag a shard that finished seconds before this job started (no conclusion yet),
+            # but needs: already waited for every shard, so only missing or pending is read again, at most 12 times.
+            case "$problem" in *"|missing" | *"|pending") ;; *) break ;; esac
+            [ "$try" -lt 12 ] || break
+            sleep 5
+          done
+          echo "::error::${problem%|*} must have exactly one successful job (found: ${problem##*|})"
+          exit 1
         env:
           GH_TOKEN: ${{ github.token }}
           ROOT_TESTS: ${{ needs.changes.outputs.root_due }}
