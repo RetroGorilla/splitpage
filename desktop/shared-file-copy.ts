@@ -58,24 +58,28 @@ function createSharedFileCopies(store: Store, files: Registry, occupied: (key: s
     return record ? { kind: "file-copy", file: fileInfo(record) } : none;
   }
 
-  async function forget(name: string): Promise<boolean> {
-    if (busyScripts.has(name)) return false;
+  async function forget(name: string, canRemove?: () => boolean, orphan = false): Promise<boolean> {
+    if (busyScripts.has(name) || canRemove?.() === false) return false;
     if (!store.read().sharedFileCopies?.some(record => scriptKey(record) === name)) return true;
     const result = await store.write(state => {
+      if (canRemove?.() === false) return false;
       state.sharedFileCopies = state.sharedFileCopies?.filter(record => scriptKey(record) !== name) ?? [];
     });
     if (result) {
       conflicts.delete(name);
       handles.delete(name);
       orphans.delete(name);
-    }
+    } else if (orphan && canRemove?.() !== false) orphans.add(name);
     return result;
   }
 
-  async function releaseOrphan(name: string): Promise<boolean> {
-    await busyScripts.get(name);
-    if (lookup(name)) orphans.add(name);
-    return forget(name);
+  async function releaseOrphan(name: string, canRemove?: () => boolean): Promise<boolean> {
+    let write = busyScripts.get(name);
+    while (write && canRemove?.() !== false) {
+      await write;
+      write = busyScripts.get(name);
+    }
+    return forget(name, canRemove, true);
   }
 
   async function write(name: string, data: Uint8Array, missing: number, mode: "check" | "overwrite" | "new" | "export", docId: string,

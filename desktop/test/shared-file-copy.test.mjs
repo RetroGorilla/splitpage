@@ -112,3 +112,25 @@ test("an erased replica cannot keep its source reserved after a desktop state wr
   assert.equal(await service.releaseOrphan(key), true);
   assert.equal(h.reopen().reserved(h.absPath), false);
 });
+
+test("orphan cleanup checks ownership when the desktop state write takes effect", async t => {
+  const h = await setup(t);
+  const writing = Promise.withResolvers();
+  const proceed = Promise.withResolvers();
+  const service = createSharedFileCopies({
+    read: h.store.read,
+    async write(mutate) {
+      writing.resolve();
+      await proceed.promise;
+      return h.store.write(mutate);
+    }
+  }, h.files, () => false);
+  let ownsRecovery = true;
+  const removal = service.releaseOrphan(key, () => ownsRecovery);
+  await writing.promise;
+  ownsRecovery = false;
+  proceed.resolve();
+  assert.equal(await removal, false);
+  assert.deepEqual(service.forPath(h.absPath), h.record);
+  assert.deepEqual(h.store.read().sharedFileCopies, [h.record]);
+});

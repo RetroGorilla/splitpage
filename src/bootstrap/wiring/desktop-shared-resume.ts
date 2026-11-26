@@ -12,6 +12,8 @@ import type { SharedSwitchOutcome } from "./shared-session.ts";
 
 declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 
+const INVALID_SAVED_RELAY = "invalid-saved-relay";
+
 export async function resumeDesktopReference(
   reference: NonNullable<DesktopPort["sharedReference"]>,
   open: (saved: DesktopSharedScriptReference) => Promise<SharedSwitchOutcome>,
@@ -26,9 +28,9 @@ export async function resumeDesktopReference(
     return outcome;
   } finally {
     const unavailable = outcome?.ok === false && outcome.reason === RETAINED_SHARED_COPY_UNAVAILABLE;
-    if (!signal.aborted && (unavailable || (reserved && outcome?.ok !== true))) {
-      const failedCopy = unavailable || outcome?.ok === false && (outcome.reason === "io" || outcome.reason === "enter-failed");
-      await reference(failedCopy ? [null, saved, "unavailable"] : [null, saved]).catch(() => false);
+    const invalidRelay = outcome?.ok === false && outcome.reason === INVALID_SAVED_RELAY;
+    if (!signal.aborted && (unavailable || invalidRelay || (reserved && outcome?.ok !== true))) {
+      await reference(unavailable ? [null, saved, "unavailable"] : [null, saved]).catch(() => false);
     }
   }
 }
@@ -39,7 +41,7 @@ export async function enterSavedReference(
   settled: () => Promise<AbortSignal>
 ): Promise<SharedSwitchOutcome> {
   const relayUrl = relaySocketUrl(address);
-  if (!relayUrl) return { ok: false, reason: RETAINED_SHARED_COPY_UNAVAILABLE };
+  if (!relayUrl) return { ok: false, reason: INVALID_SAVED_RELAY };
   return enter({ deployment, script, relayUrl, signal: await settled() });
 }
 

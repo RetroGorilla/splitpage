@@ -9,7 +9,7 @@ const COLLABORATION = ["draft-not-kept", "The shared session did not start", "Th
   "splitpage-native-replica-log", "shared-copy-erase-failed", "Splitpage-Deployment",
   "Could not reopen the local shared script.", "share-script", "share-script-modal", "Uploading script", "shared-pill", "shared-popover",
   "sharing-and-people", "leave-shared-script", "join-script-modal", "Join a shared script…", "leave-script-modal",
-  "Shared scripts on this device", "note-shared", "focus-shared", "open-shared",
+  "Shared scripts on this device", "note-shared", "focus-shared", "invalid-saved-relay",
   "file-copy-banner", "file-copy-status", "file-copy-write", "file-copy-stop", "file-copy-choice",
   "data-shared-version", "data-shared-history", "Versions kept by the relay for this shared script.", "/versions"];
 

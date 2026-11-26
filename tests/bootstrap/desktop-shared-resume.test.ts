@@ -48,9 +48,10 @@ test("desktop startup releases failed shared re-entry reservations", async t => 
   t.after(() => { stopApp(); closeApp(); });
   await bootApp();
   for (const [launch, result, cleanup] of [
-    ["open-file", "io", "unavailable"],
+    ["open-file", "io", "release"],
+    ["open-file", "enter-failed", "release"],
     ["blank", "locked", "release"],
-    ["open-shared", "io", "unavailable"],
+    ["open-shared", "io", "release"],
     ["open-shared", "locked", "release"],
     ["open-shared", RETAINED_SHARED_COPY_UNAVAILABLE, "unavailable"],
     ["open-shared", "opened", null]
@@ -111,9 +112,9 @@ test("a release build refuses a saved loopback relay reference and sends it no r
   const outcome = await resumeDesktopReference(reference,
     entry => enterSavedReference(entry, retained => enterRetainedSharedScript(restore.ports, retained), async () => lifetime.signal),
     lifetime.signal);
-  assert.deepEqual(outcome, { ok: false, reason: RETAINED_SHARED_COPY_UNAVAILABLE });
+  assert.deepEqual(outcome, { ok: false, reason: "invalid-saved-relay" });
   assert.deepEqual(restore.touched, []);
-  assert.deepEqual(calls, [[], [null, loopback, "unavailable"]]);
+  assert.deepEqual(calls, [[], [null, loopback]]);
   const socket = "ws" + relay.address.slice("http".length) + "/";
   const entry = recordingPorts();
   const retained = await enterRetainedSharedScript(entry.ports, {
