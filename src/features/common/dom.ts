@@ -28,6 +28,9 @@ export function ensureTrailingCaretSpot(container: Node | null | undefined): voi
   }
 }
 
+const generatedBrollPrefixes = new WeakSet<Element>();
+const BROLL_PREFIX_CLASS = "broll-marker-prefix";
+
 export function decorateBrollMarkers(container: Element): void {
   for (const key of container.getElementsByClassName("broll-key")) {
     const first = key.firstChild;
@@ -36,7 +39,8 @@ export function decorateBrollMarkers(container: Element): void {
     const match = /^b-roll:/i.exec(text.data);
     if (!match) continue;
     const prefix = key.ownerDocument.createElement("span");
-    prefix.className = "broll-marker-prefix";
+    prefix.className = BROLL_PREFIX_CLASS;
+    generatedBrollPrefixes.add(prefix);
     prefix.textContent = match[0];
     text.deleteData(0, match[0].length);
     key.prepend(prefix);
@@ -49,26 +53,74 @@ export function setEditableTextHtml(cell: Element, html: string): void {
   if (html.includes("broll-key")) decorateBrollMarkers(cell);
 }
 
-export function writeUndecoratedBrollSelection(cell: Element, data: DataTransfer | null): boolean {
+export function editableTextHtml(cell: Element): string {
+  const shown = cell.innerHTML;
+  if (!shown.includes(BROLL_PREFIX_CLASS)) return shown;
+  const prefixes = Array.from(cell.getElementsByClassName(BROLL_PREFIX_CLASS));
+  if (!prefixes.some(prefix => generatedBrollPrefixes.has(prefix))) return shown;
+  const copy = cell.cloneNode(true) as Element;
+  Array.from(copy.getElementsByClassName(BROLL_PREFIX_CLASS)).forEach((prefix, index) => {
+    const original = prefixes[index];
+    if (original && generatedBrollPrefixes.has(original)) prefix.replaceWith(...prefix.childNodes);
+  });
+  return copy.innerHTML;
+}
+
+export function writeUndecoratedBrollSelection(cell: Element, data: DataTransfer | null, nativeDefault = false): boolean {
   if (!data) return false;
   const doc = cell.ownerDocument;
-  const selection = doc.defaultView?.getSelection();
-  if (!selection || selection.isCollapsed || !selection.rangeCount) return false;
+  const view = doc.defaultView;
+  const selection = view?.getSelection();
+  if (!view || !selection || selection.isCollapsed || !selection.rangeCount) return false;
   const range = selection.getRangeAt(0);
-  const common = range.commonAncestorContainer;
-  if (!cell.contains(common)) return false;
-  const prefixes = cell.getElementsByClassName("broll-marker-prefix");
-  if (!Array.from(prefixes).some(prefix => range.intersectsNode(prefix))) return false;
+  if (!cell.contains(range.commonAncestorContainer)) return false;
+  const prefixes = Array.from(cell.getElementsByClassName(BROLL_PREFIX_CLASS)).filter(prefix =>
+    generatedBrollPrefixes.has(prefix) && range.intersectsNode(prefix));
+  if (!prefixes.length) return false;
 
-  const holder = doc.createElement("div");
-  holder.append(range.cloneContents());
-  for (let parent = common.nodeType === 1 ? common as Element : common.parentElement; parent && parent !== cell; parent = parent.parentElement) {
-    const copy = parent.cloneNode(false) as Element;
-    copy.append(...holder.childNodes);
-    holder.append(copy);
+  const texts = new Map<Element, Text>();
+  for (const prefix of prefixes) {
+    if (prefix.firstChild?.nodeType === 3) texts.set(prefix, prefix.firstChild as Text);
   }
-  Array.from(holder.getElementsByClassName("broll-marker-prefix")).forEach(prefix => prefix.replaceWith(...prefix.childNodes));
-  data.setData("text/html", holder.innerHTML);
-  data.setData("text/plain", selection.toString());
+  if (!texts.size) return false;
+  function point(node: Node | null, offset: number): readonly [Node | null, number] {
+    const text = node?.nodeType === 1 ? texts.get(node as Element) : undefined;
+    return text ? [text, offset ? text.length : 0] : [node, offset];
+  }
+  const anchor = point(selection.anchorNode, selection.anchorOffset);
+  const focus = point(selection.focusNode, selection.focusOffset);
+  for (const [prefix, text] of texts) prefix.replaceWith(text);
+  if (anchor[0] && focus[0]) selection.setBaseAndExtent(anchor[0], anchor[1], focus[0], focus[1]);
+
+  function restore(): void {
+    if (!selection) return;
+    const { anchorNode, anchorOffset, focusNode, focusOffset } = selection;
+    for (const [prefix, text] of texts) {
+      if (!cell.contains(text)) continue;
+      text.replaceWith(prefix);
+      prefix.append(text);
+    }
+    if (anchorNode && focusNode && cell.contains(anchorNode) && cell.contains(focusNode)) {
+      selection.setBaseAndExtent(anchorNode, anchorOffset, focusNode, focusOffset);
+    }
+  }
+
+  try {
+    const clean = selection.getRangeAt(0);
+    const common = clean.commonAncestorContainer;
+    const holder = doc.createElement("div");
+    holder.append(clean.cloneContents());
+    for (let parent = common.nodeType === 1 ? common as Element : common.parentElement; parent && parent !== cell; parent = parent.parentElement) {
+      const copy = parent.cloneNode(false) as Element;
+      copy.append(...holder.childNodes);
+      holder.append(copy);
+    }
+    data.setData("text/html", holder.innerHTML);
+    data.setData("text/plain", selection.toString());
+  } finally {
+    // why: native copy and cut must see the original text through their default action.
+    if (nativeDefault) view.setTimeout(restore, 0);
+    else restore();
+  }
   return true;
 }

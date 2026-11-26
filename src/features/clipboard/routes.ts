@@ -1,3 +1,5 @@
+import { writeUndecoratedBrollSelection } from "../common/dom.ts";
+
 interface ClipboardRoutePorts<Owner, Place, Extra> {
   readonly scriptCell: (el: Element) => boolean;
   readonly copy: (e: Pick<ClipboardEvent, "clipboardData" | "preventDefault">, cell: Element, cut: boolean) => boolean;
@@ -59,8 +61,19 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
   function copyOrCut(e: ClipboardEvent, cut: boolean): void {
     if (!open || e.defaultPrevented) return;
     const cell = cellAround(e);
-    if (!cell || !ports.scriptCell(cell)) return;
-    if (!ports.copy(e, cell, cut) || !cut) return;
+    const target = e.currentTarget;
+    const rows = target instanceof realm.Element && target.id === "rows" ? target : null;
+    if (!cell || !ports.scriptCell(cell)) {
+      if (rows) writeUndecoratedBrollSelection(rows, e.clipboardData, true);
+      return;
+    }
+    if (!ports.copy(e, cell, cut)) {
+      if (!writeUndecoratedBrollSelection(cell, e.clipboardData, true) && rows) {
+        writeUndecoratedBrollSelection(rows, e.clipboardData, true);
+      }
+      return;
+    }
+    if (!cut) return;
     const active = realm.document.activeElement;
     const fresh = active && active.closest ? active.closest(".cell-editable") : null;
     ports.afterCut(fresh || cell);

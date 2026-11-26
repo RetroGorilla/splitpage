@@ -12,6 +12,7 @@ const { render } = await import("../features/rows/render.ts");
 const { writerControls } = await import("../bootstrap/wiring/writer.ts");
 const { scriptCellOf, storedHtmlFromDom } = await import("../bootstrap/richtext.ts");
 const { domToPos } = await import("../features/common/cell-dom.ts");
+const { editableTextHtml, setEditableTextHtml } = await import("../features/common/dom.ts");
 after(closeApp);
 
 function open(visualText = "Scene") {
@@ -39,14 +40,14 @@ test("only the standard B-roll marker prefix is decorated in the editor", () => 
   assert.equal(variant.childElementCount, 0);
   assert.equal(domToPos(cell, prefix.firstChild, 0), 0);
   assert.equal(domToPos(cell, prefix.firstChild, prefix.textContent.length), 1);
-  assert.equal(storedHtmlFromDom(cell.innerHTML), html);
+  assert.equal(storedHtmlFromDom(editableTextHtml(cell)), html);
   assert.equal(currentDocument().rows[0].visualText, html);
 });
 
 test("the script cell reader reuses the stored HTML key for decorated marker text", () => {
   const markup = '<span class="broll-key" data-broll-id="bs_readback" contenteditable="false">';
-  const decorated = markup + '<span class="broll-marker-prefix">B-roll:</span></span> ';
   const stored = markup + 'B-roll:</span> ';
+  const cell = document.createElement("div");
   const parser = window.DOMParser.prototype;
   const parse = parser.parseFromString;
   let decoratedParses = 0;
@@ -57,8 +58,10 @@ test("the script cell reader reuses the stored HTML key for decorated marker tex
   try {
     const reads = Array.from({ length: 10 }, (_, i) => {
       const suffix = "0123456789".slice(0, i + 1);
+      setEditableTextHtml(cell, stored + suffix);
       const runs = scriptCellOf(stored + suffix);
-      return [runs, scriptCellOf(decorated + suffix), storedHtmlFromDom(decorated + suffix), stored + suffix];
+      const html = editableTextHtml(cell);
+      return [runs, scriptCellOf(html), storedHtmlFromDom(html), stored + suffix];
     });
     assert.equal(decoratedParses, 0);
     for (const [runs, read, html, expected] of reads) {
@@ -68,6 +71,16 @@ test("the script cell reader reuses the stored HTML key for decorated marker tex
   } finally {
     parser.parseFromString = parse;
   }
+});
+
+test("literal marker markup in pasted text is kept distinct from editor decoration", () => {
+  const marker = '<span class="broll-marker-prefix">b-roll:</span>';
+  const paste = '<textarea>' + marker + '</textarea>';
+  const cell = document.createElement("div");
+  cell.innerHTML = marker;
+  assert.equal(editableTextHtml(cell), marker);
+  assert.equal(scriptCellOf(paste).map(run => run.text).join(""), marker);
+  assert.notEqual(scriptCellOf(paste), scriptCellOf("<textarea>b-roll:</textarea>"));
 });
 
 test("Split drag and Writer Visual copy send the original B-roll markup", () => {
@@ -93,7 +106,7 @@ test("Split drag and Writer Visual copy send the original B-roll markup", () => 
       const event = new window.Event(type, { bubbles: true, cancelable: true });
       Object.defineProperty(event, transfer, { value: { setData: (format, value) => data.set(format, value) } });
       tag.dispatchEvent(event);
-      assert.equal(event.defaultPrevented, type === "copy");
+      assert.equal(event.defaultPrevented, false);
       assert.equal(data.get("text/html"), marker);
       assert.equal(data.get("text/plain"), "b-roll:");
     }

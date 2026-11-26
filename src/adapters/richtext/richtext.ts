@@ -33,11 +33,6 @@ export interface RichText {
 }
 
 const STORED_IMG_ATTRS: ReadonlySet<string> = new Set(["class", "data-blob", "data-w", "data-h", "data-mime"]);
-const BROLL_PREFIX_WRAPPER = /<span class="broll-marker-prefix">([Bb]-[Rr][Oo][Ll][Ll]:)<\/span>/g;
-
-function withoutBrollPrefixWrappers(html: string): string {
-  return html.includes('class="broll-marker-prefix"') ? html.replace(BROLL_PREFIX_WRAPPER, "$1") : html;
-}
 
 export function createRichText(ports: RichTextPorts): RichText {
   const Parser = ports.DOMParser;
@@ -54,7 +49,7 @@ export function createRichText(ports: RichTextPorts): RichText {
   }
 
   function sanitize(html: unknown): string {
-    const text = withoutBrollPrefixWrappers(html == null ? "" : String(html));
+    const text = html == null ? "" : String(html);
     const body = inertBody(text);
     const doc = body.ownerDocument;
     const out = doc.createElement("div");
@@ -67,12 +62,10 @@ export function createRichText(ports: RichTextPorts): RichText {
   }
 
   function storedHtmlFromDom<T>(html: T): T | string {
-    if (typeof html !== "string") return html;
-    const stored = withoutBrollPrefixWrappers(html);
-    if (!stored.includes("data-blob")) return stored;
-    const body = inertBody(stored);
+    if (typeof html !== "string" || html.indexOf("data-blob") === -1) return html;
+    const body = inertBody(html);
     const imgs = body.querySelectorAll("img[data-blob]");
-    if (!imgs.length) return stored;
+    if (!imgs.length) return html;
     imgs.forEach(function (img) {
       Array.from(img.attributes).forEach(function (a) {
         if (!STORED_IMG_ATTRS.has(a.name)) img.removeAttribute(a.name);
@@ -99,10 +92,7 @@ export function createRichText(ports: RichTextPorts): RichText {
     inertBody: inertBody,
     sanitize: sanitize,
     decode: decode,
-    createCellReader: function (seal, opts) {
-      const read = createCellReader(function (html) { return decode(html, opts); }, seal);
-      return html => read(typeof html === "string" ? withoutBrollPrefixWrappers(html) : html);
-    },
+    createCellReader: function (seal, opts) { return createCellReader(function (html) { return decode(html, opts); }, seal); },
     storedHtmlFromDom: storedHtmlFromDom,
     htmlToMarkdown: htmlToMarkdown,
     videoCardElement: cardElement,

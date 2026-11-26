@@ -16,10 +16,10 @@ import type { Marks, Run } from "../../core/text/runs.ts";
 import type { NativePlainMark } from "../../adapters/collab/native/format-commands.ts";
 import { domToPos, posToDom, readSelection } from "../../features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
-import { setEditableTextHtml } from "../../features/common/dom.ts";
+import { editableTextHtml, setEditableTextHtml } from "../../features/common/dom.ts";
 import { noteFieldPainted, renderRow } from "../../features/rows/render.ts";
 import { undoGesture } from "../../features/undo/routes.ts";
-import { scriptCellOf, storedHtmlFromDom } from "../richtext.ts";
+import { scriptCellOf } from "../richtext.ts";
 import { guardUnload } from "../startup/page-lifetime.ts";
 import { narrationAt, narrationSurfaceOf, shownNarrationSurface, visualTextSurface, writerNarration, writerSelectionCells } from "./native-narration-surfaces.ts";
 import { rowDrag } from "./editor-owners.ts";
@@ -623,12 +623,13 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     }
     const beat = cell.getAttribute("data-id") ?? "";
     const { from, to } = selection;
-    const marks = !text && !composing ? {} : typingMarks(scriptCellOf(cell.innerHTML), from === to ? from : from + 1);
+    const html = editableTextHtml(cell);
+    const marks = !text && !composing ? {} : typingMarks(scriptCellOf(html), from === to ? from : from + 1);
     const visual = visualTextSurface.cellAt(cell) === cell;
     return { beat, cell, surface: visual ? visualTextSurface : narrationSurfaceOf(cell), field: visual ? "visualText" : "audioText",
       selection, composing, composition: composing, text,
       units: Math.max(text.length, selection.to - selection.from), previewCaret: selection.from + text.length, range: null, deletion,
-      before: null, after: null, endsGroup: false, paint: null, html: cell.innerHTML, marks };
+      before: null, after: null, endsGroup: false, paint: null, html, marks };
   }
 
   function anchor(next: Draft): Draft | string {
@@ -792,7 +793,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (document.activeElement === buffered.cell) buffered.cell.setSelectionRange(buffered.selection.from, buffered.selection.to);
       return;
     }
-    buffered.cell.innerHTML = buffered.html;
+    setEditableTextHtml(buffered.cell, buffered.html);
     if (document.activeElement === buffered.cell || buffered.cell.closest("#writer-doc") === document.activeElement) {
       setCellSelection(buffered.cell, buffered.selection.from, buffered.selection.to);
     }
@@ -885,7 +886,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   function flushForInput(cell: Element, selection: CellRange, keepPreview = true, moveCaret = true): { cell: Element; selection: CellRange; stale?: true } | null {
     const buffered = draft;
     if (!buffered) return { cell, selection };
-    const oldHtml = cell instanceof HTMLInputElement ? cell.value : cell.innerHTML;
+    const oldHtml = cell instanceof HTMLInputElement ? cell.value : editableTextHtml(cell);
     if (buffered.cell !== cell) {
       if (cell instanceof HTMLInputElement) {
         const shown = () => documentReader.current()?.title ?? "";
@@ -907,7 +908,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const fresh = visual ? visualTextSurface.cell(beat) : narrationCell(beat, cell);
       if (!fresh) { session.refuse(STALE); return null; }
       if (original === shown()) return { cell: fresh, selection };
-      if (keepPreview) fresh.innerHTML = oldHtml;
+      if (keepPreview) setEditableTextHtml(fresh, oldHtml);
       return { cell: fresh, selection, stale: true };
     }
     const start = draftEndpoint(buffered, selection.from, 0, selection.to >= buffered.selection.from);
@@ -921,7 +922,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (from != null && to != null && from <= to) return { cell: fresh, selection: { from, to } };
     if (keepPreview) {
       if (fresh instanceof HTMLInputElement) fresh.value = oldHtml;
-      else fresh.innerHTML = oldHtml;
+      else setEditableTextHtml(fresh, oldHtml);
     }
     return { cell: fresh, selection, stale: true };
   }
@@ -1219,7 +1220,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (!direction) return null;
     const selected = cellSelection(cell);
     if (!selected || selected.from !== selected.to) return null;
-    const boundary = direction === -1 ? 0 : cellLength(scriptCellOf(cell.innerHTML));
+    const boundary = direction === -1 ? 0 : cellLength(scriptCellOf(editableTextHtml(cell)));
     return selected.from === boundary ? direction : null;
   }
 
@@ -1437,7 +1438,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (!selection || !isTitle && touchesProtectedText(cell, selection)) { session.refuse(STALE); event.preventDefault(); return; }
       if (draft?.composing) { event.preventDefault(); return; }
       if (!isTitle && selection.from !== selection.to && crossesJoin(cell, selection, joinSeams(cell))) {
-        refusedJoinComposition = { cell, selection, html: cell.innerHTML, revision: !draft && paintIsCurrent() ? native.revision() : null };
+        refusedJoinComposition = { cell, selection, html: editableTextHtml(cell), revision: !draft && paintIsCurrent() ? native.revision() : null };
         refuseJoinedEdit(cell);
         event.preventDefault();
         return;
@@ -1446,7 +1447,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       compositionRefused = false;
       if (draft && !draft.deletion && insideDraft(draft, cell, selection)) {
         clearTimeout(timer);
-        composingInside = { cell, selection, html: isTitle ? cell.value : cell.innerHTML };
+        composingInside = { cell, selection, html: isTitle ? cell.value : editableTextHtml(cell) };
         draft.composing = true;
         return;
       }
@@ -2030,10 +2031,5 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 }
 
 export function keepNativeFieldPaint(buffered: Pick<Draft, "cell" | "beat" | "field">, row: Parameters<typeof noteFieldPainted>[2] | undefined): void {
-  if (buffered.field === "title" || !row) return;
-  const html = buffered.cell.innerHTML;
-  const stored = row[buffered.field];
-  if (stored === html || (html.includes("broll-marker-prefix") && stored === storedHtmlFromDom(html))) {
-    noteFieldPainted(buffered.cell, buffered.field, row);
-  }
+  if (buffered.field !== "title" && row?.[buffered.field] === editableTextHtml(buffered.cell)) noteFieldPainted(buffered.cell, buffered.field, row);
 }

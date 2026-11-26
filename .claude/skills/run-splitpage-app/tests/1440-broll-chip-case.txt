@@ -29,8 +29,12 @@ eval document.documentElement.dataset.theme='light'
 caret #rows .cell-editable[data-id="a"][data-field="visualText"] start
 key shift ArrowRight
 expect getSelection().toString().replace(/\u200b/g,'') === 'b-roll:'
-eval window.selectionCoversLabel=chip=>{const prefix=chip.querySelector('.broll-marker-prefix');const text=document.createRange();text.selectNodeContents(chip);const label=prefix?prefix.getBoundingClientRect():text.getBoundingClientRect();return label.width>0&&Array.from(getSelection().getRangeAt(0).getClientRects()).some(rect=>Math.abs(rect.left-label.left)<1&&Math.abs(rect.right-label.right)<1&&rect.bottom>label.top&&rect.top<label.bottom)}
+eval window.labelBounds=chip=>{const prefix=chip.querySelector('.broll-marker-prefix'),range=document.createRange();if(!prefix){range.selectNodeContents(chip);return range.getBoundingClientRect()}const rendered=getComputedStyle(prefix,'::before'),probe=document.createElement('span');Object.assign(probe.style,{position:'absolute',visibility:'hidden',whiteSpace:rendered.whiteSpace,font:rendered.font,letterSpacing:rendered.letterSpacing,wordSpacing:rendered.wordSpacing});probe.textContent=JSON.parse(rendered.content.split(' / ')[0]);document.body.append(probe);range.selectNodeContents(probe);const width=range.getBoundingClientRect().width;probe.remove();const bounds=prefix.getBoundingClientRect(),left=bounds.left+parseFloat(rendered.left);return {left,right:left+width,width,top:bounds.top,bottom:bounds.bottom}}
+eval window.selectionCoversLabel=chip=>{const label=labelBounds(chip);return label.width>0&&Array.from(getSelection().getRangeAt(0).getClientRects()).some(rect=>Math.abs(rect.left-label.left)<1&&Math.abs(rect.right-label.right)<1&&rect.bottom>label.top&&rect.top<label.bottom)}
 expect selectionCoversLabel(chips('#rows')[0])
+eval window.wideLabel=document.createElement('style'); wideLabel.textContent='.broll-marker-prefix::before { letter-spacing: 3px }'; document.head.append(wideLabel)
+expect !selectionCoversLabel(chips('#rows')[0])
+eval wideLabel.remove()
 eval window.markupIsPlain=html=>html.includes('>b-roll:</span>')&&!html.includes('broll-marker-prefix')&&!html.includes('text-fill-color'); window.splitDrag=new DataTransfer(); chips('#rows')[0].dispatchEvent(new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:splitDrag}))
 expect markupIsPlain(splitDrag.getData('text/html')) && splitDrag.getData('text/plain') === 'b-roll:'
 key ArrowLeft
@@ -48,9 +52,38 @@ caret .wr-flow-visual-text start
 key shift ArrowRight
 eval window.writerCopy=new DataTransfer(); document.querySelector('.wr-flow-visual-text').dispatchEvent(new ClipboardEvent('copy',{bubbles:true,cancelable:true,clipboardData:writerCopy}))
 expect markupIsPlain(writerCopy.getData('text/html')) && writerCopy.getData('text/plain') === 'b-roll:'
+wait !!chips('.wr-flow-visual-text')[0].querySelector('.broll-marker-prefix')
+eval window.writerDrag=new DataTransfer(); chips('.wr-flow-visual-text')[0].dispatchEvent(new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:writerDrag}))
+expect markupIsPlain(writerDrag.getData('text/html')) && writerDrag.getData('text/plain') === 'b-roll:'
+eval window.selectChip=chip=>{chip.closest('.cell-editable').focus();const range=document.createRange();range.selectNode(chip);getSelection().removeAllRanges();getSelection().addRange(range)}
+eval window.prepareClipboardRead=()=>{document.getElementById('broll-clipboard-capture')?.remove();window.clipRead=null;const sink=document.createElement('textarea');sink.id='broll-clipboard-capture';sink.className='toast';sink.style.cssText='position:fixed;top:0;left:0;z-index:300';sink.addEventListener('paste',event=>{event.preventDefault();window.clipRead={html:event.clipboardData.getData('text/html'),plain:event.clipboardData.getData('text/plain')};sink.remove()},{once:true});document.body.append(sink);sink.focus()}
+eval window.clipIsClean=marker=>clipRead?.plain.trim()===marker&&clipRead.html.includes(marker)&&!clipRead.html.includes('broll-marker-prefix')&&!/text-fill-color:\s*(transparent|rgba\(0,\s*0,\s*0,\s*0\))/.test(clipRead.html)
+eval selectChip(chips('.wr-flow-visual-text')[0]); window.writerCut=document.execCommand('cut')
+expect writerCut
+expect chips('.wr-flow-visual-text').length===2 && !F.state().rows[0].visualText.includes('>b-roll:</span>')
+eval prepareClipboardRead()
+key ctrl KeyV
+expect clipIsClean('b-roll:')
 
 click #wr-close
 wait !W.on()
+eval window.mediaCell=()=>document.querySelector('#rows .cell-editable[data-field="visualText"]'); window.mediaMarker=()=>mediaCell().querySelector('.broll-key'); mediaCell().insertAdjacentHTML('beforeend',' <a class="video-embed-card" href="https://youtu.be/abc">Watch video</a>');mediaCell().dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText'}))
+expect !!mediaCell().querySelector('.video-embed-card') && F.state().rows[0].visualText.includes('video-embed-card')
+eval selectChip(mediaMarker()); window.mediaDrag=new DataTransfer(); mediaMarker().dispatchEvent(new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:mediaDrag}))
+expect mediaDrag.getData('text/html').includes('B-roll:') && !mediaDrag.getData('text/html').includes('broll-marker-prefix') && !mediaDrag.getData('text/html').includes('text-fill-color') && mediaDrag.getData('text/plain').trim()==='B-roll:'
+eval selectChip(mediaMarker()); window.mediaCopy=document.execCommand('copy')
+expect mediaCopy
+eval prepareClipboardRead()
+key ctrl KeyV
+expect clipIsClean('B-roll:')
+wait !!mediaMarker().querySelector('.broll-marker-prefix')
+eval selectChip(mediaMarker()); window.mediaCut=document.execCommand('cut')
+expect mediaCut
+expect chips('#rows').length===1 && !!mediaCell().querySelector('.video-embed-card') && F.state().rows[0].visualText.includes('video-embed-card')
+eval prepareClipboardRead()
+key ctrl KeyV
+expect clipIsClean('B-roll:')
+
 eval window.legacy='<span class="broll-key" data-broll-id="bs_legacy" contenteditable="false">B-roll: and words</span>'; window.short='<span class="broll-key" data-broll-id="bs_short" contenteditable="false">broll:</span> Harbour'; F.openFile(new File([JSON.stringify({schema:2,title:'B-roll marker variants',paragraphsDecided:true,rows:[{id:'legacy',audioText:'Alpha',visualText:legacy},{id:'short',audioText:'Beta',visualText:short}],comments:[]})],'broll-variants.splitpage'))
 wait F.state().title === 'B-roll marker variants'
 eval window.legacyChip=chips('#rows')[0]; window.shortChip=chips('#rows')[1]; window.hasVisibleText=chip=>getComputedStyle(chip).webkitTextFillColor===getComputedStyle(chip).color

@@ -33,6 +33,7 @@ import { cellLength, commentIds, normalizeCell } from "../../core/text/runs.ts";
 import { sliceCell } from "../../core/text/edits.ts";
 import { clipboardContent, clipboardEndsInBlock } from "../common/clipboard-blocks.ts";
 import { inheritOpenedTags } from "../common/clipboard-tags.ts";
+import { editableTextHtml } from "../common/dom.ts";
 import { flattenDirections } from "../../core/text/directions.ts";
 import { toHtml } from "../../core/text/html.ts";
 import {
@@ -246,7 +247,7 @@ function anchoredInText(id: string, target: PasteTarget) {
 }
 
 function liveCellHtml(cellEl: Element) {
-  let html = cellEl.innerHTML;
+  let html = editableTextHtml(cellEl);
   if (html.indexOf("\u200B") !== -1) html = html.replace(/\u200B/g, "");
   return (ports as CellClipboardPorts).text.storedHtmlFromDom(html);
 }

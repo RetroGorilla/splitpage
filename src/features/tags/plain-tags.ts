@@ -3,7 +3,7 @@ import type { TagCategoryLook } from "../../core/production/looks.ts";
 import { isBlankTagName } from "../../core/production/tags.ts";
 import { domToPos, posToDom } from "../common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
-import { isInsideProtectedTagOrLink as isInsideTagOrLink } from "../common/dom.ts";
+import { editableTextHtml, isInsideProtectedTagOrLink as isInsideTagOrLink } from "../common/dom.ts";
 import { cappedName, escapeHtml } from "../../core/document/text-policy.ts";
 import { deleteRange, insertText, marksAt, replaceText, setMark, sliceCell, typingMarks } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
@@ -132,7 +132,7 @@ function tagCaret(cellEl: Element): Range | TagCaretRefusal {
   if (!range.collapsed) {
     const selection = cellSelection(cellEl);
     if (selection) {
-      const cell = tagPorts().text.fromHtml(tagPorts().text.storedHtmlFromDom(cellEl.innerHTML));
+      const cell = tagPorts().text.fromHtml(tagPorts().text.storedHtmlFromDom(editableTextHtml(cellEl)));
       const existing = new Set(cell.flatMap(run => tagStack(run.marks)));
       let probe = namedTagId("prop", "selection probe");
       while (existing.has(probe)) probe += "x";
@@ -179,7 +179,7 @@ function afterOrInsideWord(saved: TagCaretSnapshot): boolean {
   if (!ports) return false;
   const pos = domToPos(saved.cellEl, saved.node, saved.offset);
   if (pos === null) return false;
-  const html = ports.text.storedHtmlFromDom(saved.cellEl.innerHTML.replace(ZWSP_RE, ""));
+  const html = ports.text.storedHtmlFromDom(editableTextHtml(saved.cellEl).replace(ZWSP_RE, ""));
   return !matchPlainTagKeyword(projection(ports.text.fromHtml(html)).slice(0, pos) + "prop:");
 }
 
@@ -195,7 +195,7 @@ function openSilentTag(saved: TagCaretSnapshot, cat: TagCategoryId, keyword: str
   if (pos === null) return;
   const sel = window.getSelection();
   if (!sel) return;
-  const current = ports.text.fromHtml(ports.text.storedHtmlFromDom(cellEl.innerHTML.replace(ZWSP_RE, "")));
+  const current = ports.text.fromHtml(ports.text.storedHtmlFromDom(editableTextHtml(cellEl).replace(ZWSP_RE, "")));
   const rest = node.nodeType === 3
     ? (node as Text).splitText(offset)
     : node.insertBefore(document.createTextNode(""), node.childNodes[offset] ?? null) as Text;
@@ -343,7 +343,7 @@ function caretInOpen(o: OpenPlainTag) {
 function notePlainTagInput(cellEl: Element): void {
   const o = open;
   if (!o || o.cellEl !== cellEl || !o.silent?.pending || !stillThere(o)) return;
-  const html = tagPorts().text.storedHtmlFromDom(cellEl.innerHTML.replace(ZWSP_RE, ""));
+  const html = tagPorts().text.storedHtmlFromDom(editableTextHtml(cellEl).replace(ZWSP_RE, ""));
   if (toHtml(tagPorts().text.fromHtml(html)) === o.silent.initialHtml) return;
   o.silent.pending = false;
   tagPorts().undo.breakCoalescing();
@@ -358,7 +358,7 @@ function restorePlainTag(cellEl: Element): (() => void) | null {
   return function () {
     if (open !== o) return;
     const sel = cellSelection(cellEl);
-    const cell = tagPorts().text.fromHtml(tagPorts().text.storedHtmlFromDom(cellEl.innerHTML));
+    const cell = tagPorts().text.fromHtml(tagPorts().text.storedHtmlFromDom(editableTextHtml(cellEl)));
     const start = from + width;
     if (!sel || sel.from !== sel.to || sel.from < start || existingPlainTagEnd(cell, start, true) < sel.to ||
       (!o.silent && projection(cell).slice(from, start) !== o.keyword)) {
@@ -573,7 +573,7 @@ export function maybeOpenPlainTag(e: { inputType?: string; data?: string | null 
 function charBeforeNode(cellEl: Element, node: Node) {
   const pos = domToPos(cellEl, node, 0);
   if (!pos) return "";
-  const html = tagPorts().text.storedHtmlFromDom(cellEl.innerHTML.replace(ZWSP_RE, ""));
+  const html = tagPorts().text.storedHtmlFromDom(editableTextHtml(cellEl).replace(ZWSP_RE, ""));
   return projection(tagPorts().text.fromHtml(html)).charAt(pos - 1);
 }
 
@@ -621,7 +621,7 @@ export function closePlainTag() {
   const at = caretInOpen(o);
   const start = domToPos(o.cellEl, o.span, o.span.childNodes.length);
   let to = at === null || start === null ? null : start + at - 1;
-  const html = tagPorts().text.storedHtmlFromDom(o.cellEl.innerHTML.replace(ZWSP_RE, ""));
+  const html = tagPorts().text.storedHtmlFromDom(editableTextHtml(o.cellEl).replace(ZWSP_RE, ""));
   const current = tagPorts().text.fromHtml(html, { media: true });
   if (start !== null && to !== null && existingPlainTagEnd(current, start, true) < to) {
     cancelPlainTag();
@@ -673,7 +673,7 @@ export function startPlainTags(given: PlainTagPorts): PlainTagMount {
       occurrence?.dispose();
       const editor = createTagOccurrenceEditor(cell => {
         const selection = cellSelection(cell);
-        const model = given.text.fromHtml(given.text.storedHtmlFromDom(cell.innerHTML));
+        const model = given.text.fromHtml(given.text.storedHtmlFromDom(editableTextHtml(cell)));
         openCategoryAtCaret(cell, selection ? marksAt(model, selection.from) : {});
       }, () => { if (plainTagOpen()) closePlainTag(); given.undo.breakCoalescing(); }, () => {
         given.undo.breakCoalescing();

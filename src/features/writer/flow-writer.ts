@@ -16,7 +16,7 @@ import { toHtml } from "../../core/text/html.ts";
 import { cellLength } from "../../core/text/runs.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
 import { createFlowVisualBox } from "./flow-visual-box.ts";
-import { ensureTrailingCaretSpot, setEditableTextHtml } from "../common/dom.ts";
+import { editableTextHtml, ensureTrailingCaretSpot, setEditableTextHtml } from "../common/dom.ts";
 import { clipboardContent, clipboardEndsInBlock } from "../common/clipboard-blocks.ts";
 import { inheritOpenedTags } from "../common/clipboard-tags.ts";
 
@@ -155,7 +155,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
       const html = holder.innerHTML;
       const pasted = clipboardContent(html ? ports.decode(html) : [], endsInBlock, () => data.getData("text/plain"));
       const piece = inheritOpenedTags(cell, selection, pasted.cell);
-      const old = ports.decode(ports.storedHtml(cell.innerHTML));
+      const old = ports.decode(ports.storedHtml(editableTextHtml(cell)));
       const line = piece === pasted.cell && !html && data.getData("text/plain") === "\n" ? breakLine(old, selection.from, selection.to) : null;
       const next = line ?? insertCell(deleteRange(old, selection.from, selection.to), selection.from, piece);
       const restore = ports.visualBeforeWrite?.(cell);

@@ -82,11 +82,16 @@ export function mountRowRoutes(mount: RowRoutesMount): RowRoutes {
 
   function onDragStart(e: Event): void {
     const row = closest(e, ".row");
-    if (!row) return;
     const data = (e as DragEvent).dataTransfer;
+    if (!row) {
+      if (e.target === mount.rows) writeUndecoratedBrollSelection(mount.rows, data);
+      return;
+    }
     if (!row.getAttribute("draggable")) {
       const cell = closest(e, ".cell-editable");
-      if (cell && ports.scriptCell(cell)) writeUndecoratedBrollSelection(cell, data);
+      if (cell && ports.scriptCell(cell) && !writeUndecoratedBrollSelection(cell, data)) {
+        writeUndecoratedBrollSelection(mount.rows, data);
+      }
       return;
     }
     const rowId = idOf(row);

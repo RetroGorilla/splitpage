@@ -1,7 +1,7 @@
 import type { CellPage } from "../../application/editing/cell-editing.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
-import { setEditableTextHtml } from "../common/dom.ts";
+import { editableTextHtml, setEditableTextHtml } from "../common/dom.ts";
 
 export interface CellPagePorts {
   readonly storedHtml: (html: string) => string;
@@ -19,7 +19,7 @@ export function createCellPage(ports: CellPagePorts): CellPage<Element, unknown>
     },
     attached: function (cellEl) { return cellEl.isConnected; },
     html: function (cellEl) {
-      const shown = cellEl.innerHTML;
+      const shown = editableTextHtml(cellEl);
       return ports.storedHtml(shown.indexOf("\u200B") === -1 ? shown : shown.replace(ZWSP, ""));
     },
     selection: cellSelection,

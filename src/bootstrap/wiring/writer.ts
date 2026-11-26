@@ -1,5 +1,5 @@
 import { acceptGhostOnTab, dismissesTagGhost, plainTagKeydown } from "../../features/common/tag-completion-keys.ts";
-import { setEditableTextHtml } from "../../features/common/dom.ts";
+import { editableTextHtml, setEditableTextHtml } from "../../features/common/dom.ts";
 import { startWriter } from "../../features/writer/writer.ts";
 import { writerActions as definitions } from "../../features/writer/actions.ts";
 import type { WriterFeaturePorts } from "../../features/writer/ports.ts";
@@ -138,7 +138,7 @@ export function mountWriterRuntimeFeature() {
               if (nativeEditorActive()) return;
               currentWhoList()?.cancel();
               if (currentPlainTags()?.isOpen(cell)) currentPlainTags()?.close();
-              cell.innerHTML = text.sanitizeHtml(cell.innerHTML);
+              setEditableTextHtml(cell, text.sanitizeHtml(editableTextHtml(cell)));
               writerEditing.cells().sync(cell);
               anchorBrollInLeftCell(cell);
               hideTagGhost();
@@ -226,8 +226,9 @@ export function mountWriterRuntimeFeature() {
             leaveBeat: beat => {
               if (nativeEditorActive()) return;
               if (paintGuard().painting() || undoGuard().applying() || screenIsStale()) return;
-              const clean = text.sanitizeHtml(beat.innerHTML);
-              if (clean !== text.storedHtmlFromDom(beat.innerHTML)) setEditableTextHtml(beat, clean);
+              const shown = editableTextHtml(beat);
+              const clean = text.sanitizeHtml(shown);
+              if (clean !== text.storedHtmlFromDom(shown)) setEditableTextHtml(beat, clean);
               writerEditing.cells().sync(beat);
               anchorBrollInLeftCell(beat);
             },

@@ -4,7 +4,7 @@ import { hasSetLength } from "../../core/document/timing.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import { posToDom } from "../common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
-import { ensureTrailingCaretSpot, setEditableTextHtml, writeUndecoratedBrollSelection } from "../common/dom.ts";
+import { editableTextHtml, ensureTrailingCaretSpot, setEditableTextHtml, writeUndecoratedBrollSelection } from "../common/dom.ts";
 
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 
@@ -73,7 +73,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     dirty = false;
     let next: FlowRange | null;
     saving = true;
-    try { next = ports.save(target, cell.innerHTML, first); }
+    try { next = ports.save(target, editableTextHtml(cell), first); }
     finally { saving = false; }
     if (!next || next.head.kind !== "beat") return;
     target = next;
@@ -254,11 +254,8 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
 
   function onCompositionStart(): void { composing = true; }
   function onCompositionEnd(): void { composing = false; save(); refresh(); }
-  function onCopy(event: ClipboardEvent): void {
-    if (!writeUndecoratedBrollSelection(cell, event.clipboardData)) return;
-    event.preventDefault();
-    event.stopPropagation();
-  }
+  function onCopyOrCut(event: ClipboardEvent): void { writeUndecoratedBrollSelection(cell, event.clipboardData, true); }
+  function onDragStart(event: DragEvent): void { writeUndecoratedBrollSelection(cell, event.dataTransfer); }
   function onPaste(event: ClipboardEvent): void {
     event.preventDefault();
     event.stopPropagation();
@@ -284,7 +281,8 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   const listeners: [EventTarget, string, EventListener][] = [
     [cell, "input", onInput], [cell, "keydown", onKeydown as EventListener], [cell, "beforeinput", onBeforeInput],
     [cell, "compositionstart", onCompositionStart], [cell, "compositionend", onCompositionEnd],
-    [cell, "copy", onCopy as EventListener], [cell, "paste", onPaste as EventListener], [cell, "drop", onDrop],
+    [cell, "copy", onCopyOrCut as EventListener], [cell, "cut", onCopyOrCut as EventListener],
+    [cell, "dragstart", onDragStart as EventListener], [cell, "paste", onPaste as EventListener], [cell, "drop", onDrop],
     [button, "mousedown", keepSelection], [button, "click", onButton], [note, "mousedown", keepSelection], [note, "click", onNote],
     [closeButton, "click", onClose], [doc, "mousedown", outside], [window, "resize", refreshOnEvent]
   ];

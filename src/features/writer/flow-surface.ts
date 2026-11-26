@@ -13,7 +13,7 @@ import { hasSetLength } from "../../core/document/timing.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import type { MarkName, Marks, Run } from "../../core/text/runs.ts";
 import { domKeys, domToPos, posToDom } from "../common/cell-dom.ts";
-import { setEditableTextHtml } from "../common/dom.ts";
+import { editableTextHtml, setEditableTextHtml, writeUndecoratedBrollSelection } from "../common/dom.ts";
 import { createFlowBeatMenu } from "./flow-beat-menu.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { CommonDocumentSession } from "../../application/session/document-session.ts";
@@ -550,7 +550,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (ports.editingBlocked()) return;
     const rowId = el.getAttribute("data-id");
     if (!rowId) return;
-    const stored = ports.storedHtml(el.innerHTML.replace(ZWSP_ALL, ""));
+    const stored = ports.storedHtml(editableTextHtml(el).replace(ZWSP_ALL, ""));
     const runs = ports.decode(stored);
     ports.syncBeat(rowId, runs);
     rendered.set(el, beatHtml(runs));
@@ -997,7 +997,11 @@ export function createSurface(ports: SurfacePorts): Surface {
 
   function onCopy(event: ClipboardEvent): void {
     const range = selection();
-    if (!range || isCollapsed(range) || !event.clipboardData) return;
+    if (!event.clipboardData) return;
+    if (!range || isCollapsed(range)) {
+      writeUndecoratedBrollSelection(root, event.clipboardData, true);
+      return;
+    }
     event.preventDefault();
     if (ports.clipboard) ports.clipboard.copy(range, event.clipboardData, false);
     else event.clipboardData.setData("text/plain", logicalText(ports.doc(), range, ports.flow));
@@ -1005,7 +1009,11 @@ export function createSurface(ports: SurfacePorts): Surface {
 
   function onCut(event: ClipboardEvent): void {
     const range = selection();
-    if (!range || isCollapsed(range) || !event.clipboardData) return;
+    if (!event.clipboardData) return;
+    if (!range || isCollapsed(range)) {
+      writeUndecoratedBrollSelection(root, event.clipboardData, true);
+      return;
+    }
     event.preventDefault();
     if (ports.clipboard) ports.clipboard.copy(range, event.clipboardData, true);
     else event.clipboardData.setData("text/plain", logicalText(ports.doc(), range, ports.flow));
@@ -1241,7 +1249,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     ports.doc().rows.forEach(function (row) {
       const el = beatEl(row.id);
       if (!el) { problems.push("beat " + row.id + " has no element"); return; }
-      const stored = ports.storedHtml(el.innerHTML.replace(ZWSP_ALL, ""));
+      const stored = ports.storedHtml(editableTextHtml(el).replace(ZWSP_ALL, ""));
       const shown = projection(ports.decode(stored));
       const held = projection(cellOf(row));
       if (shown !== held) problems.push("beat " + row.id + " shows " + JSON.stringify(shown) + " but holds " + JSON.stringify(held));
@@ -1257,6 +1265,7 @@ export function createSurface(ports: SurfacePorts): Surface {
     [root, "beforeinput", onBeforeInput],
     [root, "input", onInput],
     [root, "keydown", onKeydown as EventListener],
+    [root, "dragstart", (event: Event) => { writeUndecoratedBrollSelection(root, (event as DragEvent).dataTransfer); }],
     ...ports.clipboard ? [] : [
       [root, "copy", onCopy as EventListener] as [EventTarget, string, EventListener],
       [root, "cut", onCut as EventListener] as [EventTarget, string, EventListener],

@@ -1,5 +1,6 @@
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { addGalleryPicture, isOtherFileLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
+import { editableTextHtml } from "../common/dom.ts";
 
 import type { PastePlace, BeatMedia, BeatMediaPorts } from "./ports.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
@@ -41,11 +42,11 @@ export function compressImageFile(file: Blob | null | undefined, maxDim: number,
 }
 
 function capturePastePlace(cellEl: Element) {
-  return { html: (ports as BeatMediaPortUse).text.storedHtmlFromDom(cellEl.innerHTML), sel: (ports as BeatMediaPortUse).selection.of(cellEl) };
+  return { html: (ports as BeatMediaPortUse).text.storedHtmlFromDom(editableTextHtml(cellEl)), sel: (ports as BeatMediaPortUse).selection.of(cellEl) };
 }
 
 function restorePastePlace(cellEl: Element, place: PastePlace) {
-  const unchanged = place.sel && (ports as BeatMediaPortUse).text.storedHtmlFromDom(cellEl.innerHTML) === place.html;
+  const unchanged = place.sel && (ports as BeatMediaPortUse).text.storedHtmlFromDom(editableTextHtml(cellEl)) === place.html;
   (ports as BeatMediaPortUse).selection.set(cellEl, unchanged ? (place.sel as CellRange).from : Infinity, unchanged ? (place.sel as CellRange).to : Infinity);
 }
 

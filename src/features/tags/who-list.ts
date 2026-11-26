@@ -7,7 +7,7 @@ import { OBJ, projection, whoName } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
 import { insertWho, startsWho } from "../../core/text/who.ts";
 import { cellSelection } from "../common/cell-selection.ts";
-import { isInsideTagOrLink } from "../common/dom.ts";
+import { editableTextHtml, isInsideTagOrLink } from "../common/dom.ts";
 import type { WhoListMount, WhoListPorts } from "./ports.ts";
 
 const ZWSP_RE = new RegExp(String.fromCharCode(0x200B), "g");
@@ -54,7 +54,7 @@ export function startWhoList(ports: WhoListPorts): WhoListMount {
   function listEl(): HTMLElement | null { return document.getElementById("who-list"); }
 
   function cellNow(cellEl: Element): Run[] {
-    return ports.text.fromHtml(ports.text.storedHtmlFromDom(cellEl.innerHTML.replace(ZWSP_RE, "")));
+    return ports.text.fromHtml(ports.text.storedHtmlFromDom(editableTextHtml(cellEl).replace(ZWSP_RE, "")));
   }
 
   function caretIn(cellEl: Element): number | null {

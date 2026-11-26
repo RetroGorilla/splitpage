@@ -17,7 +17,7 @@ import { sceneHeaderHtml, sceneRowEntries } from "./scene-rows.ts";
 import { sceneGroups } from "../../core/document/scenes.ts";
 import { videoLinkLabel } from "../../core/document/gallery.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
-import { decorateBrollMarkers, ensureTrailingCaretSpot } from "../common/dom.ts";
+import { decorateBrollMarkers, editableTextHtml, ensureTrailingCaretSpot } from "../common/dom.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import { writerCaretBeat, writerFocusTarget } from "../common/writer-focus.ts";
 import { safeHref } from "../../core/document/text-policy.ts";
@@ -1124,7 +1124,7 @@ export function typeAtDirectionEdge(cellEl: Element, text: string): Element | nu
   const between = node.nodeType === 1 && (holdsDirection(node.childNodes[offset - 1]) || holdsDirection(node.childNodes[offset]));
   if (!inSpan && !between) return null;
   const at0 = cellSelection(cellEl);
-  if (!at0 || at0.from !== at0.to || insideDirection(ports.text.fromHtml(ports.text.storedHtmlFromDom(cellEl.innerHTML)), at0.from)) return null;
+  if (!at0 || at0.from !== at0.to || insideDirection(ports.text.fromHtml(ports.text.storedHtmlFromDom(editableTextHtml(cellEl))), at0.from)) return null;
   let typed = false;
   const fresh = throughModel(cellEl, function (cell, sel) {
     if (!sel || sel.from !== sel.to || insideDirection(cell, sel.from)) return null;
@@ -1143,7 +1143,7 @@ export function typeAtDirectionEdge(cellEl: Element, text: string): Element | nu
 export function cellFormatState(cellEl: Element): Record<string, boolean> | null {
   let read: () => { cell: Run[]; media: DraftMedia | null };
   if (ports.draft.isScript(cellEl)) {
-    const html = ports.text.storedHtmlFromDom(cellEl.innerHTML);
+    const html = ports.text.storedHtmlFromDom(editableTextHtml(cellEl));
     if (/<img|video-embed-card/.test(html)) return null;
     read = function () { return { cell: ports.text.fromHtml(html), media: null }; };
   } else if (ports.draft.isDraft(cellEl)) {
@@ -1254,7 +1254,7 @@ export function handleToolbarCmd(btn: Element, cellOverride?: HTMLElement, wrapO
     const includesTag = tsel.rangeCount && Array.from(cellEl.querySelectorAll(".tag-anchor")).some(tag => tsel.getRangeAt(0).intersectsNode(tag));
     if (tsel.rangeCount && (tsel.isCollapsed || cellEl.getAttribute("data-field") === "visualText" || includesTag) && rangeInside(tsel.getRangeAt(0), cellEl)) {
       const selection = cellSelection(cellEl);
-      const cell = ports.text.fromHtml(ports.text.storedHtmlFromDom(cellEl.innerHTML));
+      const cell = ports.text.fromHtml(ports.text.storedHtmlFromDom(editableTextHtml(cellEl)));
       ports.actions.invoke("tag-selection", "button", {
         caret: cellEl,
         marks: selection ? marksForTyping(cellEl, cell, selection.from) : {}
