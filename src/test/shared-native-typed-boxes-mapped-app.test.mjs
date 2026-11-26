@@ -366,3 +366,18 @@ for (const reply of [false, true]) for (const order of orders) {
     else assert.equal(need("#comment-modal").hidden, true);
   });
 }
+
+test("a shared Production redraw keeps a focused tag draft without matching typed boxes across the whole page", async t => {
+  await enter(t);
+  openMug();
+  const box = need(tagBox("notes"));
+  box.focus();
+  box.value = "Wide shot";
+  box.setSelectionRange(2, 4);
+  const whole = document.querySelectorAll, asked = [];
+  document.querySelectorAll = function (selector) { asked.push(selector); return whole.call(this, selector); };
+  try { renderProduction(); } finally { document.querySelectorAll = whole; }
+  const again = need(tagBox("notes"));
+  assert.deepEqual([again.value, document.activeElement === again, again.selectionStart, again.selectionEnd], ["Wide shot", true, 2, 4]);
+  assert.deepEqual(asked.filter(selector => selector.includes(".tag-notes-input") && selector.includes(".tag-person-input")), []);
+});

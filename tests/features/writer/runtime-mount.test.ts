@@ -6,6 +6,7 @@ import { startWriter } from "../../../src/features/writer/writer.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeWriterPorts } from "../fakes.ts";
+import { deepFreeze } from "../../../src/core/document/freeze.ts";
 
 function harness() {
   Object.assign(globalThis, { MutationObserver: window.MutationObserver, CSS: { escape: (s: string) => s } });
@@ -107,6 +108,57 @@ test("writer runtime opens comments before opening, schedules its existing idle 
   } finally {
     second.dispose();
   }
+});
+
+test("a Writer repaint writes contenteditable only when editing permission changes", () => {
+  const h = harness();
+  const writer = startWriter(h.ports);
+  try {
+    writer.openWriter();
+    const root = document.getElementById("writer-doc") as HTMLElement;
+    const writes: string[] = [];
+    const setAttribute = root.setAttribute.bind(root);
+    root.setAttribute = (name: string, value: string) => { if (name === "contenteditable") writes.push(value); setAttribute(name, value); };
+    writer.renderWriter();
+    writer.renderWriter();
+    assert.equal(root.getAttribute("contenteditable"), "true");
+    assert.deepEqual(writes, []);
+    h.state.allowed = false;
+    writer.renderWriter();
+    writer.renderWriter();
+    assert.equal(root.getAttribute("contenteditable"), "false");
+    assert.deepEqual(writes, ["false"]);
+    h.state.allowed = true;
+    writer.renderWriter();
+    assert.equal(root.getAttribute("contenteditable"), "true");
+    assert.deepEqual(writes, ["false", "true"]);
+  } finally { writer.dispose(); }
+});
+
+test("every Writer paint of the same frozen document repaints and writes a title that lost focus in between", () => {
+  const h = harness(), create = h.ports.flow.create;
+  const current = h.ports.document.current();
+  assert.ok(current);
+  const shown = deepFreeze(structuredClone({ ...current, title: "Shared" }));
+  let repaints = 0;
+  const writer = startWriter({ ...h.ports, document: { ...h.ports.document, current: () => shown },
+    flow: { ...h.ports.flow, create: (...args) => {
+      const flow = create(...args);
+      return { ...flow, repaint: (restore?: boolean) => { repaints++; flow.repaint(restore); } };
+    } } });
+  try {
+    writer.openWriter();
+    const title = document.getElementById("writer-title") as HTMLInputElement;
+    title.value = "stale";
+    title.focus();
+    repaints = 0;
+    writer.paintWriterDraw(writer.drawWriter());
+    assert.equal(title.value, "stale");
+    title.blur();
+    writer.renderWriter();
+    assert.equal(repaints, 2);
+    assert.equal(title.value, "Shared");
+  } finally { writer.dispose(); }
 });
 
 test("writer capture guard is removed on dispose and remount refuses once before bubble listeners", () => {

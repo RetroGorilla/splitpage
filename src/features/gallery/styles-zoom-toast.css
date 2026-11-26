@@ -1,4 +1,4 @@
-  body:has(.scene-gallery-zoom:not([hidden])) #toast-host {
+  body:has(.scene-gallery-zoom:not([hidden])) #toast-host:has(> *) {
     bottom: calc(60px + env(safe-area-inset-bottom));
   }.bundle-progress {
   position: fixed;

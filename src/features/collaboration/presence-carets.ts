@@ -22,7 +22,12 @@ export interface PeerCaretMark {
 }
 
 const PAINTED = "#rows, #writer";
-const MEASURED = "#rows, #writer-doc, #writer .wr-flow-visual-text";
+
+// why: a selector list with a descendant part matches every element of the page, on every keystroke's frame
+function measuredRoots(document: Document): Element[] {
+  const roots = ["rows", "writer-doc"].map(id => document.getElementById(id)).filter(root => root !== null);
+  return [...roots, ...document.getElementById("writer")?.querySelectorAll(".wr-flow-visual-text") ?? []];
+}
 const SHOWN_TEXT = { split: "#rows", writer: "#writer-doc, .wr-flow-visual-box" } as const;
 
 function paintsShownText(document: Document, records: readonly MutationRecord[]): boolean {
@@ -179,7 +184,7 @@ export function mountPresenceCarets(ports: PresenceCaretsPorts): () => void {
 
   function watchSizes(): void {
     if (!resized) return;
-    for (const root of document.querySelectorAll(MEASURED)) {
+    for (const root of measuredRoots(document)) {
       if (sized.has(root)) continue;
       sized.add(root);
       resized.observe(root);

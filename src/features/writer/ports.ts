@@ -38,6 +38,7 @@ export interface FlowWriter {
   readonly isCurrent: () => boolean;
   readonly finish: () => FlowRange | null;
   readonly repaint: (restore?: boolean) => void;
+  readonly placeVisualAside: () => void;
   readonly caret: (rowId: string, offset: number | "end") => void;
   readonly format: (command: string) => void;
   readonly marks: () => Record<string, boolean>;

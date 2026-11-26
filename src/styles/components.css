@@ -746,7 +746,7 @@
   .annotate-swatch { width: 36px; height: 36px; }
   .annotate-swatch::before { inset: 7px; }
 }
-body:has(.annotate-overlay:not([hidden])) #toast-host {
+body:has(.annotate-overlay:not([hidden])) #toast-host:has(> *) {
   bottom: calc(52px + env(safe-area-inset-bottom));
 }
 .add-row-bar { position: relative; padding: 18px 0 var(--space-4); display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
@@ -891,7 +891,8 @@ body:has(.annotate-overlay:not([hidden])) #toast-host {
   z-index: 200;
   align-items: center;
 }
-body:has([role="menu"]:not([hidden]), .anchor-popover, .link-popover:not([hidden]), .video-popover:not([hidden])) #toast-host {
+/* why: an empty host is checked first, so typing does not rescan the whole page for open menus */
+body:has([role="menu"]:not([hidden]), .anchor-popover, .link-popover:not([hidden]), .video-popover:not([hidden])) #toast-host:has(> *) {
   z-index: 20;
 }
 .toast {

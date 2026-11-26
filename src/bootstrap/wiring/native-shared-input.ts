@@ -28,7 +28,7 @@ import { notices } from "./ports/effects.ts";
 import { NATIVE_REMOVED_TYPING } from "./ports/shared-command-notices.ts";
 import { editAllowed, sessionStamps } from "./session-owner.ts";
 import { sharedUndoRoute } from "./undo.ts";
-import { writerControls, writerFlowPorts } from "./writer.ts";
+import { repaintWriterAfterPublish, writerControls, writerFlowPorts } from "./writer.ts";
 import { currentWhoList } from "./who-list.ts";
 
 interface NativeInputPorts {
@@ -294,7 +294,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (event.kind === "size" && event.state !== "full") fullRefused = false;
   });
   const stopPaint = session.subscribe(() => {
-    writerControls()?.renderWriter();
+    repaintWriterAfterPublish();
     const title = documentReader.current()?.title ?? "";
     for (const id of ["doc-title", "writer-title"]) {
       const input = document.getElementById(id);

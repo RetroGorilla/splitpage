@@ -237,6 +237,26 @@ test("a Writer visual box made after tracking starts in Split is watched for siz
   dispose();
 });
 
+test("a redraw after typing in the Writer finds its measured roots without matching every element of the page", async t => {
+  const h = harness(t);
+  const dispose = mountPresenceCarets(h.ports);
+  h.online();
+  h.el("writer").hidden = false;
+  h.receive([peer({ view: "writer" })]);
+  h.flush();
+  const whole = h.document.querySelectorAll, asked: string[] = [];
+  h.document.querySelectorAll = function (this: Document, selector: string) { asked.push(selector); return whole.call(this, selector); } as typeof whole;
+  const beat = h.document.querySelector("#writer-doc .wr-beat") as HTMLElement;
+  (beat.firstChild as Text).data = "Hello, world";
+  await Promise.resolve();
+  h.setEnds({ anchor: 5, head: 5 });
+  assert.equal(h.flush(), 1);
+  assert.deepEqual(h.caretAt(), ["150px", "300px", "20px"]);
+  assert.deepEqual(asked, []);
+  assert.deepEqual(h.observed.map(root => root.id || root.className), ["rows", "writer-doc", "wr-flow-visual-text"]);
+  dispose();
+});
+
 test("marks skip peers without a caret, a painted cell, a resolved position, or a place inside the view", t => {
   const h = harness(t);
   const view = { x: 0, y: 0, width: 800, height: 600 };

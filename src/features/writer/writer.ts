@@ -73,7 +73,9 @@ export function paintWriterDraw(draw: ReturnType<typeof drawWriter>) {
     const title = (document.getElementById("writer-title") as HTMLInputElement);
     if (document.activeElement !== title) title.value = draw.title;
     title.readOnly = draw.readOnly;
-    doc.setAttribute("contenteditable", draw.readOnly ? "false" : "true");
+    const editable = draw.readOnly ? "false" : "true";
+    // why: rewriting contenteditable, even unchanged, restyles every beat of the Writer on each repaint
+    if (doc.getAttribute("contenteditable") !== editable) doc.setAttribute("contenteditable", editable);
     flowWriter.repaint();
     updateWriterStats();
   }
