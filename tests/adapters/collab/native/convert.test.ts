@@ -26,7 +26,19 @@ function readBack(document: ValidatedDocument): ValidatedDocument {
   return migrateRows(structuredClone(late.reader.document()));
 }
 
+const escapedAttributes: Record<string, readonly (readonly [string, string, string])[]> = {
+  "attribute-cases.splitpage": [
+    ["less", 'data-tag-name="A < B"', 'data-tag-name="A &lt; B"'],
+    ["href", 'href="https://example.com/?q=<>', 'href="https://example.com/?q=&lt;&gt;']
+  ],
+  "quoted-tag.splitpage": [["quote-row", 'data-tag-name="A > B"', 'data-tag-name="A &gt; B"']],
+  "quoted-who.splitpage": [["quote-row", 'data-who="Mira > Nia"', 'data-who="Mira &gt; Nia"']]
+};
+
 const knownDifferences: Record<string, string> = {
+  ...Object.fromEntries(Object.keys(escapedAttributes).map(name => [
+    name, "the shared projection writes newly serialized attributes with escaped angle brackets"
+  ])),
   "merge-text-unicode-and-atoms.json/inputs/base": "the rich-text reader removes the stored U+200B in visual text",
   "merge-text-unicode-and-atoms.json/inputs/mine": "the rich-text reader removes the stored U+200B in visual text",
   "merge-text-unicode-and-atoms.json/inputs/theirs": "the rich-text reader removes the stored U+200B in visual text",
@@ -36,6 +48,11 @@ const knownDifferences: Record<string, string> = {
 
 function expectedOf(name: string, source: DocumentShape): DocumentShape {
   const expected = structuredClone(source);
+  for (const [id, before, after] of escapedAttributes[name] ?? []) {
+    const row = expected.rows.find(row => row.id === id);
+    assert.ok(row && typeof row.visualText === "string" && row.visualText.includes(before), id);
+    row.visualText = row.visualText.replace(before, after);
+  }
   if (name.startsWith("merge-text-unicode-and-atoms.json/")) {
     const row = expected.rows[3]; assert.ok(row && typeof row.visualText === "string");
     row.visualText = row.visualText.replace(/\u200b/g, "");
@@ -52,7 +69,7 @@ function expectedOf(name: string, source: DocumentShape): DocumentShape {
   return expected;
 }
 
-test("conversion round trip: all 291 real-shaped fixtures read back, five known differences", () => {
+test("conversion round trip: all 291 real-shaped fixtures read back, eight known differences", () => {
   let differing = 0;
   assert.equal(fixtures.length, 291);
   for (const item of fixtures) {

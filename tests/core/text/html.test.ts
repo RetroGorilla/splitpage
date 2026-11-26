@@ -31,7 +31,7 @@ test("text and attributes are escaped; NBSP is written as an entity", () => {
   assert.equal(toHtml([T("l", { href: "https://e.x/a" + NBSP + "b?a=\"1\"&b" })]),
     '<a href="https://e.x/a&nbsp;b?a=&quot;1&quot;&amp;b" target="_blank" rel="noopener">l</a>');
   assert.equal(toHtml([T("m", { tag: "t:cast:A & \"B\"" })]), tagSpan("cast", "A &amp; &quot;B&quot;", "m"));
-  assert.equal(toHtml([T("c", { cmt: ["c<1>"] })]), '<span class="cmt-anchor" data-cmt="c<1>">c</span>');
+  assert.equal(toHtml([T("c", { cmt: ["c<1>"] })]), '<span class="cmt-anchor" data-cmt="c&lt;1&gt;">c</span>');
 });
 
 test("Unicode text is written as it is", () => {
