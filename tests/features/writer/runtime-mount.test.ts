@@ -109,6 +109,58 @@ test("writer runtime opens comments before opening, schedules its existing idle 
   }
 });
 
+test("a Writer repaint writes contenteditable only when editing permission changes", () => {
+  const h = harness();
+  const writer = startWriter(h.ports);
+  try {
+    writer.openWriter();
+    const root = document.getElementById("writer-doc") as HTMLElement;
+    const writes: string[] = [];
+    const setAttribute = root.setAttribute.bind(root);
+    root.setAttribute = (name: string, value: string) => { if (name === "contenteditable") writes.push(value); setAttribute(name, value); };
+    writer.renderWriter();
+    writer.renderWriter();
+    assert.equal(root.getAttribute("contenteditable"), "true");
+    assert.deepEqual(writes, []);
+    h.state.allowed = false;
+    writer.renderWriter();
+    writer.renderWriter();
+    assert.equal(root.getAttribute("contenteditable"), "false");
+    assert.deepEqual(writes, ["false"]);
+    h.state.allowed = true;
+    writer.renderWriter();
+    assert.equal(root.getAttribute("contenteditable"), "true");
+    assert.deepEqual(writes, ["false", "true"]);
+  } finally { writer.dispose(); }
+});
+
+test("a second Writer paint in the same task repaints only when the document, permission or Writer DOM changed", async () => {
+  const h = harness(), create = h.ports.flow.create;
+  let repaints = 0;
+  const writer = startWriter({ ...h.ports, flow: { ...h.ports.flow, create: (...args) => {
+    const flow = create(...args);
+    return { ...flow, repaint: (restore?: boolean) => { repaints++; flow.repaint(restore); } };
+  } } });
+  try {
+    writer.openWriter();
+    await Promise.resolve();
+    const root = document.getElementById("writer-doc") as HTMLElement;
+    repaints = 0;
+    writer.renderWriter();
+    writer.paintWriterDraw(writer.drawWriter());
+    assert.equal(repaints, 1, "the same document painted twice in one task repaints once");
+    root.append(document.createElement("span"));
+    writer.renderWriter();
+    assert.equal(repaints, 2, "a Writer DOM change since the last paint repaints");
+    h.state.allowed = false;
+    writer.renderWriter();
+    assert.equal(repaints, 3, "a permission change repaints");
+    await Promise.resolve();
+    writer.renderWriter();
+    assert.equal(repaints, 4, "a paint in a later task repaints");
+  } finally { writer.dispose(); }
+});
+
 test("writer capture guard is removed on dispose and remount refuses once before bubble listeners", () => {
   const h = harness();
   h.state.allowed = false;

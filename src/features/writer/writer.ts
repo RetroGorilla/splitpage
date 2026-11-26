@@ -70,13 +70,38 @@ export function paintWriterDraw(draw: ReturnType<typeof drawWriter>) {
     reopenOnRedo = null;
   }
   if (flowWriter) {
+    const painting = (currentDocument as WriterCurrentDocument)();
+    if (paintedThisTask(painting, draw)) return;
     const title = (document.getElementById("writer-title") as HTMLInputElement);
     if (document.activeElement !== title) title.value = draw.title;
     title.readOnly = draw.readOnly;
-    doc.setAttribute("contenteditable", draw.readOnly ? "false" : "true");
+    const editable = draw.readOnly ? "false" : "true";
+    // why: rewriting contenteditable, even unchanged, restyles every beat of the Writer on each repaint
+    if (doc.getAttribute("contenteditable") !== editable) doc.setAttribute("contenteditable", editable);
     flowWriter.repaint();
     updateWriterStats();
+    markPainted(painting, draw);
   }
+}
+
+let lastPaint: { readonly doc: WriterDocument; readonly draw: ReturnType<typeof drawWriter>; readonly writer: FlowWriter } | null = null;
+let writerMutations: MutationObserver | null = null;
+
+// why: one publish repaints the Writer from two subscribers; the second, with the same document and an untouched DOM,
+// redid every beat's diff and the caret placement for nothing
+function paintedThisTask(painting: WriterDocument | null, draw: ReturnType<typeof drawWriter>): boolean {
+  const last = lastPaint;
+  if (!last || !writerMutations || !painting || last.writer !== flowWriter || last.doc !== painting) return false;
+  if (last.draw.title !== draw.title || last.draw.readOnly !== draw.readOnly) return false;
+  return writerMutations.takeRecords().length === 0;
+}
+
+function markPainted(painting: WriterDocument | null, draw: ReturnType<typeof drawWriter>): void {
+  if (!writerMutations || !painting || !flowWriter) return;
+  writerMutations.takeRecords();
+  const mark = { doc: painting, draw, writer: flowWriter };
+  lastPaint = mark;
+  queueMicrotask(() => { if (lastPaint === mark) lastPaint = null; });
 }
 
 let writerWordTotal = 0;
@@ -219,6 +244,10 @@ function attachFlowWriter() {
   root.setAttribute("tabindex", "0");
   flowWriter = flowMaker.create(root, updateWriterFormatState, (dir) => { flowUndoStep?.(dir); });
   stopWriterLinks = mountWriterLinks();
+  if (window.MutationObserver) {
+    writerMutations = new window.MutationObserver(() => { lastPaint = null; });
+    writerMutations.observe(root, { childList: true, subtree: true, characterData: true, attributes: true });
+  }
 }
 
 function detachFlowWriter() {
@@ -227,6 +256,9 @@ function detachFlowWriter() {
   if (flowWriter.dispose() === false) return false;
   stopWriterLinks?.();
   stopWriterLinks = null;
+  writerMutations?.disconnect();
+  writerMutations = null;
+  lastPaint = null;
   flowWriter = null;
   updateWriterFormatState();
   const root = (document.getElementById("writer-doc") as HTMLElement);

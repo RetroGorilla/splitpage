@@ -786,6 +786,13 @@ function unsavedTyping(el: TypedBox): boolean {
   return findTagByKey(el.getAttribute("data-key"))?.notes !== cappedLongText(plainText(el.value), 2000);
 }
 
+// why: one '#root .box' selector list makes the browser match every element of the page, scripts of 300 beats included
+function typedBoxesIn(rootIds: readonly string[]): TypedBox[] {
+  const found = new Set<TypedBox>(), selector = TYPED_BOXES.join(", ");
+  for (const id of rootIds) for (const box of document.getElementById(id)?.querySelectorAll<TypedBox>(selector) ?? []) found.add(box);
+  return [...found].sort((a, b) => a === b ? 0 : a.compareDocumentPosition(b) & a.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+}
+
 let typedLife: { readonly ports: TagPanelPorts | null; readonly shared: object; readonly epoch: number } | null = null;
 
 function keepingTyped(shared: object, rootIds: readonly string[], draw: () => void): void {
@@ -794,8 +801,7 @@ function keepingTyped(shared: object, rootIds: readonly string[], draw: () => vo
   typedLife = { ports, shared, epoch };
   if (!sameLife) typed().clear();
   const active = document.activeElement;
-  const roots = rootIds.map(id => "#" + id), selector = roots.flatMap(root => TYPED_BOXES.map(box => root + " " + box)).join(", ");
-  const boxes = Array.from(document.querySelectorAll<TypedBox>(selector));
+  const roots = rootIds.map(id => "#" + id), boxes = typedBoxesIn(rootIds);
   if (!sameLife) {
     // why: a draw that renders nothing leaves the boxes standing, and their text belongs to the lifetime before
     for (const el of boxes) el.value = el.defaultValue;
