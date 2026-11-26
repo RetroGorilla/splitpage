@@ -87,6 +87,19 @@ ID from `list`. `delete <script-id>` stops sharing and deletes that script from
 the relay. The output of `issue` and `reset` grants access. Share it privately
 with the intended recipient.
 
+Revoking a guest device stops that device credential from working. Anyone with the
+active guest link and password can join again. To withdraw guest access, use
+**Reset link** in Splitpage or `reset` in the CLI, then share the new link only
+with the intended recipients.
+
+When a returning copy needs a replacement credential, the app sends a HEAD
+request to `/api/scripts/<script-id>/password-exchange` to check that the stored
+guest link is still active. The relay checks the link again at password exchange.
+The HEAD budget is 60 requests per minute per connecting IP address. A reverse
+proxy or tunnel shares that budget across clients connecting through its address.
+Over-budget checks return HTTP 429 with `Retry-After: 60`, and the app offers a
+retry after temporary failures.
+
 ## Back up and rehearse a restore
 
 1. While the relay is running, run

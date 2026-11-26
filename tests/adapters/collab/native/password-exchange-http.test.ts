@@ -10,7 +10,7 @@ import { scriptAccess } from "../../../../collab-server/access.ts";
 import { ownerRequests } from "../../../../collab-server/owner-http.ts";
 import { MAX_DEVICE_CREDENTIALS_PER_SCRIPT, openWriter } from "../../../../collab-server/storage.ts";
 
-test("password exchange reports device capacity with its own retry interval and reason", async t => {
+test("recovery checks use a per-client budget separate from password exchange", async t => {
   const directory = mkdtempSync(join(tmpdir(), "splitpage-password-http-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   using db = openWriter(directory);
@@ -39,9 +39,21 @@ test("password exchange reports device capacity with its own retry interval and 
   await once(server, "listening");
   const address = server.address();
   assert.ok(address && typeof address === "object");
-  const response = await fetch(`http://127.0.0.1:${address.port}/api/scripts/${scriptId}/password-exchange`, {
+  const endpoint = `http://127.0.0.1:${address.port}/api/scripts/${scriptId}/password-exchange`;
+  const authorization = "Bearer " + guest.token;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const target = attempt % 2 ? endpoint : endpoint.replace(scriptId, "unknown-script");
+    assert.equal((await fetch(target, { method: "HEAD", headers: { Authorization: "Bearer invalid", Origin: origin } })).status, 403);
+  }
+  const limited = await fetch(endpoint, {
+    method: "HEAD", headers: { Authorization: authorization, Origin: origin, "X-Forwarded-For": "192.0.2.1" }
+  });
+  assert.equal(limited.status, 429);
+  assert.equal(limited.headers.get("Retry-After"), "60");
+  assert.equal(limited.headers.get("Access-Control-Allow-Origin"), origin);
+  const response = await fetch(endpoint, {
     method: "POST",
-    headers: { Authorization: "Bearer " + guest.token, "Content-Type": "application/json", Origin: origin },
+    headers: { Authorization: authorization, "Content-Type": "application/json", Origin: origin },
     body: JSON.stringify({ password })
   });
   assert.equal(response.status, 429);

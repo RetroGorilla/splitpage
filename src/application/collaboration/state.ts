@@ -40,6 +40,7 @@ export interface CollaborationSnapshot {
   readonly relay: CollaborationRelayState;
   readonly pictures: CollaborationPictureCounts;
   readonly refusal: CollaborationPermanentRefusal | null;
+  readonly passwordRecoveryCheck: "checking" | "retryable" | null;
   readonly mergeTooLarge: string | null;
   readonly offlineClashes: readonly OfflineClashEntry[];
 }
@@ -58,6 +59,7 @@ export interface CollaborationState extends CollaborationReads {
   readonly setPictures: (pictures: CollaborationPictureCounts) => void;
   readonly setRefusal: (reason: CollaborationPermanentRefusal) => void;
   readonly clearRefusal: () => void;
+  readonly setPasswordRecoveryCheck: (check: NonNullable<CollaborationSnapshot["passwordRecoveryCheck"]>) => void;
   readonly setMergeTooLarge: (message: string) => void;
   readonly setOfflineClashes: (clashes: readonly OfflineClash[]) => void;
   readonly dismissOfflineClashes: () => void;
@@ -76,6 +78,7 @@ export const PERMANENT_COLLABORATION_REFUSALS: readonly CollaborationPermanentRe
 ]);
 
 export const MERGE_TOO_LARGE_MESSAGE = "Your changes could not sync because combining the copies would exceed the 15 MB limit. You can still read your local copy. Export it as a fresh .splitpage project to start a new shared session.";
+export const PASSWORD_RECOVERY_UNREACHABLE = "Could not reach the relay. Check your connection and try again.";
 
 export const IDLE_COLLABORATION_SNAPSHOT: CollaborationSnapshot = Object.freeze({
   active: false,
@@ -84,6 +87,7 @@ export const IDLE_COLLABORATION_SNAPSHOT: CollaborationSnapshot = Object.freeze(
   relay: Object.freeze({ connected: false, firstSyncDone: false, pendingChangeCount: 0 }),
   pictures: Object.freeze({ checking: 0, uploading: 0, downloading: 0 }),
   refusal: null,
+  passwordRecoveryCheck: null,
   mergeTooLarge: null,
   offlineClashes: Object.freeze([])
 });
@@ -137,6 +141,7 @@ function sameSnapshot(a: CollaborationSnapshot, b: CollaborationSnapshot): boole
     && sameRelay(a.relay, b.relay)
     && samePictures(a.pictures, b.pictures)
     && a.refusal === b.refusal
+    && a.passwordRecoveryCheck === b.passwordRecoveryCheck
     && a.mergeTooLarge === b.mergeTooLarge
     && a.offlineClashes === b.offlineClashes;
 }
@@ -195,6 +200,7 @@ export function createCollaborationState(): CollaborationState {
         relay: freezeRelay(initial?.relay ?? IDLE_COLLABORATION_SNAPSHOT.relay),
         pictures: freezePictures(initial?.pictures ?? IDLE_COLLABORATION_SNAPSHOT.pictures),
         refusal: initial?.refusal ?? null,
+        passwordRecoveryCheck: initial?.passwordRecoveryCheck ?? null,
         mergeTooLarge: initial?.mergeTooLarge ?? null,
         offlineClashes: IDLE_COLLABORATION_SNAPSHOT.offlineClashes
       });
@@ -211,25 +217,35 @@ export function createCollaborationState(): CollaborationState {
       update({ ...current, localWriteError: freezeError(error) });
     },
     setRelay(relay) {
-      if (!current.active || current.refusal || current.mergeTooLarge) return;
+      if (!current.active || current.refusal || current.passwordRecoveryCheck || current.mergeTooLarge) return;
       update({
         ...current,
         relay: freezeRelay(relay)
       });
     },
     setPictures(pictures) {
-      if (!current.active) return;
+      if (!current.active || current.passwordRecoveryCheck) return;
       update({ ...current, pictures: freezePictures(pictures) });
     },
     clearRefusal() {
       if (!current.active) return;
-      if (current.refusal) update({ ...current, refusal: null });
+      if (current.refusal || current.passwordRecoveryCheck) update({ ...current, refusal: null, passwordRecoveryCheck: null });
+    },
+    setPasswordRecoveryCheck(check) {
+      if (!current.active || current.refusal || current.mergeTooLarge) return;
+      update({
+        ...current,
+        passwordRecoveryCheck: check,
+        pictures: IDLE_COLLABORATION_SNAPSHOT.pictures,
+        relay: freezeRelay({ connected: false, firstSyncDone: false, pendingChangeCount: current.relay.pendingChangeCount })
+      });
     },
     setRefusal(reason) {
       if (!current.active) return;
       update({
         ...current,
         refusal: reason,
+        passwordRecoveryCheck: null,
         pictures: IDLE_COLLABORATION_SNAPSHOT.pictures,
         relay: freezeRelay({ connected: false, firstSyncDone: false, pendingChangeCount: current.relay.pendingChangeCount })
       });
@@ -239,6 +255,7 @@ export function createCollaborationState(): CollaborationState {
       update({
         ...current,
         mergeTooLarge: message || MERGE_TOO_LARGE_MESSAGE,
+        passwordRecoveryCheck: null,
         pictures: IDLE_COLLABORATION_SNAPSHOT.pictures,
         relay: freezeRelay({ connected: false, firstSyncDone: false, pendingChangeCount: current.relay.pendingChangeCount })
       });

@@ -24,9 +24,12 @@ after(() => {
   closeApp();
 });
 
-for (const reset of [false, true]) {
-  test(reset ? "a pruned device cannot re-enter after the guest link is reset"
-    : "a returning guest can re-enter the password after their device credential is pruned", { timeout: 25_000 }, async t => {
+for (const [scenario, title] of [
+  ["eligible", "a returning guest can re-enter the password after their device credential is pruned"],
+  ["reset", "a pruned device cannot re-enter after the guest link is reset"],
+  ["retry", "an unavailable relay keeps password recovery retryable until the link check succeeds"]
+] as const) {
+  test(title, { timeout: 25_000 }, async t => {
     const relay = serverHarness(t);
     const run = relay.launch();
     const state = relay.seed();
@@ -57,9 +60,21 @@ for (const reset of [false, true]) {
     }
     for (let count = 0; count < MAX_DEVICE_CREDENTIALS_PER_SCRIPT; count++) await exchange();
 
-    if (reset) {
+    if (scenario === "reset") {
       const response = await run.owner(`scripts/${scriptId}/reset`, { method: "POST" }, owner.token);
       assert.equal(response.status, 200);
+    }
+    let checks = 0;
+    if (scenario === "retry") {
+      const fetchFromRelay = globalThis.fetch;
+      t.mock.method(globalThis, "fetch", (input: URL, init?: RequestInit) => {
+        if (init?.method === "HEAD" && input.pathname.endsWith("/password-exchange")) {
+          checks++;
+          if (checks === 1) return Promise.resolve(new Response(null, { status: 503 }));
+          if (checks === 2) return Promise.reject(new TypeError("Relay unavailable"));
+        }
+        return fetchFromRelay(input, init);
+      });
     }
     const app = (window as unknown as { __sharedTest: {
       enterRetained: (entry: RetainedSharedScript) => Promise<SharedSwitchOutcome>;
@@ -67,9 +82,36 @@ for (const reset of [false, true]) {
     } }).__sharedTest;
     assert.deepEqual(await app.enterRetained({ deployment, script: scriptId, relayUrl: "ws://127.0.0.1:" + await run.port() }), { ok: true });
     try {
-      while (!collaborationSnapshot().refusal) await delay(10, undefined, { signal: t.signal });
       const reenter = document.querySelector<HTMLButtonElement>("#collab-access-reenter-password");
-      if (reset) {
+      if (scenario === "retry") {
+        const retry = document.querySelector<HTMLButtonElement>("#collab-access-retry");
+        for (const attempt of [1, 2]) {
+          while (!collaborationSnapshot().refusal && (!retry || retry.hidden || retry.disabled)) {
+            await delay(10, undefined, { signal: t.signal });
+          }
+          assert.equal(collaborationSnapshot().refusal, null);
+          assert.ok(retry);
+          assert.equal(checks, attempt);
+          assert.equal(reenter?.hidden, true);
+          assert.equal(document.getElementById("collab-access-banner")?.hidden, false);
+          assert.match(document.getElementById("collab-access-title")?.textContent ?? "", /^Offline/);
+          assert.match(document.getElementById("collab-access-text")?.textContent ?? "", /Could not reach the relay/);
+          if (attempt === 1) {
+            const dismiss = document.querySelector<HTMLButtonElement>("#collab-access-dismiss");
+            const save = document.querySelector<HTMLButtonElement>("#btn-save");
+            assert.ok(dismiss && save);
+            dismiss.click();
+            assert.equal(document.getElementById("collab-access-banner")?.hidden, true);
+            assert.match(save.textContent ?? "", /^Offline/);
+            save.click();
+            assert.equal(document.getElementById("collab-access-banner")?.hidden, false);
+            assert.equal(document.activeElement, retry);
+          }
+          retry.click();
+        }
+      }
+      while (!collaborationSnapshot().refusal) await delay(10, undefined, { signal: t.signal });
+      if (scenario === "reset") {
         assert.equal(reenter?.hidden, true);
         assert.match(document.getElementById("collab-access-text")?.textContent ?? "", /^Your access to this shared script was removed\./);
         return;

@@ -1,17 +1,14 @@
-import { DEVICE_CREDENTIAL_HEADER } from "../../../../shared/link-password.ts";
-
 type PasswordExchange =
   | { readonly kind: "credential"; readonly token: string }
   | { readonly kind: "failed"; readonly reason: string };
 
 function requestPasswordExchange(origin: string, script: string, linkToken: string, signal: AbortSignal,
-  deviceToken?: string, body?: { password: string | null }): Promise<Response> {
+  body?: { password: string | null }): Promise<Response> {
   return fetch(new URL("/api/scripts/" + encodeURIComponent(script) + "/password-exchange", origin), {
     method: body ? "POST" : "HEAD",
     headers: {
       Authorization: "Bearer " + linkToken,
-      ...(body && { "Content-Type": "application/json" }),
-      ...(deviceToken && { [DEVICE_CREDENTIAL_HEADER]: deviceToken })
+      ...(body && { "Content-Type": "application/json" })
     },
     ...(body && { body: JSON.stringify(body) }),
     cache: "no-store", credentials: "omit", redirect: "error",
@@ -19,19 +16,22 @@ function requestPasswordExchange(origin: string, script: string, linkToken: stri
   });
 }
 
-export async function checkLinkPasswordRecovery(origin: string, script: string, linkToken: string, signal: AbortSignal,
-  deviceToken?: string): Promise<boolean> {
+export async function checkLinkPasswordRecovery(origin: string, script: string, linkToken: string,
+  signal: AbortSignal): Promise<"eligible" | "denied" | "retryable"> {
   try {
-    return (await requestPasswordExchange(origin, script, linkToken, signal, deviceToken)).status === 204;
+    const { status } = await requestPasswordExchange(origin, script, linkToken, signal);
+    if (status === 204) return "eligible";
+    if (status === 403 || status === 404) return "denied";
   } catch {
-    return false;
+    return "retryable";
   }
+  return "retryable";
 }
 
 export async function exchangeLinkPassword(origin: string, script: string, linkToken: string, password: string | null,
-  signal: AbortSignal, deviceToken?: string): Promise<PasswordExchange> {
+  signal: AbortSignal): Promise<PasswordExchange> {
   try {
-    const response = await requestPasswordExchange(origin, script, linkToken, signal, deviceToken, { password });
+    const response = await requestPasswordExchange(origin, script, linkToken, signal, { password });
     if (response.status === 428) return { kind: "failed", reason: "password-required" };
     if (response.status === 401) return { kind: "failed", reason: "wrong-password" };
     if (response.status === 403) return { kind: "failed", reason: "access-removed" };

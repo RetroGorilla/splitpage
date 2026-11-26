@@ -10,7 +10,7 @@ import { InvitationSnapshotError, readInvitationSnapshot } from "../../adapters/
 import { checkLinkPasswordRecovery, exchangeLinkPassword } from "../../adapters/collab/native/password-exchange.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { canReenterLinkPassword, isPermanentCollaborationRefusal, localWriteErrorMessage } from "../../application/collaboration/state.ts";
-import type { CollaborationLocalWriteError, CollaborationPermanentRefusal } from "../../application/collaboration/state.ts";
+import type { CollaborationLocalWriteError } from "../../application/collaboration/state.ts";
 import { sanitizeHtml } from "../richtext.ts";
 import { guardUnload, waitDuringLifetime } from "../startup/page-lifetime.ts";
 import { collaborationState, setSharedRetryLocalWrite } from "./collaboration-owner.ts";
@@ -50,6 +50,7 @@ interface RetainedSharingControls {
   readonly passwordRequired: boolean;
   readonly manage: (operation: "promote" | "reset" | "stop" | "check-link" | "set-password" | "remove-password", password?: string) => Promise<void>;
   readonly reenter: (password: string | null, signal: AbortSignal) => Promise<string | null>;
+  readonly retryPasswordCheck: () => void;
 }
 
 export function retainedSharingControls() {
@@ -154,7 +155,7 @@ export function createRetainedPictureBinding(options: {
     reconnect() { pictures?.reconnect(); },
     retryStorage() { pictures?.retryStorage(); },
     finishPreparation() { pictures?.finishPreparation(); },
-    onRelayEvent(event: NativeRelayEvent, recovery?: Promise<CollaborationPermanentRefusal | null>) {
+    onRelayEvent(event: NativeRelayEvent, checkPasswordRecovery?: () => void) {
       if (!options.sessionCurrent()) return;
       if (event.kind === "status") {
         if (permanentlyStopped) return;
@@ -173,13 +174,8 @@ export function createRetainedPictureBinding(options: {
         const permanent = isPermanentCollaborationRefusal(event.reason);
         if (permanent) {
           permanentlyStopped = true;
-          const owner = collaborationState();
-          if (recovery) {
-            owner.setRelay({ ...owner.snapshot().relay, connected: false, firstSyncDone: false });
-            void recovery.then(reason => {
-              if (reason && options.sessionCurrent()) owner.setRefusal(reason);
-            });
-          } else owner.setRefusal(event.reason);
+          if (checkPasswordRecovery) checkPasswordRecovery();
+          else collaborationState().setRefusal(event.reason);
         }
         detach();
         options.onRelayConnected?.(false);
@@ -377,6 +373,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         : null;
       let liveRelay: ReturnType<typeof openNativeRelay> | undefined;
       const recoveryLifetime = new AbortController();
+      let retryPasswordCheck: (() => void) | undefined;
       const connect = () => {
         if (entry.relayUrl && pictureBinding) {
           pictureBinding.bindCopy(replica);
@@ -402,17 +399,29 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
               }
               if (event.kind === "session-replaced" && sessionCurrent()) collaborationState().dismissOfflineClashes();
               const previous = membership;
-              if (event.kind === "authentication-failed" && exchangePassword && pictureOrigin && previous?.role === "guest"
+              const origin = pictureOrigin;
+              if (event.kind === "authentication-failed" && exchangePassword && origin && previous?.role === "guest"
                 && (event.reason === "password-changed" || (event.reason === "permission-denied" && previous.guestLinkToken))) {
                 const linkToken = previous.guestLinkToken ?? previous.token;
-                const deviceToken = previous.token === linkToken ? undefined : previous.token;
-                const recovery = checkLinkPasswordRecovery(pictureOrigin, entry.script, linkToken, recoveryLifetime.signal, deviceToken)
-                  .then(eligible => {
-                    if (recoveryLifetime.signal.aborted || membership !== previous) return null;
-                    if (!eligible) return "access-removed";
-                    return event.reason === "password-changed" ? "password-changed" : "device-credential-expired";
-                  });
-                pictureBinding.onRelayEvent(event, recovery);
+                const check = async () => {
+                  const owner = collaborationState();
+                  const snapshot = owner.snapshot();
+                  if (!sessionCurrent() || recoveryLifetime.signal.aborted || membership !== previous
+                    || snapshot.refusal || snapshot.mergeTooLarge || snapshot.passwordRecoveryCheck === "checking") return;
+                  owner.setPasswordRecoveryCheck("checking");
+                  const outcome = await checkLinkPasswordRecovery(origin, entry.script, linkToken, recoveryLifetime.signal);
+                  if (!sessionCurrent() || recoveryLifetime.signal.aborted || membership !== previous
+                    || owner.snapshot().passwordRecoveryCheck !== "checking") return;
+                  if (outcome === "retryable") {
+                    owner.setPasswordRecoveryCheck("retryable");
+                    return;
+                  }
+                  retryPasswordCheck = undefined;
+                  owner.setRefusal(outcome === "denied" ? "access-removed"
+                    : event.reason === "password-changed" ? "password-changed" : "device-credential-expired");
+                };
+                retryPasswordCheck = () => { void check(); };
+                pictureBinding.onRelayEvent(event, retryPasswordCheck);
                 return;
               }
               pictureBinding.onRelayEvent(event);
@@ -492,6 +501,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           role: membership?.role ?? "guest",
           link: membership?.role === "owner" ? link?.href ?? null : null,
           passwordRequired: membership?.linkPasswordRequired ?? false,
+          retryPasswordCheck() { retryPasswordCheck?.(); },
           async canManage() {
             if (!manage || !pictureOrigin || membership?.role !== "guest") return false;
             const settings = await sharing?.status?.();
@@ -508,9 +518,8 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
             managing = true;
             const lifetime = AbortSignal.any([signal, recoveryLifetime.signal]);
             const guestLinkToken = previous.guestLinkToken ?? previous.token;
-            const deviceToken = previous.token === guestLinkToken ? undefined : previous.token;
             try {
-              const result = await exchangePassword(pictureOrigin, entry.script, guestLinkToken, password, lifetime, deviceToken);
+              const result = await exchangePassword(pictureOrigin, entry.script, guestLinkToken, password, lifetime);
               lifetime.throwIfAborted();
               if (result.kind === "failed") {
                 if (result.reason === "access-removed") owner.setRefusal(result.reason);

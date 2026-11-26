@@ -90,6 +90,8 @@ function openPasswordRecovery(): void {
 
 export const requestPasswordRecovery = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI
   ? openPasswordRecovery : undefined;
+export const retryPasswordRecovery = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI
+  ? () => retainedSharingControls()?.retryPasswordCheck() : undefined;
 
 function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "register">): () => void {
   const unmountAnnouncements = mountCollaborationAnnouncements(document, { collaboration });

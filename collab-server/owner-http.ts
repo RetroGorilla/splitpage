@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { isSha256Hex } from "../shared/blob-policy.ts";
-import { DEVICE_CREDENTIAL_HEADER, LINK_PASSWORD_MAX, PASSWORD_SHARE_TYPE, validLinkPassword } from "../shared/link-password.ts";
+import { LINK_PASSWORD_MAX, PASSWORD_SHARE_TYPE, validLinkPassword } from "../shared/link-password.ts";
 import type { AbandonResult, InvitationRole, IssuedInvitation, scriptAccess } from "./access.ts";
 import { RelayError } from "./config.ts";
 import { managementAuthorizer } from "./management-auth.ts";
@@ -106,20 +106,23 @@ async function creationBody(request: IncomingMessage, limit: number): Promise<{ 
 export function ownerRequests(secret: string | undefined, limit: number, commands: Commands, deployment?: string,
   origins: ReadonlySet<string> = new Set()) {
   const authorize = managementAuthorizer(secret);
-  const attempts = new Map<string, { failures: number; until: number }>();
+  const attempts = new Map<string, { count: number; until: number }>();
+  const recoveryChecks: typeof attempts = new Map();
   let exchangesInFlight = 0;
   let nextSweep = 0;
   const attemptPeriod = 60_000;
-  function attemptWindow(name: string) {
+  function attemptWindow(key: string, windows: typeof attempts) {
     const now = Date.now();
     if (now >= nextSweep) {
-      for (const [script, record] of attempts) if (record.until <= now) attempts.delete(script);
+      for (const entries of [attempts, recoveryChecks]) {
+        for (const [key, record] of entries) if (record.until <= now) entries.delete(key);
+      }
       nextSweep = now + attemptPeriod;
     }
-    let record = attempts.get(name);
+    let record = windows.get(key);
     if (!record || record.until <= now) {
-      record = { failures: 0, until: now + attemptPeriod };
-      attempts.set(name, record);
+      record = { count: 0, until: now + attemptPeriod };
+      windows.set(key, record);
     }
     return record;
   }
@@ -146,36 +149,43 @@ export function ownerRequests(secret: string | undefined, limit: number, command
           const requestedMethod = request.headers["access-control-request-method"];
           if (!origin || (requestedMethod !== "POST" && requestedMethod !== "HEAD")) throw new RequestError(403);
           response.setHeader("Access-Control-Allow-Methods", "HEAD, POST");
-          response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, " + DEVICE_CREDENTIAL_HEADER);
+          response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
           reply(204);
           return true;
         }
         if (method !== "POST" && method !== "HEAD") throw new RequestError(405);
+        if (method === "HEAD") {
+          const check = attemptWindow(request.socket.remoteAddress ?? "", recoveryChecks);
+          if (check.count >= 60) {
+            response.setHeader("Retry-After", "60");
+            reply(429);
+            return true;
+          }
+          check.count += 1;
+        }
         const token = bearerToken(request);
-        const device = request.headers[DEVICE_CREDENTIAL_HEADER.toLowerCase()];
-        if (device !== undefined && (typeof device !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(device))) throw new RequestError(403);
-        if (!token || !commands.activeLink(name, token, device)) throw new RequestError(403);
+        if (!token || !commands.activeLink(name, token)) throw new RequestError(403);
         if (method === "HEAD") {
           reply(204);
           return true;
         }
         const value = await readPasswordBody(request);
         if (!request.complete || response.destroyed) return true;
-        if (!commands.activeLink(name, token, device)) throw new RequestError(403);
+        if (!commands.activeLink(name, token)) throw new RequestError(403);
         const stored = commands.readPassword(name);
-        const attempt = stored && value !== null ? attemptWindow(name) : undefined;
+        const attempt = stored && value !== null ? attemptWindow(name, attempts) : undefined;
         if (!stored) reply(200, { token });
         else if (value === null) reply(428);
-        else if (exchangesInFlight >= 8 || (attempt && attempt.failures >= 5)) {
+        else if (exchangesInFlight >= 8 || (attempt && attempt.count >= 5)) {
           response.setHeader("Retry-After", "60");
           reply(429);
         } else {
           exchangesInFlight += 1;
           try {
-            const result = await commands.exchange(name, token, value, stored, device);
+            const result = await commands.exchange(name, token, value, stored);
             if (result.kind === "exchanged") reply(200, { token: result.token });
             else if (result.kind === "wrong-password") {
-              if (attempt) attempt.failures += 1;
+              if (attempt) attempt.count += 1;
               reply(401);
             } else if (result.kind === "device-limit") {
               response.setHeader("Retry-After", "5");
