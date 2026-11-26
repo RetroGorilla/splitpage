@@ -323,6 +323,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     isCurrent,
     finish: () => { closeVisualAside(); return isCurrent() ? surface.finish() : null; },
     repaint: restore => { if (isCurrent()) { surface.repaint(restore); visual?.refresh(restore); } },
+    placeVisualAside: () => { if (isCurrent()) visual?.refresh(); },
     caret,
     format,
     marks,

@@ -15,14 +15,35 @@ function topLevel(text, separator) {
   return parts.map(part => part.trim()).filter(Boolean);
 }
 
+function closing(text, open) {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "(" || ch === "[") depth++;
+    else if ((ch === ")" || ch === "]") && --depth === 0) return i;
+  }
+  return text.length;
+}
+
 function pageWideHas(selector) {
-  const match = /(?:^|[\s>+~])(?:html|body):has\(\s*([^)]?)/.exec(selector);
-  return match !== null && match[1] !== ">";
+  for (const match of selector.matchAll(/(?:^|[\s>+~,(])(?:html|body):has\(/g)) {
+    const open = match.index + match[0].length - 1;
+    const argument = selector.slice(open + 1, closing(selector, open));
+    if (topLevel(argument, /,/).some(arm => !arm.startsWith(">"))) return true;
+  }
+  return false;
 }
 
 function guardedSubject(selector) {
   const subject = topLevel(selector, /[\s>+~]/).at(-1) ?? "";
-  return /:has\(>\s*\*\)|:not\(\[hidden\]\)/.test(subject);
+  let depth = 0;
+  for (let i = 0; i < subject.length; i++) {
+    if (depth === 0 && /^(?::has\(>\s*\*\)|:not\(\[hidden\]\))/.test(subject.slice(i))) return true;
+    const ch = subject[i];
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth--;
+  }
+  return false;
 }
 
 test("a page-wide :has() over the whole page is reached only through a subject that is usually absent", () => {
@@ -42,4 +63,10 @@ test("the page-wide :has() check accepts child-only and guarded rules and reject
   assert.equal(guardedSubject('body:has([role="menu"]:not([hidden])) #toast-host'), false);
   assert.equal(guardedSubject("body:has(.a) #toast-host:has(> *)"), true);
   assert.equal(guardedSubject("body:has(.a) .tag-edit-action:not([hidden])"), true);
+  assert.equal(pageWideHas("body:has(> .a, .b) #toast-host"), true);
+  assert.equal(pageWideHas("body:has(> .a, > .b) #toast-host"), false);
+  assert.equal(pageWideHas(":is(body:has(.a)) .x"), true);
+  assert.equal(guardedSubject("body:has(.a) :is(.x, .y:not([hidden]))"), false);
+  assert.equal(guardedSubject("body:has(.a) :is(.x:has(> *))"), false);
+  assert.equal(guardedSubject("body:has(.a) #toast-host:not([hidden]):hover"), true);
 });

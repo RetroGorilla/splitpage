@@ -287,6 +287,50 @@ export function stopWriterRuntimeFeature(): boolean {
 }
 export const writerControls = writer.owner;
 
+interface WriterScreenPaint {
+  readonly doc: object;
+  readonly title: string;
+  readonly readOnly: boolean;
+  readonly titleFocused: boolean;
+}
+
+let screenWriterPaint: WriterScreenPaint | null = null;
+
+function writerTitleFocused(): boolean {
+  return !!document.activeElement && document.activeElement.id === "writer-title";
+}
+
+export function paintWriterForScreen(): void {
+  screenWriterPaint = null;
+  const control = writerControls();
+  if (!control) return;
+  const shown = documentReader.current(), draw = control.drawWriter(), titleFocused = writerTitleFocused();
+  control.paintWriterDraw(draw);
+  if (!shown || !Object.isFrozen(shown)) return;
+  const mark = { doc: shown, ...draw, titleFocused };
+  screenWriterPaint = mark;
+  queueMicrotask(() => { if (screenWriterPaint === mark) screenWriterPaint = null; });
+}
+
+function samePaint(mark: WriterScreenPaint | null, draw: { readonly title: string; readonly readOnly: boolean }): boolean {
+  return !!mark && mark.doc === documentReader.current() && mark.title === draw.title && mark.readOnly === draw.readOnly
+    && mark.titleFocused === writerTitleFocused();
+}
+
+// why: a shared publish paints the screen, Writer included, before its session listeners run; repainting the same
+// frozen document again costs a frame, so only the visual aside is placed again for layout that moved in between
+export function repaintWriterAfterPublish(): void {
+  const mark = screenWriterPaint;
+  screenWriterPaint = null;
+  const control = writerControls();
+  if (!control) return;
+  if (samePaint(mark, control.drawWriter())) {
+    control.writerFlowControl()?.placeVisualAside();
+    return;
+  }
+  control.renderWriter();
+}
+
 export function setWriterDocumentObservers(active: boolean): void {
   writerControls()?.writerFlowControl()?.setDocumentObservers(active);
 }

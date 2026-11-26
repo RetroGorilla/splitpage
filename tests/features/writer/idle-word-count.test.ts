@@ -18,7 +18,7 @@ test("flow selection and input callbacks count only the selection until the idle
   const flow: FlowWriter = {
     find: { visuals: () => false, setVisuals: noop, search: () => ({ matches: [], inTags: 0 }), reveal: () => null,
       replace: () => false, leave: noop, selection: () => null, pickedText: () => "", firstFrom: () => 0 },
-    openVisual: noop, isCurrent: () => true, finish: () => null, repaint: noop, caret: noop, format: noop,
+    openVisual: noop, isCurrent: () => true, finish: () => null, repaint: noop, placeVisualAside: noop, caret: noop, format: noop,
     marks: () => ({}), beforeReplay: noop, afterReplay: noop, comment: noop, jumpComment: noop,
     selection: () => null, selectedText: () => selected, place: noop, check: () => [], setDocumentObservers: noop, dispose: () => true
   };

@@ -135,12 +135,11 @@ test("a Writer repaint writes contenteditable only when editing permission chang
   } finally { writer.dispose(); }
 });
 
-test("a second Writer paint in the same task repaints unless it shows the same frozen document over an untouched DOM", async () => {
+test("every Writer paint of the same frozen document repaints and writes a title that lost focus in between", () => {
   const h = harness(), create = h.ports.flow.create;
   const current = h.ports.document.current();
   assert.ok(current);
-  const frozen = (title: string) => deepFreeze(structuredClone({ ...current, title }));
-  let shown: typeof current = frozen("One");
+  const shown = deepFreeze(structuredClone({ ...current, title: "Shared" }));
   let repaints = 0;
   const writer = startWriter({ ...h.ports, document: { ...h.ports.document, current: () => shown },
     flow: { ...h.ports.flow, create: (...args) => {
@@ -149,29 +148,16 @@ test("a second Writer paint in the same task repaints unless it shows the same f
     } } });
   try {
     writer.openWriter();
-    await Promise.resolve();
-    const root = document.getElementById("writer-doc") as HTMLElement;
+    const title = document.getElementById("writer-title") as HTMLInputElement;
+    title.value = "stale";
+    title.focus();
     repaints = 0;
-    writer.renderWriter();
     writer.paintWriterDraw(writer.drawWriter());
-    assert.equal(repaints, 1, "the same frozen document painted twice in one task repaints once");
-    shown = frozen("One");
+    assert.equal(title.value, "stale");
+    title.blur();
     writer.renderWriter();
-    assert.equal(repaints, 2, "another document object repaints");
-    root.append(document.createElement("span"));
-    writer.renderWriter();
-    assert.equal(repaints, 3, "a Writer DOM change since the last paint repaints");
-    h.state.allowed = false;
-    writer.renderWriter();
-    assert.equal(repaints, 4, "a permission change repaints");
-    await Promise.resolve();
-    writer.renderWriter();
-    assert.equal(repaints, 5, "a paint in a later task repaints");
-    const mutable = structuredClone({ ...current, title: "Two" });
-    shown = mutable;
-    writer.renderWriter();
-    writer.renderWriter();
-    assert.equal(repaints, 7, "a document that can still change repaints every time");
+    assert.equal(repaints, 2);
+    assert.equal(title.value, "Shared");
   } finally { writer.dispose(); }
 });
 
