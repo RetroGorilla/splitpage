@@ -318,7 +318,7 @@ function samePaint(mark: WriterScreenPaint | null, draw: { readonly title: strin
 }
 
 // why: a shared publish paints the screen, Writer included, before its session listeners run; repainting the same
-// frozen document again costs a frame, so only the visual aside is placed again for layout that moved in between
+// frozen document again costs a frame, so only the visual aside and tag suggestion follow layout that moved between
 export function repaintWriterAfterPublish(): void {
   const mark = screenWriterPaint;
   screenWriterPaint = null;
@@ -326,6 +326,7 @@ export function repaintWriterAfterPublish(): void {
   if (!control) return;
   if (samePaint(mark, control.drawWriter())) {
     control.writerFlowControl()?.placeVisualAside();
+    if (tagGhost) updateTagGhost(tagGhost.cellEl);
     return;
   }
   control.renderWriter();

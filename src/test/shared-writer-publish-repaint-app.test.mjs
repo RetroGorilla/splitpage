@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { bootApp, closeApp } from "./_app-boot.mjs";
-import { adoptReplacement, sharedSession } from "../bootstrap/wiring/session-owner.ts";
+import { adoptReplacement, onSessionChange, sharedSession } from "../bootstrap/wiring/session-owner.ts";
+import { updateTagGhost } from "../features/tags/production-tags.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
@@ -26,10 +27,10 @@ function cleanSession() {
     createSessionCapabilities("standalone", { edit: allowed, comment: allowed }));
 }
 
-async function openSharedWriter(t) {
-  adoptReplacement(migrateRows({ schema: 2, title: "Native script", rows: [
-    { id: "r1", audioText: "Hello", visualText: "Look" }, { id: "r2", audioText: "There", visualText: "" }
-  ] }));
+async function openSharedWriter(t, rows = [
+  { id: "r1", audioText: "Hello", visualText: "Look" }, { id: "r2", audioText: "There", visualText: "" }
+], productionTags = []) {
+  adoptReplacement(migrateRows({ schema: 2, title: "Native script", rows, productionTags }));
   t.mock.method(notices, "show", () => {});
   assert.deepEqual(await hook.enter(), { ok: true });
   t.after(cleanSession);
@@ -40,6 +41,12 @@ async function openSharedWriter(t) {
   const flow = control.writerFlowControl();
   const repaints = t.mock.method(flow, "repaint");
   return { control, flow, repaints };
+}
+
+function sampleAfterPublish(t, read) {
+  const samples = [];
+  t.after(onSessionChange(() => { samples.push(read()); }));
+  return samples;
 }
 
 function between(t, step) {
@@ -84,9 +91,31 @@ test("a visual box whose anchor moves between the screen paint and the session l
   let bottom = 120;
   beat.getClientRects = () => [{ left: 40, right: 400, top: bottom - 20, bottom, width: 360, height: 20 }];
   between(t, () => { bottom = 260; });
+  const tops = sampleAfterPublish(t, () => box.style.top);
   assert.equal(hook.nativePeer.titleType(0, "B ").kind, "written");
   await delay(55);
-  assert.equal(box.style.top, "268px");
+  assert.equal(tops[0], "268px", "sampled as the publish ends, before any selection event can place it");
+});
+
+test("a tag suggestion whose text moves between the screen paint and the session listener follows it", async t => {
+  const { flow } = await openSharedWriter(t, [{ id: "r1", audioText: "Hello [Cam", visualText: "" }],
+    [{ id: "t_camera", cat: "prop", name: "Camera", owner: "", notes: "", status: "needed" }]);
+  const root = document.getElementById("writer-doc");
+  root.focus();
+  flow.caret("r1", "end");
+  let top = 120;
+  const rects = window.Range.prototype.getClientRects;
+  window.Range.prototype.getClientRects = () => [{ left: 40, right: 90, top, bottom: top + 18, width: 50, height: 18 }];
+  t.after(() => { window.Range.prototype.getClientRects = rects; });
+  updateTagGhost(root.querySelector('.wr-beat[data-id="r1"]'));
+  const ghost = document.getElementById("tag-ghost");
+  assert.equal(ghost.classList.contains("is-visible"), true);
+  assert.equal(ghost.style.top, "120px");
+  between(t, () => { top = 260; });
+  const tops = sampleAfterPublish(t, () => ghost.classList.contains("is-visible") ? ghost.style.top : "hidden");
+  assert.equal(hook.nativePeer.titleType(0, "C ").kind, "written");
+  await delay(55);
+  assert.equal(tops[0], "260px", "sampled as the publish ends, before any selection event can place it");
 });
 
 test("a title that loses focus between the screen paint and the session listener shows the shared title", async t => {

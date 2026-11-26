@@ -29,9 +29,21 @@ function pageWideHas(selector) {
   for (const match of selector.matchAll(/(?:^|[\s>+~,(])(?:html|body):has\(/g)) {
     const open = match.index + match[0].length - 1;
     const argument = selector.slice(open + 1, closing(selector, open));
-    if (topLevel(argument, /,/).some(arm => !arm.startsWith(">"))) return true;
+    if (topLevel(argument, /,/).some(arm => !childOnly(arm))) return true;
   }
   return false;
+}
+
+function childOnly(arm) {
+  if (!arm.startsWith(">")) return false;
+  const steps = arm.replace(/\s*>\s*/g, ">");
+  let depth = 0;
+  for (const ch of steps) {
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth--;
+    else if (depth === 0 && /[\s+~]/.test(ch)) return false;
+  }
+  return true;
 }
 
 function guardedSubject(selector) {
@@ -66,6 +78,9 @@ test("the page-wide :has() check accepts child-only and guarded rules and reject
   assert.equal(pageWideHas("body:has(> .a, .b) #toast-host"), true);
   assert.equal(pageWideHas("body:has(> .a, > .b) #toast-host"), false);
   assert.equal(pageWideHas(":is(body:has(.a)) .x"), true);
+  assert.equal(pageWideHas(":is(body:has(> .topbar .mini-toolbar)) .tag-edit-action"), true);
+  assert.equal(pageWideHas("body:has(> .topbar ~ .panel) .x"), true);
+  assert.equal(pageWideHas("body:has(> .topbar > .mini-toolbar:not([hidden])) .x"), false);
   assert.equal(guardedSubject("body:has(.a) :is(.x, .y:not([hidden]))"), false);
   assert.equal(guardedSubject("body:has(.a) :is(.x:has(> *))"), false);
   assert.equal(guardedSubject("body:has(.a) #toast-host:not([hidden]):hover"), true);
