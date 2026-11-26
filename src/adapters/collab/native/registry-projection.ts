@@ -177,6 +177,13 @@ function propNormalizer(tags: DocumentShape["productionTags"]) {
   };
 }
 
+function hydrateTagAlternatives(tag: DocumentTag, tags: NativeRoots["tags"]): void {
+  const record = tag.id ? tags.get(tag.id) : undefined;
+  const edits = record instanceof Y.Map ? readNativeTagAlternatives(record, tag.unmergedEdits) : unmergedTagEdits(tag.unmergedEdits);
+  if (edits.length) tag.unmergedEdits = edits;
+  else delete tag.unmergedEdits;
+}
+
 export function projectNativeTags(stored: DocumentShape["productionTags"], roots: NativeRoots, people: ReadonlySet<string>) {
   const tagsRemoved = hasRemoved(roots.tags) || stored.some(tag => tag && !tag.name);
   if (tagsRemoved) {
@@ -186,10 +193,7 @@ export function projectNativeTags(stored: DocumentShape["productionTags"], roots
   for (const tag of stored) {
     if (!tag) continue;
     if (tag.owner && !people.has(tag.owner)) tag.owner = "";
-    const record = tag.id ? roots.tags.get(tag.id) : undefined;
-    const edits = record instanceof Y.Map ? readNativeTagAlternatives(record, tag.unmergedEdits) : unmergedTagEdits(tag.unmergedEdits);
-    if (edits.length) tag.unmergedEdits = edits;
-    else delete tag.unmergedEdits;
+    hydrateTagAlternatives(tag, roots.tags);
   }
   const { tags, groups } = foldTags(stored, roots);
   let lookup: ReturnType<typeof propNormalizer> | undefined;
@@ -214,7 +218,10 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
     if (tagsRemoved) {
       const { readers } = production(visible);
       derived = missingRegistryTags(document.rows, stored, readers);
-      if (derived.length) ensureTagIds([...stored, ...derived]);
+      if (derived.length) {
+        ensureTagIds([...stored, ...derived]);
+        for (const tag of derived) hydrateTagAlternatives(tag, roots.tags);
+      }
     }
     // why: a surviving keyed line seeds its default shot on core reload; unkeyed lines have their own command path
     if (shotsRemoved) {

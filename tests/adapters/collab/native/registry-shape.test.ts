@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
+import { mintTagId } from "../../../../src/core/document/tags.ts";
 import { addBrollProp, removeBrollProp } from "../../../../src/core/production/records.ts";
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
+import { formatNativeText } from "../../../../src/adapters/collab/native/format-commands.ts";
 import { changeNativeRegistry } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import { transactNativeCommand } from "../../../../src/adapters/collab/native/script.ts";
 import { projectNativeRegistries } from "../../../../src/adapters/collab/native/registry-projection.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { removeNativeRows } from "../../../../src/adapters/collab/native/structure-commands.ts";
+import { anchorNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { encodeNativeValue, mintNativeId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
 import { cells, convertedScript, edit, joinedScript } from "./helpers.ts";
 
@@ -145,6 +148,25 @@ test("a removed registry follows new inline tags and narration on a surviving ke
     assert.equal(removed.productionTags.some(tag => tag?.name === "Case"), false);
     assert.deepEqual(removed.brollShots, []);
   } finally { script.doc.destroy(); }
+});
+
+test("a tag derived after concurrent removal and inline marking retains its saved alternatives", () => {
+  const id = mintTagId("prop", "Kettle");
+  const unmergedEdits = [{ field: "notes", value: "Bring the spare" }];
+  const initial = migrateRows({ ...source(), rows: [{ id: "r1", audioText: "Kettle" }],
+    productionTags: [{ cat: "prop", name: "Kettle", id, notes: "For the close-up", unmergedEdits }] });
+  withCopies(initial, (left, right, settle) => {
+    assert.equal(changeNativeRegistry(left, { kind: "remove", collection: "tags", ids: [id] }).kind, "written");
+    assert.deepEqual(left.reader.document().productionTags, []);
+    const selection = anchorNativeText(right, { beat: "r1", cell: "narration" }, 0, 6);
+    assert.ok(selection.kind === "anchored");
+    assert.equal(formatNativeText(right, selection.range, { kind: "tag", id: "t:prop:Kettle", on: true }).kind, "written");
+    settle();
+    for (const copy of [left, right]) {
+      assert.deepEqual(copy.reader.document().productionTags,
+        [{ cat: "prop", name: "Kettle", id, notes: "", owner: "", status: "needed", unmergedEdits }]);
+    }
+  });
 });
 
 function withCopies(document: ValidatedDocument, run: (left: NativeScript, right: NativeScript, settle: () => void) => void): void {
