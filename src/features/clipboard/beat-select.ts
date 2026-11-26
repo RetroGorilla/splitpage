@@ -28,8 +28,9 @@ let swallowClick = false;
 let scroll: { dir: number; speed: number; raf: number } | null = null;
 let styleEl: HTMLStyleElement | null = null;
 let menuEl: HTMLDivElement | null = null;
+const REFUSED = false;
 let pendingCut = false;
-let clipWritten: ReturnType<typeof writeBeats> | null = null;
+let clipWritten: ReturnType<typeof payloadOfSelection> | typeof REFUSED | null = null;
 
 function hasBeatSelection() {
   if (sel && sel.doc !== (ports as BeatSelectPorts).document.current()) clearBeatSelection();
@@ -306,14 +307,18 @@ function prefetchPictures() {
 
 function count(n: number) { return n === 1 ? "1 beat" : n + " beats"; }
 
-function writeBeats(cd: DataTransfer, cut: boolean) {
+function payloadOfSelection(cut: boolean) {
   const ids = selectedBeatIds();
   const nonce = cut ? (ports as BeatSelectPorts).nonce() : null;
   const out = buildBeatPayload((ports as BeatSelectPorts).document.current(), ids, { cut: nonce });
-  try { cd.setData(BEATS_MIME, out.json); } catch (e) { }
-  cd.setData("text/html", out.html);
-  cd.setData("text/plain", out.text);
   return { ids: ids, nonce: nonce, out: out };
+}
+
+function putBeats(cd: DataTransfer, w: ReturnType<typeof payloadOfSelection>) {
+  try { cd.setData(BEATS_MIME, w.out.json); } catch (e) { }
+  cd.setData("text/html", w.out.html);
+  cd.setData("text/plain", w.out.text);
+  return w;
 }
 
 function onBeforeCopy(e: Event) {
@@ -329,15 +334,26 @@ function onCopyEvent(e: ClipboardEvent) {
   if (!hasBeatSelection() || inEditable() || !e.clipboardData) return;
   const cut = e.type === "cut" || pendingCut;
   pendingCut = false;
-  e.preventDefault();
   e.stopImmediatePropagation();
-  const w = writeBeats(e.clipboardData, cut);
-  clipWritten = w;
   if (cut) {
-    afterCut(w);
+    cutInto(e, e.clipboardData);
     return;
   }
+  e.preventDefault();
+  const w = putBeats(e.clipboardData, payloadOfSelection(false));
+  clipWritten = w;
   announceLeftOut(count(w.ids.length) + " copied", w.out.leftOut, "ok");
+}
+
+function cutInto(e: ClipboardEvent, cd: DataTransfer) {
+  const w = payloadOfSelection(true);
+  const entry = takeOut(w.ids);
+  // why: a refused removal leaves the clipboard as it was, and the event's default copies no beat selection
+  if (entry === REFUSED) { clipWritten = REFUSED; return; }
+  e.preventDefault();
+  clipWritten = putBeats(cd, w);
+  setLiveCut(w.nonce, ((ports as BeatSelectPorts).document.current() as DocumentView).docId);
+  announceCut(w, entry);
 }
 
 function announceLeftOut(msg: string, leftOut: string[], kind?: "ok" | "warn") {
@@ -359,7 +375,7 @@ function runClipboardCommand(cut: boolean) {
   clipWritten = null;
   const ok = execCopy();
   pendingCut = false;
-  if (ok && clipWritten) return;
+  if (clipWritten === REFUSED || (ok && clipWritten)) return;
   const ids = selectedBeatIds();
   if (!ids.length || !navigator.clipboard) { (ports as BeatSelectPorts).notices.show("Could not reach the clipboard.", "warn"); return; }
   const nonce = cut ? (ports as BeatSelectPorts).nonce() : null;
@@ -384,9 +400,13 @@ function sameDocument(started: DocumentView | null, startedId: string | null, ep
   return !!started && now === started && now.docId === startedId && (ports as BeatSelectPorts).lifetime.epoch() === epoch;
 }
 
-function afterCut(w: ReturnType<typeof writeBeats>) {
+function afterCut(w: ReturnType<typeof payloadOfSelection>) {
   setLiveCut(w.nonce, ((ports as BeatSelectPorts).document.current() as DocumentView).docId);
   const entry = takeOut(w.ids);
+  if (entry !== REFUSED) announceCut(w, entry);
+}
+
+function announceCut(w: ReturnType<typeof payloadOfSelection>, entry: ReturnType<BeatSelectPorts["undo"]["last"]>) {
   const msg = count(w.ids.length) + " cut — paste them with Ctrl+V";
   if (w.out.leftOut.length) announceLeftOut(msg, w.out.leftOut);
   else offerUndo(msg, entry);
@@ -401,7 +421,10 @@ function runBeatCommand(command: Command) {
 function takeOut(ids: string[]) {
   (ports as BeatSelectPorts).undo.breakCoalescing();
   const before = (ports as BeatSelectPorts).undo.last();
-  const done = runBeatCommand(removeBeatsCommand(ids));
+  const outcome = (ports as BeatSelectPorts).edits.run(removeBeatsCommand(ids));
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind === "rejected") return REFUSED;
+  const done = outcome.kind === "applied" || outcome.kind === "committed";
   sel = null;
   paint();
   (ports as BeatSelectPorts).undo.flush();
@@ -415,7 +438,8 @@ export function deleteSelectedBeats() {
   const ids = selectedBeatIds();
   if (!ids.length) return;
   closeBeatMenu();
-  offerUndo(count(ids.length) + " deleted", takeOut(ids));
+  const entry = takeOut(ids);
+  if (entry !== REFUSED) offerUndo(count(ids.length) + " deleted", entry);
 }
 
 function offerUndo(msg: string, entry: ReturnType<BeatSelectPorts["undo"]["last"]>) {

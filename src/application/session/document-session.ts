@@ -45,6 +45,7 @@ export interface Command {
 export type DocumentStructureIntent =
   | { readonly kind: "insert-beat"; readonly id: string | null; readonly focus?: "narration" | "visual" }
   | { readonly kind: "remove-beat"; readonly id: string }
+  | { readonly kind: "remove-beats"; readonly ids: readonly string[] }
   | { readonly kind: "remove-heading"; readonly id: string }
   | { readonly kind: "add-heading"; readonly id: string; readonly beat: string; readonly name: string }
   | { readonly kind: "rename-heading"; readonly id: string; readonly name: string }

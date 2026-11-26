@@ -1,6 +1,6 @@
 import { randomHexBytes, randomIds } from "../../adapters/identity/ids.ts";
 import { documentReader as portDocument, documentLifetime as portLifetime } from "./ports/document.ts";
-import { edits as portEdits, undoControl as portUndo } from "./ports/editing.ts";
+import { edits as portEdits, notifiedUndo, undoControl as portUndo } from "./ports/editing.ts";
 import { pictures as portPictures } from "./ports/pictures.ts";
 import { text as portText } from "./ports/text.ts";
 import { notices as portNotices } from "./ports/effects.ts";
@@ -56,7 +56,7 @@ export function mountCopyPasteFeature(): CopyPasteMount {
       document: portDocument,
       lifetime: portLifetime,
       edits: portEdits,
-      undo: portUndo,
+      undo: notifiedUndo,
       pictures: portPictures,
       notices: portNotices,
       cells: { sync: (cell) => { cellEditing().sync(cell); } },

@@ -500,7 +500,7 @@ const removeButton = id => document.querySelector(`#rows .row[data-id="${id}"] [
 
 for (const command of ["delete", "cut"]) for (const route of ["keyboard", "menu"]) {
   for (const mode of ["allowed", "capability", "hold", "silent", "announced"]) {
-    test(`Native selected beat baseline: ${command}, ${route}, ${mode}`, async t => {
+    test(`Split: selected beat ${command} through ${route} admits the shared removal, ${mode}`, async t => {
       const f = await enter(t);
       const before = structuredClone(app()), native = f.native.encodeState(), peer = f.peer.encodeState();
       const standalone = undoOwner().sizes(), action = t.mock.method(notices, "showAction");
@@ -542,6 +542,32 @@ for (const command of ["delete", "cut"]) for (const route of ["keyboard", "menu"
           document.querySelector(`#scene-menu [data-scene-action="${command}"]`).click();
           assert.equal(document.querySelector("#scene-menu").hidden, true);
         }
+        assert.deepEqual(errors, []);
+        assert.deepEqual(undoOwner().sizes(), standalone);
+        assert.equal(action.mock.callCount(), 0);
+        assert.equal(calls, mode === "hold" ? 0 : 1);
+        if (mode === "allowed") {
+          assert.equal(document.body.classList.contains("has-scene-selection"), false);
+          assert.equal(document.getElementById("scene-selection-style").textContent, "");
+          if (command === "cut") {
+            const clip = parseBeatPayload(clipboard.get(BEATS_MIME));
+            assert.deepEqual(clip.rows.map(({ audioText, visualText }) => [audioText, visualText]), [["Other", "Scene"], ["Third", "Final"]]);
+            assert.ok(clip.cut);
+            assert.match(clipboard.get("text/plain"), /Other[\s\S]*Third/);
+            assert.match(clipboard.get("text/html"), /Other[\s\S]*Third/);
+          } else assert.equal(clipboard.size, 0);
+          assert.deepEqual(f.notices(), [[command === "cut" ? "2 beats cut — paste them with Ctrl+V." : "2 beats deleted.", "ok"]]);
+          agree(f, ["abcdef"]);
+          assert.deepEqual(openCopy(t, f.native.encodeState(), "Reader").document(), app());
+          assert.deepEqual(f.peer.commands.undo(), { kind: "unchanged" });
+          history(document.body);
+          agree(f, ["abcdef", "Other", "Third"]);
+          assert.deepEqual(cells(app()), cells(before));
+          history(document.body, true);
+          agree(f, ["abcdef"]);
+          assert.equal(f.notices().length, 1);
+          return;
+        }
         assert.equal(document.body.classList.contains("has-scene-selection"), true);
         assert.equal(document.getElementById("scene-selection-style").textContent, selection);
         assert.deepEqual(app(), before);
@@ -549,18 +575,8 @@ for (const command of ["delete", "cut"]) for (const route of ["keyboard", "menu"
         assert.deepEqual(f.peer.document(), before);
         assert.deepEqual(f.native.encodeState(), native);
         assert.deepEqual(f.peer.encodeState(), peer);
-        assert.deepEqual(undoOwner().sizes(), standalone);
-        assert.equal(action.mock.callCount(), 0);
-        if (command === "cut") {
-          const clip = parseBeatPayload(clipboard.get(BEATS_MIME));
-          assert.deepEqual(clip.rows.map(({ audioText, visualText }) => [audioText, visualText]), [["Other", "Scene"], ["Third", "Final"]]);
-          assert.ok(clip.cut);
-          assert.match(clipboard.get("text/plain"), /Other[\s\S]*Third/);
-          assert.match(clipboard.get("text/html"), /Other[\s\S]*Third/);
-        } else assert.equal(clipboard.size, 0);
-        assert.equal(calls, 0);
-        assert.deepEqual(f.notices(), []);
-        assert.deepEqual(errors, ["standalone only while the session is shared: held"]);
+        assert.equal(clipboard.size, 0);
+        assert.deepEqual(f.notices(), [mode === "announced" ? ["Held by the listener.", "warn"] : warning]);
       } finally {
         window.removeEventListener("error", observe);
         release();

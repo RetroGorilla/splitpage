@@ -102,6 +102,14 @@ export function createNativeEditorStructure({ native, session, input, publish, r
           }
           break;
         }
+        case "remove-beats": {
+          const ids = [...new Set(intent.ids)];
+          if (!ids.length) return { kind: "noop" };
+          if (!ids.every(id => before.rows.some(row => row.id === id))) return owner.refuse("missing");
+          step = native.commands.removeRows.withSelection(current?.range ?? anchor(ids[0] as string, 0), ids);
+          if (current && ids.includes(current.row)) after = null;
+          break;
+        }
         case "add-heading": {
           const name = cappedText(intent.name, 200), at = anchor(intent.beat, 0);
           if (!name || sceneBeforeBeat(before, intent.beat)) return { kind: "noop" };

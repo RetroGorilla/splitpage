@@ -78,6 +78,7 @@ export function removeBeatsCommand(rowIds: readonly string[]): Command {
   return {
     name: "remove-scenes",
     needs: "edit",
+    structure: { kind: "remove-beats", ids: rowIds },
     plan: function (doc): Plan | null {
       const gone = rowIds.filter(function (id, at) { return present(doc, id) && rowIds.indexOf(id) === at; });
       if (!gone.length) return null;
