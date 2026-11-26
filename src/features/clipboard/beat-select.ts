@@ -19,6 +19,7 @@ const SCROLL_MAX = 28;
 const NOT_A_BEAT_CLICK = "a[href], button, input, textarea, select, summary, label, .row-menu, .link-popover, .video-popover, .mini-toolbar";
 const BEAT_PICTURE = ".scene-gallery-tile";
 const SPLIT_VIEW = "#root, #rows";
+const READ_ONLY_PREVIEW = ".shared-history-preview";
 const HIDES_BEATS ='#rows .hidden-shot-strip, #rows .section-fold[aria-expanded="false"]';
 
 let ports: BeatSelectPorts | null = null;
@@ -45,6 +46,7 @@ let menuEl: HTMLDivElement | null = null;
 const REFUSED = false;
 let pendingCut = false;
 let commanded = false;
+let originInSplit = true;
 let clipWritten: BeatPayload | typeof REFUSED | null = null;
 
 function selectionOf(anchor: string | null | undefined, focus: string | null | undefined, ids: Set<string>): BeatSelection {
@@ -97,6 +99,7 @@ function beatsBetween(anchorId: string | null | undefined, focusId: string | nul
 
 export function selectBeats(anchorId: string | null | undefined, focusId?: string | null | undefined) {
   const focus = focusId || anchorId;
+  originInSplit = true;
   sel = selectionOf(anchorId, focus, beatsBetween(anchorId, focus));
   paint();
 }
@@ -347,8 +350,9 @@ function payloadOfSelection(cut: boolean): BeatPayload {
   return { ids: ids, nonce: nonce, out: out };
 }
 
-function putBeats(cd: DataTransfer, w: BeatPayload) {
-  try { cd.setData(BEATS_MIME, w.out.json); } catch (e) { }
+function putBeats(cd: DataTransfer, w: BeatPayload, strict?: boolean) {
+  if (strict) cd.setData(BEATS_MIME, w.out.json);
+  else try { cd.setData(BEATS_MIME, w.out.json); } catch (e) { }
   cd.setData("text/html", w.out.html);
   cd.setData("text/plain", w.out.text);
   return w;
@@ -387,13 +391,11 @@ function cutInto(e: ClipboardEvent, cd: DataTransfer) {
     return;
   }
   const nonce = (ports as BeatSelectPorts).nonce();
-  const shown = (ports as BeatSelectPorts).document.current() as DocumentView;
   let staged: BeatPayload | null = null;
   let failure: { error: unknown } | null = null;
   const entry = takeOut(selectedBeatIds(), function (live, ids) {
-    const doc: DocumentView = { ...shown, ...live };
-    const w = { ids: ids, nonce: nonce, out: buildBeatPayload(doc, ids, { cut: nonce }) };
-    try { putBeats(cd, w); } catch (error) { failure = { error: error }; return false; }
+    const w = { ids: ids, nonce: nonce, out: buildBeatPayload(live, ids, { cut: nonce }) };
+    try { putBeats(cd, w, true); } catch (error) { failure = { error: error }; return false; }
     staged = w;
     return true;
   });
@@ -567,9 +569,31 @@ export function newScriptFromSelection() {
   });
 }
 
+function inSplit(node: Node | null) {
+  const el = node && (node.nodeType === 1 ? node as Element : node.parentElement);
+  return !!el && (!!el.closest(SPLIT_VIEW) || !!(menuEl && menuEl.contains(el)));
+}
+
+function textSelectedOutside() {
+  const s = window.getSelection();
+  return !!s && s.rangeCount > 0 && [s.anchorNode, s.focusNode].some(function (n) { return !!n && n.isConnected && n !== document.body && !inSplit(n); });
+}
+
+function previewOpen() {
+  const preview = document.querySelector(READ_ONLY_PREVIEW);
+  return !!preview && !preview.closest("[hidden]");
+}
+
 function outsideSplit() {
   const a = document.activeElement;
-  return !!a && a !== document.body && !a.closest(SPLIT_VIEW) && !(menuEl && menuEl.contains(a));
+  if (a && a !== document.body) return !inSplit(a);
+  // why: with focus on the page body the last press or text selection says where the person is working
+  return !originInSplit || textSelectedOutside() || previewOpen();
+}
+
+function noteOrigin(e: Event) {
+  const target = e.target as Node | null;
+  if (target && target !== document && target !== document.body) originInSplit = inSplit(target);
 }
 
 function onKeyDown(e: KeyboardEvent) {
@@ -659,6 +683,7 @@ function onContextMenu(e: MouseEvent) {
 }
 
 function onDocMouseDown(e: MouseEvent) {
+  noteOrigin(e);
   if (menuEl && menuEl.contains(e.target as Node | null)) return;
   if (e.button === 2 && hasBeatSelection()) {
     const row = (e.target as Element).closest && (e.target as Element).closest("#rows .row[data-id]");
@@ -681,6 +706,7 @@ export function startBeatSelect(given: BeatSelectPorts) {
   scroll = null;
   pendingCut = false;
   commanded = false;
+  originInSplit = true;
   clipWritten = null;
   const offs: (() => void)[] = [];
   function listen(target: EventTarget, type: string, fn: EventListener, opts?: boolean) {
@@ -703,7 +729,17 @@ export function startBeatSelect(given: BeatSelectPorts) {
   listen(document, "contextmenu", onContextMenu as EventListener);
   listen(window, "resize", closeBeatMenu);
   listen(window, "scroll", closeBeatMenu, true);
-  offs.push(given.document.onChange(function () { if (sel) hasBeatSelection(); }));
+  offs.push(given.document.onChange(function (change) {
+    if (!sel) return;
+    const c = change.changes;
+    const doc = given.document.current();
+    // why: a peer's text edit moves no beat, so the selection only takes the new document and keeps its paint
+    if (given.sharing() && sel.doc && doc && doc.docId === sel.docId && given.lifetime.epoch() === sel.epoch && !c.whole && !c.rowsInserted.length && !c.rowsRemoved.length && !c.rowsMoved) {
+      sel = { ...sel, doc: doc };
+      return;
+    }
+    hasBeatSelection();
+  }));
   exposeTestHook("__sceneSelectTest", function () { return {
     select: selectBeats,
     clear: clearBeatSelection,

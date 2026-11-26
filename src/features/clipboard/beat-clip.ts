@@ -32,7 +32,7 @@ interface BeatInsertOptions {
 }
 type BeatPasteOptions = Pick<BeatInsertOptions, "afterRowId" | "mint" | "stamp"> & { title?: string | undefined };
 import type { BeatClipPorts } from "./ports.ts";
-import type { DocumentView } from "../../application/session/document-session.ts";
+import type { DeepReadonly, DocumentView } from "../../application/session/document-session.ts";
 import type { DocumentShape, DocumentComment, DocumentTag, DocumentShot, ValidatedDocument, DocumentRow } from "../../core/document/validated.ts";
 import type { Run } from "../../core/text/runs.ts";
 import { normalizeBrollProps } from "../../core/document/broll.ts";
@@ -81,7 +81,7 @@ function cellIdsOf(rows: readonly DocumentRow[], pick: (cell: readonly Run[], ou
   return out;
 }
 
-export function buildBeatPayload(state: DocumentView | null, rowIds: readonly string[], opts?: { cut?: string | null; dataUrl?: BeatClipPorts["pictures"]["dataUrlFor"]; cap?: number }) {
+export function buildBeatPayload(state: DeepReadonly<DocumentShape> | null, rowIds: readonly string[], opts?: { cut?: string | null; dataUrl?: BeatClipPorts["pictures"]["dataUrlFor"]; cap?: number }) {
   opts = opts || {};
   const want = Object.create(null) as Record<string, boolean>;
   (rowIds || []).forEach(function (id) { want[id] = true; });
