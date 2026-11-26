@@ -58,6 +58,7 @@ click #btn-write
 wait W.on()
 eval W.openVisual('r6'); window.v=function(){return document.querySelector('.wr-flow-visual-text');}; true
 press sfx: rain on [umb
+wait document.getElementById('tag-ghost').classList.contains('is-visible')
 key Tab
 expect kw(v()) && v().querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'
 key Tab
