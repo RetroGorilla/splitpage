@@ -360,7 +360,9 @@ export class NativeScriptReader {
       }
     });
     observe(roots.edited, events => { for (const event of events) for (const key of event.keys.keys()) this.dirtyBeats.add(key); });
-    for (const root of [roots.people, roots.tags, roots.shots]) observe(root, () => { this.registryCache = null; });
+    const invalidateRegistries = () => { this.registryCache = null; };
+    for (const root of [roots.people, roots.tags, roots.shots]) observe(root, invalidateRegistries);
+    observe(roots.tagKeys, invalidateRegistries);
   }
 
   close(): void {

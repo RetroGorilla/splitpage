@@ -234,8 +234,8 @@ test("deriveProductionIndex lists registry entries in order, then the live tags 
   assert.deepEqual(ix.unregistered.map((t) => t.key), ["location kitchen", "sound whistle"]);
   assert.equal(ix.entries[3]?.mentions, ix.unregistered[0]?.mentions);
   assert.equal(ix.rowCount, 2);
-  assert.equal(ix.tagSig.length, 36);
-  assert.deepEqual(ix.tagSig.slice(18, 24), [null, null, null, null, null, null]);
+  assert.equal(ix.tagSig.length, 42);
+  assert.deepEqual(ix.tagSig.slice(21, 28), [null, null, null, null, null, null, null]);
 });
 
 test("nested Production and Gear entries retain their own records and mentions", () => {
@@ -280,6 +280,12 @@ test("an index is kept through prose edits and goes stale when what it reads cha
   const restatused = jsonCopy(state);
   (restatused.productionTags[0] as RegistryTag).status = "sourcing";
   assert.equal(refreshedProductionIndex(deriveProductionIndex(state, readers), restatused, readers), null);
+  const conflicted = jsonCopy(state);
+  (conflicted.productionTags[0] as RegistryTag).unmergedEdits = [{ field: "notes", value: "Spare" }];
+  const conflictIndex = deriveProductionIndex(conflicted, readers);
+  const changedConflict = jsonCopy(conflicted);
+  (changedConflict.productionTags[0] as RegistryTag).unmergedEdits = [{ field: "notes", value: "Use the spare" }];
+  assert.equal(refreshedProductionIndex(conflictIndex, changedConflict, readers), null);
   const grown = Object.assign({}, state, { productionTags: state.productionTags.concat([registered("cast", "Ada")]) });
   assert.equal(refreshedProductionIndex(deriveProductionIndex(state, readers), grown, readers), null);
 });

@@ -300,6 +300,21 @@ test("same-name prop additions keep both IDs and show one through undo, redo and
   }, undefined, source(initial), true);
 });
 
+test("shot capacity counts folded aliases once and keeps their stored keys", () => {
+  const initial = initialProps(38);
+  registryCopies((left, right, settle) => {
+    for (const copy of [left, right]) write(copy, { kind: "addProp", id: "shot", prop: "Kettle" });
+    settle();
+    assert.equal(read(left)?.length, 39);
+    assert.equal(propsOf(left).size, 40);
+    write(left, { kind: "addProp", id: "shot", prop: "Lid" });
+    settle();
+    assert.equal(read(right)?.length, 40);
+    assert.equal(propsOf(right).size, 41);
+    assert.equal(changeNativeRegistry(right, { kind: "addProp", id: "shot", prop: "Spout" }).kind, "refused");
+  }, undefined, source(initial));
+});
+
 test("the winner can undo and redo two concurrent additions using the same existing tag ID", () => {
   const initial = initialProps(3), rope = { id: "t_rope", name: "Rope" };
   registryCopies((left, right, settle) => {

@@ -197,6 +197,18 @@ test("production tags: merging saved copies preserves alternate values from shar
   }]);
 });
 
+test("production tags: saved folds with different IDs retain both primary notes and both alternatives", () => {
+  const saved = (id: string, notes: string, value: string) => tag(id, "Lens", { notes, unmergedEdits: [{ field: "notes", value }] });
+  const merged = mergeProductionTags([], [saved("t_first", "A", "B")], [saved("t_second", "C", "D")]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0]?.notes, "C");
+  assert.deepEqual(merged[0]?.unmergedEdits?.map(edit => edit.value).sort(), ["A", "B", "D"]);
+  const resolved = (id: string, notes: string) => tag(id, "Lens", { notes, sharedFold: true });
+  const result = mergeProductionTags([], [resolved("t_first", "A")], [resolved("t_second", "C")]);
+  assert.deepEqual(result[0]?.unmergedEdits, [{ field: "notes", value: "A" }]);
+  assert.equal(result[0]?.sharedFold, true);
+});
+
 test("b-roll props: additions on both sides, removals, an ancestor with no list, and the cap", () => {
   const K = prop("t_kettle", "Kettle"), L = prop("t_ladder", "Ladder"), T = prop("t_tripod", "Tripod");
   assert.deepEqual(mergeBrollProps([K], [K, L], [K, T]), [K, T, L]);

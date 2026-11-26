@@ -283,7 +283,7 @@ export function commentEntries(doc: ExportDocument, opts?: CommentOptions | null
     return compareCommentPositions({ rowId: text(a.rowId), field: text(a.field), createdAt: a.createdAt },
       { rowId: text(b.rowId), field: text(b.field), createdAt: b.createdAt }, rowIndexOf);
   });
-  return list.map(function (c) {
+  const entries = list.map(function (c) {
     const rowIndex = rowIndexOf(c.rowId);
     const entry: CommentEntry = {
       id: c.id,
@@ -310,6 +310,18 @@ export function commentEntries(doc: ExportDocument, opts?: CommentOptions | null
     if (pieces) entry.pieces = commentBodyPieces({ kind: c.kind, field: c.field, imageValue: c.imageValue, body: c.body }, services);
     return entry;
   });
+  for (const [index, tag] of doc.tags.entries()) {
+    if (!tag?.unmergedEdits) continue;
+    for (const [at, { field, value }] of tag.unmergedEdits.entries()) {
+      const label = field === "notes" ? "Notes" : field === "owner" ? "Assigned to" : "Status";
+      const body = field === "owner" ? doc.people.find(person => person.id === value)?.name ?? value
+        : field === "status" ? tagStatus(value)?.label ?? value : value;
+      entries.push({ id: "tag-conflict:" + index + ":" + at, rowIndex: -1, field: "tag", location: tag.name + " · " + label,
+        author: "Unmerged edit", body, quoted: "", resolved: false, resolvedBy: "", assignee: "", when: "", replies: [],
+        ...(pieces ? { pieces: [{ text: body }] } : {}) });
+    }
+  }
+  return entries;
 }
 
 function bodyPieces(html: unknown, services: ExportServices = exportServices()): BodyPiece[] {

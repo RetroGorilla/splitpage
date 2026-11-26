@@ -99,7 +99,7 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
     plan(writes, changes);
   }
 
-  return { activeCount: active.length, damaged: bad.size > 0,
+  return { distinctCount: shown.length, damaged: bad.size > 0,
     hasName: (name: string) => shown.some(({ prop }) => normalizeTagName(prop.name) === name),
     add, remove, move, replace };
 }

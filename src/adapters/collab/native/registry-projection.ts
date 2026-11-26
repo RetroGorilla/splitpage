@@ -13,6 +13,7 @@ import { toPlainText } from "../../../core/text/projections.ts";
 import { tagIds } from "../../../core/text/runs.ts";
 import type { Run } from "../../../core/text/runs.ts";
 import type { NativeRoots } from "./roots.ts";
+import { NATIVE_TAG_FIELDS, nativeTagCounter, nativeTagFields, readNativeTagAlternatives } from "./tag-fields.ts";
 import { sameNativeValue } from "./values.ts";
 
 interface RegistryCellRow {
@@ -31,7 +32,7 @@ export interface NativeRegistryRowInputs {
 
 type KeyedTag = DocumentTag & { id: string };
 
-function foldTags(tags: DocumentShape["productionTags"]) {
+function foldTags(tags: DocumentShape["productionTags"], roots: NativeRoots) {
   const byName = new Map<string, KeyedTag | KeyedTag[]>(), groups = new Map<string, readonly string[]>();
   for (const tag of tags) {
     if (!tag?.name || !isTagId(tag.id)) continue;
@@ -48,29 +49,53 @@ function foldTags(tags: DocumentShape["productionTags"]) {
     if (!first) continue;
     const ids = Object.freeze(members.map(tag => tag.id));
     for (const id of ids) groups.set(id, ids);
-    const tag = { ...first }, edits: UnmergedTagEdit[] = [];
-    for (const [field, fallback] of [["notes", ""], ["owner", ""], ["status", TAG_STATUS_IDS[0]]] as const) {
-      const values = new Set<string>(), previous = new Set<string>();
+    const tag = { ...first, sharedFold: true as const }, edits: UnmergedTagEdit[] = [];
+    for (const field of nativeTagFields) {
+      const fallback = NATIVE_TAG_FIELDS[field], values = new Set<string>(), previous = new Set<string>();
+      let winner: string = fallback, highest = 0;
       for (const member of members) {
-        const value = member[field];
+        const value = member[field] ?? fallback;
+        const counter = nativeTagCounter(roots.tags.get(member.id), field);
+        if (counter > highest || highest === 0 && winner === fallback && value !== fallback) {
+          winner = value;
+          highest = counter;
+        }
         if (value && value !== fallback) values.add(value);
         for (const edit of member.unmergedEdits ?? []) if (edit.field === field) previous.add(edit.value);
       }
-      const [value, ...remaining] = values;
-      if (value) tag[field] = value;
-      for (const alternative of new Set([...remaining, ...previous])) {
-        if (alternative !== tag[field]) edits.push({ field, value: alternative });
+      tag[field] = winner;
+      for (const alternative of new Set([...values, ...previous])) {
+        if (alternative !== winner) edits.push({ field, value: alternative });
       }
     }
     if (edits.length) tag.unmergedEdits = edits;
     else delete tag.unmergedEdits;
     folded.set(first.id, tag);
   }
-  return { tags: groups.size ? tags.flatMap(tag => {
+  const projected = groups.size ? tags.flatMap(tag => {
     if (!tag?.id || !groups.has(tag.id)) return [tag];
     const merged = folded.get(tag.id);
     return merged ? [merged] : [];
-  }) : tags, groups };
+  }) : tags;
+  const retired = [...roots.tagKeys].filter(([id]) => !roots.tags.has(id));
+  if (retired.length) {
+    const livingByKey = new Map<string, readonly string[]>();
+    for (const tag of tags) {
+      if (!tag?.id || !roots.tags.has(tag.id)) continue;
+      const ids = groups.get(tag.id) ?? Object.freeze([tag.id]);
+      const key = roots.tagKeys.get(tag.id) ?? registryKey(tag.cat, tag.name);
+      const prior = livingByKey.get(key);
+      if (!prior || String(ids[0]) < String(prior[0])) livingByKey.set(key, ids);
+    }
+    for (const [id, key] of retired) {
+      const living = livingByKey.get(key);
+      if (living) {
+        groups.set(id, living);
+        for (const member of living) groups.set(member, living);
+      }
+    }
+  }
+  return { tags: projected, groups };
 }
 
 function production(rows: readonly RegistryCellRow[]) {
@@ -183,15 +208,15 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
     if (record?.owner && !people.has(record.owner)) record.owner = "";
   }
   for (const tag of document.productionTags) {
-    if (!tag || !Object.hasOwn(tag, "unmergedEdits")) continue;
-    const edits = unmergedTagEdits(tag.unmergedEdits);
+    if (!tag) continue;
+    const stored = tag.id ? roots.tags.get(tag.id) : undefined;
+    const edits = stored instanceof Y.Map ? readNativeTagAlternatives(stored, tag.unmergedEdits) : unmergedTagEdits(tag.unmergedEdits);
     if (edits.length) tag.unmergedEdits = edits;
     else delete tag.unmergedEdits;
   }
-  const { tags, groups } = foldTags(document.productionTags);
-  document.productionTags = tags;
+  const { tags, groups } = foldTags(document.productionTags, roots);
   if (document.brollShots.some(shot => shot.props?.length)) {
-    const relevantTags = propNormalizer(document.productionTags);
+    const relevantTags = propNormalizer(tags);
     for (const shot of document.brollShots) {
       if (!shot.props?.length) continue;
       const props = groups.size ? shot.props.map(prop => {

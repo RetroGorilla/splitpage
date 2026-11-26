@@ -329,6 +329,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     t.status = tagStatusId(t.status) || TAG_STATUS_IDS[0];
     t.owner = typeof t.owner === "string" && knownPeople[t.owner] ? t.owner : "";
     t.notes = cappedLongText(plainText(t.notes), 2000);
+    if (t.sharedFold !== true) delete t.sharedFold;
     if (Object.hasOwn(t, "unmergedEdits")) {
       const edits = unmergedTagEdits(t.unmergedEdits);
       if (edits.length) t.unmergedEdits = edits;

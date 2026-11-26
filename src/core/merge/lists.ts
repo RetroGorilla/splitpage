@@ -16,6 +16,7 @@ export interface TagInput {
   owner?: string | undefined;
   notes?: string | undefined;
   status?: string | undefined;
+  sharedFold?: true | undefined;
   unmergedEdits?: readonly UnmergedTagEdit[] | undefined;
 }
 
@@ -26,6 +27,7 @@ export interface TagEntry {
   notes: string;
   status: string;
   id?: string;
+  sharedFold?: true | undefined;
   unmergedEdits?: readonly UnmergedTagEdit[] | undefined;
 }
 
@@ -154,6 +156,7 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
   (baseTags || []).forEach(function (t) { if (t && t.name) baseById[idOf(t)] = t; });
   const out: TagEntry[] = [], byId = idMap<TagEntry>(), theirKeys = idMap<boolean>();
   function keepUnmergedEdits(into: TagEntry, from: TagInput): void {
+    if (from.sharedFold) into.sharedFold = true;
     if (!from.unmergedEdits?.length) return;
     const edits = unmergedTagEdits([...(into.unmergedEdits ?? []), ...from.unmergedEdits]);
     if (edits.length) into.unmergedEdits = edits;
@@ -200,10 +203,20 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
     const key = registryKey(e.cat, e.name);
     const first = byKey[key];
     if (!first) { byKey[key] = e; return true; }
+    const primaries = first.sharedFold || e.sharedFold || first.unmergedEdits?.length || e.unmergedEdits?.length ? [
+      { field: "notes", value: first.notes }, { field: "notes", value: e.notes },
+      { field: "owner", value: first.owner }, { field: "owner", value: e.owner },
+      { field: "status", value: first.status }, { field: "status", value: e.status }
+    ] as const : [];
     if (ownerGivesWay(first.owner, e.owner, live)) first.owner = e.owner;
     if (!first.notes && e.notes) first.notes = e.notes;
     if (tagStatusRank(e.status) > tagStatusRank(first.status)) first.status = e.status;
     keepUnmergedEdits(first, e);
+    if (primaries.length) {
+      const edits = unmergedTagEdits([...(first.unmergedEdits ?? []), ...primaries]).filter(edit => edit.value !== first[edit.field]);
+      if (edits.length) first.unmergedEdits = edits;
+      else delete first.unmergedEdits;
+    }
     return false;
   });
 }

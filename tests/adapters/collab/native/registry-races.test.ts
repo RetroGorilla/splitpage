@@ -281,7 +281,7 @@ test("same-name tags read as one record and keep fields from either creation", (
     const id = [first.created, second.created].sort()[0];
     const name = id === first.created ? "Kettle" : "KETTLE";
     assert.deepEqual(read(left, "tags").filter(tag => typeof tag?.name === "string" && tag.name.toLowerCase() === "kettle"),
-      [{ id, cat: "prop", name, notes: "Handheld", status: "have", owner: "" }]);
+      [{ id, cat: "prop", name, notes: "Handheld", status: "have", owner: "", sharedFold: true }]);
     assert.ok(left.roots.tags.has(first.created) && left.roots.tags.has(second.created));
   });
 });
@@ -296,7 +296,7 @@ test("same-name tag conflicts stay reachable until a field is edited and return 
     try {
       const tag = () => record(left, "tags", first.created);
       const unmerged = [{ field: "notes", value: "From the kitchen" }, { field: "owner", value: "p2" }, { field: "status", value: "returned" }];
-      assert.deepEqual(tag(), { id: first.created, cat: "prop", name: "Kettle", notes: "Handheld", owner: "p1", status: "have", unmergedEdits: unmerged });
+      assert.deepEqual(tag(), { id: first.created, cat: "prop", name: "Kettle", notes: "Handheld", owner: "p1", status: "have", sharedFold: true, unmergedEdits: unmerged });
       write(left, set("tags", second.created, { notes: "For the wide shot" }));
       settle();
       assert.equal(tag()?.notes, "For the wide shot");
@@ -344,6 +344,67 @@ test("a same-name tag unseen by the remover survives delivery", () => {
   });
 });
 
+test("a late lower ID changes the tag identity and preserves the explicit edit or reset", () => {
+  for (const value of ["Resolved", ""]) {
+    const seed = convertedScript(registrySource());
+    const [late, first, second] = [joinedScript(seed, 4), joinedScript(seed, 9), joinedScript(seed, 12)];
+    try {
+      const baseline = Y.encodeStateVector(seed.doc);
+      const add = (script: NativeScript, notes: string) => changeNativeRegistry(script, { kind: "create", collection: "tags", fields: { cat: "prop", name: "Kettle", notes } });
+      const a = add(first, "First"), b = add(second, "Second"), c = add(late, "Late");
+      assert.ok("created" in a && "created" in b && "created" in c && c.created < a.created);
+      Y.applyUpdate(first.doc, Y.encodeStateAsUpdate(second.doc, baseline), "peer");
+      write(first, set("tags", a.created, { notes: value }));
+      Y.applyUpdate(first.doc, Y.encodeStateAsUpdate(late.doc, baseline), "peer");
+      const all = Y.encodeStateAsUpdate(first.doc, baseline);
+      for (const copy of [first, second, late]) {
+        Y.applyUpdate(copy.doc, all, "peer");
+        assert.equal(record(copy, "tags", c.created)?.notes, value);
+        assert.deepEqual(record(copy, "tags", c.created)?.unmergedEdits, [{ field: "notes", value: "Late" }]);
+      }
+    } finally { for (const copy of [seed, late, first, second]) copy.doc.destroy(); }
+  }
+});
+
+test("undo of the canonical tag keeps its references and stale commands attached after reload", () => {
+  registryUndoCopies((left, right, settle) => {
+    const create = { kind: "create", collection: "tags", fields: { cat: "prop", name: "Kettle" } } as const;
+    const undo = openNativeUndo(left);
+    try {
+      const first = changeNativeRegistry(left, create), second = changeNativeRegistry(right, create);
+      assert.ok("created" in first && "created" in second && first.created < second.created);
+      settle();
+      write(right, { kind: "addProp", id: "bs2", prop: "Kettle" });
+      settle();
+      assert.deepEqual(record(right, "shots", "bs2")?.props, [{ id: first.created, name: "Kettle" }]);
+      assert.equal(undo.undo().kind, "written");
+      settle();
+      const reopened = joinedScript(right, 15);
+      try {
+        assert.deepEqual(record(reopened, "shots", "bs2")?.props, [{ id: second.created, name: "Kettle" }]);
+        write(reopened, set("tags", first.created, { name: "Tea kettle" }));
+        assert.deepEqual(record(reopened, "shots", "bs2")?.props, [{ id: second.created, name: "Tea kettle" }]);
+        const reloaded = joinedScript(reopened, 16);
+        try {
+          write(reloaded, set("tags", first.created, { notes: "Handheld" }));
+          assert.equal(record(reloaded, "tags", second.created)?.notes, "Handheld");
+          assert.deepEqual(record(reloaded, "shots", "bs2")?.props, [{ id: second.created, name: "Tea kettle" }]);
+        } finally { reloaded.doc.destroy(); }
+      } finally { reopened.doc.destroy(); }
+    } finally { undo.destroy(); }
+  });
+});
+
+test("independent resolutions clear each field's saved alternatives", () => {
+  const edits = [{ field: "notes", value: "Spare" }, { field: "status", value: "have" }];
+  registryCopies((left, right, settle) => {
+    write(left, set("tags", "t_lamp", { notes: "Pack" }));
+    write(right, set("tags", "t_lamp", { status: "returned" }));
+    settle();
+    assert.deepEqual(record(left, "tags", "t_lamp"), { id: "t_lamp", cat: "prop", name: "Lamp", owner: "", notes: "Pack", status: "returned" });
+  }, undefined, registrySource({ productionTags: [{ id: "t_lamp", cat: "prop", name: "Lamp", unmergedEdits: edits }] }));
+});
+
 test("three independent same-name creations converge through a reload without rewriting the records", () => {
   const seed = convertedScript(registrySource());
   const copies = [4, 9, 12].map(id => joinedScript(seed, id));
@@ -359,7 +420,7 @@ test("three independent same-name creations converge through a reload without re
       for (const update of arrangePackets(updates, "shuffled", index + 1)) Y.applyUpdate(copy.doc, update, "peer");
       const before = Y.encodeStateAsUpdate(copy.doc);
       assert.deepEqual(read(copy, "tags").filter(tag => tag?.name === "Kettle"), [
-        { id: ids[0], cat: "prop", name: "Kettle", owner: "", notes: "A", status: "needed", unmergedEdits: [{ field: "notes", value: "B" }, { field: "notes", value: "C" }] }
+        { id: ids[0], cat: "prop", name: "Kettle", owner: "", notes: "A", status: "needed", sharedFold: true, unmergedEdits: [{ field: "notes", value: "B" }, { field: "notes", value: "C" }] }
       ]);
       assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), before);
     }

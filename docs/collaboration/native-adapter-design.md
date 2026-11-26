@@ -1013,10 +1013,21 @@ A beat loses its rank through a same-moment move race (section 10): 3 of 600 gen
 **Tags on the same letters.** A writer who untags, then retags a tag on exactly another tag's letters: which of the two reads as the outer tag follows the writers' client ids. With writer client 5 the retagged tag reads outer; with writer client 20 the other tag does. Every copy agrees and both tags stay ([format-commands.test.ts](../../tests/adapters/collab/native/format-commands.test.ts), "carried item 1, as built: across writers"). Accepted as built (Owner).
 
 **Same-name registry tags.** The shared registry reader groups live records by category and normalized name. The
-lowest ID identifies the projected tag and its shot props. The registry cache holds the grouping until its inputs
-change. Each field uses the first non-default value in ID order. The card's read-only **Unmerged edit** entries show
-other distinct values. Saved copies and file merges retain those entries with the tag. Explicit field edits update all observed
-members in one transaction, so Undo can bring back the earlier values. The reader never rewrites stored records.
+lowest live ID identifies the projected tag and its shot props. The registry cache holds the grouping until its
+inputs change. Editing notes, owner or status writes the new value and one more than the highest counter seen for
+that field onto each observed member in one transaction. The highest counter wins and equal counters prefer the
+lowest ID. At counter zero, the first non-default value in ID order wins. A reset to the default carries its own
+counter. Undo can bring back the earlier values and counters. The reader never rewrites stored records.
+
+The card's read-only **Unmerged edit** entries show other distinct values. Each field keeps its own stored
+alternatives so resolving notes and status on different copies clears both. The saved tag records that it was
+folded even if every field agrees. When it is merged with a different ID for the same key, the file merge retains
+any displaced primary values alongside the alternatives.
+Script exports with a comments section show these entries there.
+
+Tag creations record their category and normalized name in `tagKeys` outside Undo. After Undo removes the
+creating record, its ID still resolves to a live member of that group. That member can be renamed while the old
+reference continues to resolve through the recorded key. Explicit removal keeps the record tombstoned.
 
 Removal marks every observed member of the folded tag in one undoable transaction. An unseen concurrent addition
 survives and the tag can appear again with that record's fields. Labelled tag removal and surviving-label healing
@@ -1025,8 +1036,8 @@ delivery orders, three writers and reload.
 
 ## 4. Undo
 
-One `Y.UndoManager` per person over every root a command writes, headings and names included, not `births` or
-`edited`. Only the local command origin is tracked. Grouping follows the app's word rule with `stopCapturing()`
+One `Y.UndoManager` per person over command roots including headings and names, with `births`, `edited` and
+`tagKeys` outside its scope. Only the local command origin is tracked. Grouping follows the app's word rule with `stopCapturing()`
 (E3). Default delete filter; no depth cap.
 
 - Undo takes back only the presser's changes. A press can pass over spent steps (E11) or change only a removed
@@ -1495,7 +1506,8 @@ E5's checks are the template.
 | `visuals` | One visual cell (`Y.Text`) per beat, kept after the beat is removed |
 | `headings` | Per heading: `rank`, other fields; `removed` when set |
 | `names` | One name cell (`Y.Text`) per heading, written at conversion |
-| `comments`, `replies`, `people`, `tags` | The file's fields; bodies are whole strings |
+| `comments`, `replies`, `people`, `tags` | The file's fields; bodies are whole strings. Tags keep field counters and per-field alternatives |
+| `tagKeys` | Original registry key of each created tag, retained when Undo removes its record |
 | `shots` | The shot's file fields and a nested `props` map. Each key is the tag ID, or `n:` followed by the JSON-encoded normalized name. Its record holds the encoded name, rank and optional `removed` mark |
 | `edited` | Per beat, `{by, at}` of the last typing |
 

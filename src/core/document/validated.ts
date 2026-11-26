@@ -35,6 +35,7 @@ export type DocumentTag = {
   owner?: string | undefined;
   notes?: string | undefined;
   status?: string | undefined;
+  sharedFold?: true | undefined;
   unmergedEdits?: readonly UnmergedTagEdit[] | undefined;
 };
 

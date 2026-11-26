@@ -1,5 +1,6 @@
 import * as Y from "yjs";
 import { normalizeBrollProps } from "../../../core/document/broll.ts";
+import { unmergedTagEdits } from "../../../core/document/tags.ts";
 import type { ValidatedDocument } from "../../../core/document/validated.ts";
 import { tagStack, withTagStack } from "../../../core/text/runs.ts";
 import type { Run } from "../../../core/text/runs.ts";
@@ -11,6 +12,7 @@ import type { NativeRoots } from "./roots.ts";
 import { openNativeScript, transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { NATIVE_SHOT_PROPS, newNativeShotProps } from "./shot-props.ts";
+import { nativeTagAlternativesKey, nativeTagFields } from "./tag-fields.ts";
 import {
   NATIVE_BEAT_FIELDS, NATIVE_GALLERY_KEY, encodeNativeValue, isNativeBeatExtra, nativeFieldKey, nativeGalleryOf, nativeWellFormed
 } from "./values.ts";
@@ -157,9 +159,14 @@ function write(script: NativeScript, roots: NativeRoots, plan: ReturnType<typeof
     writeNativeRuns(script.doc, visual, 0, beat.visual, null);
     if (beat.edited.length) roots.edited.set(beat.id, Object.fromEntries(beat.edited));
   }
-  for (const [map, records] of [[roots.people, plan.people], [roots.tags, plan.tags]] as const) {
-    records.forEach((record, index) => { writeRecord(map, record.key, record.entries, nativeInitialRank(index)); });
-  }
+  plan.people.forEach((record, index) => { writeRecord(roots.people, record.key, record.entries, nativeInitialRank(index)); });
+  plan.tags.forEach((tag, index) => {
+    const record = writeRecord(roots.tags, tag.key, tag.entries, nativeInitialRank(index));
+    for (const field of nativeTagFields) {
+      const values = tag.alternatives.filter(edit => edit.field === field).map(edit => edit.value);
+      if (values.length) record.set(nativeTagAlternativesKey(field), values);
+    }
+  });
   plan.shots.forEach((shot, index) => {
     const record = writeRecord(roots.shots, shot.key, shot.entries, nativeInitialRank(index));
     record.set(NATIVE_SHOT_PROPS, newNativeShotProps(shot.props));
@@ -197,7 +204,8 @@ function prepare(source: ValidatedDocument, ports: NativeConversionPorts) {
   return {
     meta: metaEntries(source), title: wellFormed(source.title),
     creation: [creation, { at, by }] as const, beats,
-    people: records(bags(source.people)), tags: records(tags),
+    people: records(bags(source.people)), tags: tags.map(tag => ({ key: String(tag.id), entries: fileEntries(tag, ["id", "unmergedEdits"]),
+      alternatives: unmergedTagEdits(tag.unmergedEdits) })),
     shots: bags(source.brollShots).map(shot => ({ key: String(shot.id), entries: fileEntries(shot, ["id", "props"]),
       props: normalizeBrollProps(shot.props, []) })),
     comments: comments.map(comment => ({ id: String(comment.id), key: String(comment.id), entries: fileEntries(comment, ["id", "replies"]) })), replies

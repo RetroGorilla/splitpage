@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import { BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_PROP_NAME_MAX, BROLL_TEXT_MAX, brollStatusId, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
 import type { BrollProp } from "../../../core/document/broll.ts";
-import { isTagId, nextTagStatus, normalizeTagName, registryKey, TAG_STATUS_IDS, tagCategoryId, tagStatusId, unmergedTagEdits } from "../../../core/document/tags.ts";
+import { isTagId, nextTagStatus, normalizeTagName, registryKey, TAG_STATUS_IDS, tagCategoryId, tagStatusId } from "../../../core/document/tags.ts";
 import { cappedLongText, cappedText, plainText } from "../../../core/document/text-policy.ts";
 import type { DocumentShape, DocumentTag } from "../../../core/document/validated.ts";
 import { PERSON_NAME_MAX } from "../../../core/production/records.ts";
@@ -15,6 +15,7 @@ import { prepareNativeShotProps } from "./shot-prop-commands.ts";
 import { NATIVE_SHOT_PROPS, OBSOLETE_SHOT_PROPS, newNativeShotProps } from "./shot-props.ts";
 import { nativeWriteAvailability } from "./text-commands.ts";
 import { decodeNativeValue, encodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey, recordBag, sameNativeValue } from "./values.ts";
+import { nativeTagAlternativesKey, nativeTagCounter, nativeTagCounterKey, nativeTagFields, storedNativeTagAlternatives } from "./tag-fields.ts";
 
 type Collection = "people" | "tags" | "shots";
 type Fields = Readonly<Record<string, unknown>>;
@@ -118,8 +119,14 @@ function planNew(script: NativeScript, writes: Write[], collection: Collection, 
   if (collection === "shots") {
     const { props = [], ...ordinary } = fields;
     append(writes, root, id, ordinary, rank, props as BrollProp[]);
-  } else append(writes, root, id, fields, rank);
+  } else if (collection === "tags") appendTag(script, writes, id, fields, rank);
+  else append(writes, root, id, fields, rank);
   return id;
+}
+
+function appendTag(script: NativeScript, writes: Write[], id: string, fields: Fields, rank: string): void {
+  append(writes, script.roots.tags, id, fields, rank);
+  writes.push(() => { script.roots.tagKeys.set(id, registryKey(String(fields.cat), fields.name)); });
 }
 
 function tagAppender(script: NativeScript, writes: Write[], last: string | null): (fields: Fields) => Refused | null {
@@ -129,7 +136,7 @@ function tagAppender(script: NativeScript, writes: Write[], last: string | null)
     const id = mintNativeTagId(script.doc, offset++);
     if (root.has(id)) return refuseRecord("taken");
     rank = nativeRankBetween(rank, null);
-    append(writes, root, id, fields, rank);
+    appendTag(script, writes, id, fields, rank);
     return null;
   };
 }
@@ -225,6 +232,8 @@ function checkRename(script: NativeScript, collection: Collection, map: RecordMa
 function planTagFields(script: NativeScript, id: string, fields: Fields, cycle: boolean, document: DocumentShape, writes: Write[]): Refused | null {
   const group = script.reader.tagGroup(id);
   const shown = cycle && group ? document.productionTags.find(tag => tag?.id === group[0])?.status : undefined;
+  const maps: RecordMap[] = [];
+  let requested = fields;
   for (const member of group ?? [id]) {
     const map = target(script.roots.tags, member);
     if (!(map instanceof Y.Map)) return map;
@@ -232,17 +241,23 @@ function planTagFields(script: NativeScript, id: string, fields: Fields, cycle: 
     if (rename) return rename;
     const before = cycle ? stored(map, "status", TAG_STATUS_IDS[0]) : undefined;
     if (cycle && !tagStatusId(before)) return refuseRecord("stored");
-    const requested = cycle ? { ...fields, status: nextTagStatus(shown ?? before) } : fields;
-    if (!planFields(writes, map, requested)) return refuseRecord("stored");
-    const key = nativeFieldKey("unmergedEdits");
-    if (map.has(key)) {
-      const edits = unmergedTagEdits(stored(map, "unmergedEdits"));
-      const remaining = edits.filter(edit => !Object.hasOwn(requested, edit.field));
-      if (remaining.length < edits.length) writes.push(() => {
-        if (remaining.length) map.set(key, encodeNativeValue(remaining));
-        else map.delete(key);
-      });
-    }
+    if (cycle) requested = { ...fields, status: nextTagStatus(shown ?? before) };
+    maps.push(map);
+    if (Object.hasOwn(fields, "name") && !planFields(writes, map, { name: fields.name })) return refuseRecord("stored");
+  }
+  for (const field of nativeTagFields) {
+    if (!Object.hasOwn(requested, field)) continue;
+    const key = nativeFieldKey(field), value = requested[field];
+    const alternatives = maps.map(map => storedNativeTagAlternatives(map).some(edit => edit.field === field));
+    if (maps.some(map => map.has(key) && !decodeNativeValue(map.get(key)))) return refuseRecord("stored");
+    if (!alternatives.some(Boolean) && maps.every(map => sameNativeValue(stored(map, field), value))) continue;
+    const counter = maps.reduce((highest, map) => Math.max(highest, nativeTagCounter(map, field)), 0) + 1;
+    if (!Number.isSafeInteger(counter)) return refuseRecord("stored");
+    for (const [index, map] of maps.entries()) writes.push(() => {
+      map.set(key, encodeNativeValue(value));
+      map.set(nativeTagCounterKey(field), counter);
+      if (alternatives[index]) map.set(nativeTagAlternativesKey(field), []);
+    });
   }
   return null;
 }
@@ -387,7 +402,7 @@ function changeProp(script: NativeScript, id: string, prop: string, kind: "addPr
     const name = normalizeTagName(prop);
     if (props.hasName(name)) return RECORD_UNCHANGED;
     if (props.damaged) return refuseRecord("stored");
-    if (props.activeCount >= BROLL_PROPS_MAX) return refuseRecord("value");
+    if (props.distinctCount >= BROLL_PROPS_MAX) return refuseRecord("value");
     if (prop !== prop.trim()) return refuseRecord("value");
     const projected = projectedTagIds(script, document);
     const tag = document.productionTags.find(entry => entry?.cat === "prop" && entry.id && !projected.has(entry.id) && normalizeTagName(entry.name) === name);

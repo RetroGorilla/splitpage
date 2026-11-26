@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
+import { exportComments } from "../adapters/formats/export-kit.ts";
+import { toMarkdownDoc } from "../adapters/formats/export-text.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { captureExportDocument } from "../bootstrap/wiring/export-capture.ts";
@@ -351,8 +353,8 @@ test("concurrent same-name tags show one production card with the other writer's
   hook.nativePeer.deliver();
   await Promise.resolve();
   const id = [local, remote.created].sort()[0];
-  const [notes, other] = id === local ? ["Bring the spare", "Check & pack the case"] : ["Check & pack the case", "Bring the spare"];
-  const expected = [{ id, cat: "prop", name: "Lens", notes, status: "needed", owner: "", unmergedEdits: [{ field: "notes", value: other }] }];
+  const other = "Check & pack the case";
+  const expected = [{ id, cat: "prop", name: "Lens", notes: "Bring the spare", status: "needed", owner: "", sharedFold: true, unmergedEdits: [{ field: "notes", value: other }] }];
   copies(tags, expected);
   assert.equal(document.querySelectorAll('#production-list .tag-entity[data-key="prop lens"]').length, 1);
   const expand = tagCard("prop lens").querySelector('[data-action="tag-expand"]');
@@ -362,6 +364,9 @@ test("concurrent same-name tags show one production card with the other writer's
   const exported = captureExportDocument();
   assert.deepEqual(exported.production.map(entry => entry.id), [id]);
   assert.deepEqual(migrateRows(parseSplitpageFile(buildSplitpageFile(exported))).productionTags, expected);
+  assert.deepEqual(exportComments(exported).map(({ where, author, body }) => ({ where, author, body })),
+    [{ where: "Lens · Notes", author: "Unmerged edit", body: other }]);
+  assert.ok(toMarkdownDoc(exported).includes(other));
 });
 
 test("racing person removal and assignment agree on empty owners and restore the kept assignment", async t => {

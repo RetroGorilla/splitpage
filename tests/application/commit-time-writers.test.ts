@@ -196,7 +196,7 @@ const FIELDS: readonly Site[] = [
   ["adapters/collab/native/insert-commands.ts#blankBeat", "paragraphStart 1", "stated-write"],
   ["adapters/collab/native/reader.ts#NativeScriptReader", "docId 1, rev 1", "capture-read", "stored-read"],
   ["adapters/collab/native/registry-projection.ts#projectNativeRegistries", "owner 1", "stored-read"],
-  ["adapters/formats/export-projections.ts#commentEntries", "createdAt 2, resolvedBy 1", "no-document"],
+  ["adapters/formats/export-projections.ts#commentEntries", "createdAt 2, resolvedBy 2", "no-document"],
   ["adapters/formats/project-file.ts#buildSplitpageCopy", "docId 1", "no-document"],
   ["adapters/formats/project-file.ts#rowsFromMarkdownTable", "updatedAt 1, updatedBy 1", "file-entry"],
   ["adapters/page/standalone-html.ts#standaloneHtmlFor", "docId 1", "no-document"],
