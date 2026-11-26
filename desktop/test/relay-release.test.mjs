@@ -91,7 +91,6 @@ test("a release stage following a test stage keeps collaboration and removes the
     assert.ok(leakedCollaboration(enabledHtml).includes(marker), marker);
   }
   assert.ok(leakedCollaboration(enabledPreload).includes("splitpage:relay-owner-share-create"));
-  assert.ok(leakedCollaboration(enabledPreload).includes("open-shared"));
   assert.ok(leakedCollaboration(enabledPreload).includes("splitpage:relay-owner-sharing"));
   assert.match(enabledPreload, /splitpage:relay-owner-resume/);
   for (const marker of ["shared-pill", "shared-popover", "sharing-and-people", "leave-shared-script"]) {
@@ -124,9 +123,10 @@ test("a release stage following a test stage keeps collaboration and removes the
     "leave-script-modal", "file-copy-banner", "link-password-modal", "data-shared-history", "Shared scripts on this device"]) {
     assert.ok(leakedCollaboration(release).includes(marker), marker);
   }
-  for (const marker of ["splitpage:relay-owner-share-create", "splitpage:relay-owner-sharing", "open-shared"]) {
+  for (const marker of ["splitpage:relay-owner-share-create", "splitpage:relay-owner-sharing"]) {
     assert.ok(leakedCollaboration(releasePreload).includes(marker), marker);
   }
+  assert.match(releasePreload, /splitpage:relay-owner-resume/);
   assert.match(release, /connect-src 'self' https: http: wss:;/);
   assert.deepEqual(leakedHooks(release), []);
   assert.deepEqual(leakedHooks(releasePreload), []);

@@ -1,5 +1,4 @@
 import type { NativeReplicaReply, NativeReplicaRequest } from "./native-replica.d.ts";
-import type { SharedScriptCatalogueEntry } from "./shared-script.ts";
 
 export interface DesktopWireFile {
   id: string;
@@ -25,7 +24,6 @@ export interface DesktopWireRecent {
 
 export interface DesktopWireLaunch {
   type: string;
-  shared?: SharedScriptCatalogueEntry;
 }
 
 export interface DesktopWireBoot {
@@ -314,7 +312,7 @@ export interface DesktopIpcContract {
   "splitpage:relay-owner-clear": DesktopChannelCall<[], boolean>;
   "splitpage:relay-owner-share-create": DesktopChannelCall<Parameters<ShareScriptControls["create"]>, ShareScriptCreation>;
   "splitpage:relay-owner-share-abandon": DesktopChannelCall<[creationId: string], boolean>;
-  "splitpage:relay-owner-resume": DesktopChannelCall<[reference: [] | [DesktopSharedScriptReference | null] | [null, DesktopSharedScriptReference, "unavailable"?]], DesktopSharedScriptReference | null | boolean>;
+  "splitpage:relay-owner-resume": DesktopChannelCall<[reference: [] | [DesktopSharedScriptReference | null] | [null, DesktopSharedScriptReference, "unavailable"?]], (DesktopSharedScriptReference & { reserved: boolean }) | null | boolean>;
   "splitpage:relay-owner-sharing": DesktopChannelCall<[operation: string, name: string, lease: string, address: string, password?: string], NativeReplicaReply>;
   "splitpage:relay-owner-share-complete": DesktopChannelCall<[creationId: string], boolean>;
   "splitpage:relay-setup-save": DesktopChannelCall<[address: string, secret: string], RelaySetupSave>;

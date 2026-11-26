@@ -3474,6 +3474,8 @@ async function caseSharedTabRestore(target, fixturesDir) {
     const name = "desktop-smoke/" + link.searchParams.get("join");
     const replica = path.join(ownerProfile, "native-replicas", crypto.createHash("sha256").update(name).digest("hex"));
     await evalPage(cdp, "document.querySelector('[data-share=close]').click()");
+    record(tag + ": a shared file tab reports its current reservation separately from its launch intent", await evalPage(cdp, `(async () =>
+      window.splitpageDesktop.launchIntent.type === 'open-file' && (await window.splitpageDesktop.sharedReference([]))?.reserved === true)()`));
 
     let sharedTabId = await tabIdOfTarget(cdp);
     const standaloneId = await shell(cdp, "createTab", {});

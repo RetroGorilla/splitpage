@@ -15,18 +15,18 @@ declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 export async function resumeDesktopReference(
   reference: NonNullable<DesktopPort["sharedReference"]>,
   open: (saved: DesktopSharedScriptReference) => Promise<SharedSwitchOutcome>,
-  signal: AbortSignal,
-  clearFailedRestore = false
+  signal: AbortSignal
 ): Promise<SharedSwitchOutcome | null> {
-  const saved = await reference([]);
-  if (!saved || typeof saved !== "object" || signal.aborted) return null;
+  const reply = await reference([]);
+  if (!reply || typeof reply !== "object" || signal.aborted) return null;
+  const { reserved, ...saved } = reply;
   let outcome: SharedSwitchOutcome | undefined;
   try {
     outcome = await open(saved);
     return outcome;
   } finally {
     const unavailable = outcome?.ok === false && outcome.reason === RETAINED_SHARED_COPY_UNAVAILABLE;
-    if (!signal.aborted && (unavailable || (clearFailedRestore && outcome?.ok !== true))) {
+    if (!signal.aborted && (unavailable || (reserved && outcome?.ok !== true))) {
       const failedCopy = unavailable || outcome?.ok === false && (outcome.reason === "io" || outcome.reason === "enter-failed");
       await reference(failedCopy ? [null, saved, "unavailable"] : [null, saved]).catch(() => false);
     }
@@ -44,8 +44,7 @@ export async function enterSavedReference(
 }
 
 function startResume(enter: (entry: RetainedSharedScript) => Promise<SharedSwitchOutcome>): () => void {
-  const desktop = desktopPort();
-  const reference = desktop?.sharedReference;
+  const reference = desktopPort()?.sharedReference;
   const ready = startupReady();
   if (!reference || !ready) return () => {};
   const lifetime = new AbortController();
@@ -58,8 +57,7 @@ function startResume(enter: (entry: RetainedSharedScript) => Promise<SharedSwitc
     entrySignal.throwIfAborted();
     return entrySignal;
   };
-  void resumeDesktopReference(reference, saved => enterSavedReference(saved, enter, settled),
-    signal, desktop.launchIntent.type === "open-shared").then(outcome => {
+  void resumeDesktopReference(reference, saved => enterSavedReference(saved, enter, settled), signal).then(outcome => {
     if (outcome?.ok === false && !signal.aborted) notices.show("Could not reopen the local shared script.", "warn", true);
   }, error => { if (!signal.aborted) console.error(error); });
   return () => { lifetime.abort(); };

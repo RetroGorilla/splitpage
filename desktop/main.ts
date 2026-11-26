@@ -1958,7 +1958,10 @@ const relaySetup = COLLAB_UI ? (() => {
     async sharedReference(event: DesktopIpcEvent, args: DesktopIpcArgs<"splitpage:relay-owner-resume">[0]) {
       const tab = tabWindow(event) && tabOf(event);
       if (!tab) return false;
-      if (!args.length) return sharedReferenceFor(tab);
+      if (!args.length) {
+        const saved = sharedReferenceFor(tab);
+        return saved && { ...saved, reserved: tab.source.kind === "shared" };
+      }
       const reference = normalizeSharedReference(args[0]);
       const previous = tab.shared;
       if ((args.length === 2 || (args.length === 3 && args[2] === "unavailable")) && args[0] === null) {
@@ -2053,10 +2056,7 @@ async function askFileCopyChoice(tab: DesktopMainTab, problem: "changed" | "unav
 }
 
 function launchIntentFor(tab: DesktopMainTab) {
-  if (tab.source.kind === "shared") {
-    const shared = retainedSharedScript(tab.source);
-    if (shared) return { type: "open-shared", shared };
-  }
+  if (tab.source.kind === "shared" && retainedSharedScript(tab.source)) return { type: "open-shared" };
   if (draftsHasDraft(tab.id)) return { type: "restore-draft" };
   if (COLLAB_UI && tab.shared) return { type: "blank" as const };
   if (tab.source.kind === "file" && tab.pendingPayload) return { type: "open-file" };
