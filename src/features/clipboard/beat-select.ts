@@ -123,6 +123,7 @@ function selectAllBeats() {
   const ids = new Set(doc.rows.map(function (r) { return r.id; }));
   const first = (doc.rows[0] as NonNullable<typeof doc.rows[number]>).id;
   sel = selectionOf(first, first, ids);
+  originInSplit = true;
   leaveText();
   paint();
   prefetchPictures();
@@ -359,7 +360,7 @@ function putBeats(cd: DataTransfer, w: BeatPayload, strict?: boolean) {
 }
 
 function onBeforeCopy(e: Event) {
-  if (hasBeatSelection() && !inEditable() && !outsideSplit()) e.preventDefault();
+  if (hasBeatSelection() && !inEditable() && !outsideSplit(e.target)) e.preventDefault();
 }
 
 function inEditable() {
@@ -368,7 +369,7 @@ function inEditable() {
 }
 
 function onCopyEvent(e: ClipboardEvent) {
-  if (!hasBeatSelection() || inEditable() || !e.clipboardData || (!commanded && outsideSplit())) return;
+  if (!hasBeatSelection() || inEditable() || !e.clipboardData || (!commanded && outsideSplit(e.target))) return;
   const cut = e.type === "cut" || pendingCut;
   pendingCut = false;
   e.stopImmediatePropagation();
@@ -545,7 +546,7 @@ export function pasteBeatsAt(cd: DataTransfer | null, cellEl: Element) {
 }
 
 function onPasteEvent(e: ClipboardEvent) {
-  if (!hasBeatSelection() || inEditable() || !e.clipboardData || outsideSplit()) return;
+  if (!hasBeatSelection() || inEditable() || !e.clipboardData || outsideSplit(e.target)) return;
   const clip = beatsOnClipboard(function (t: string) { return (e.clipboardData as DataTransfer).getData(t); });
   if (!clip) return;
   e.preventDefault();
@@ -584,7 +585,12 @@ function previewOpen() {
   return !!preview && !preview.closest("[hidden]");
 }
 
-function outsideSplit() {
+function outsideSplit(target?: EventTarget | null) {
+  const node = target as Node | null | undefined;
+  if (node && node.nodeType && node !== document && node !== document.body && node !== document.documentElement) {
+    const el = node.nodeType === 1 ? node as Element : node.parentElement;
+    if (!inSplit(node) || !!(el && el.closest(READ_ONLY_PREVIEW))) return true;
+  }
   const a = document.activeElement;
   if (a && a !== document.body) return !inSplit(a);
   // why: with focus on the page body the last press or text selection says where the person is working
@@ -598,7 +604,7 @@ function noteOrigin(e: Event) {
 
 function onKeyDown(e: KeyboardEvent) {
   if (e.isComposing) return;
-  if (outsideSplit()) {
+  if (outsideSplit(e.target)) {
     if (inEditable() && hasBeatSelection()) clearBeatSelection();
     return;
   }
