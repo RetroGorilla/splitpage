@@ -67,7 +67,9 @@ export function createRichText(ports: RichTextPorts): RichText {
     const hasMarkerPrefixes = html.includes('class="broll-marker-prefix"');
     if (!hasImages && !hasMarkerPrefixes) return html;
     const body = inertBody(html);
-    const prefixes = hasMarkerPrefixes ? body.querySelectorAll(".broll-key > .broll-marker-prefix") : [];
+    // why: a CSS selector query can initialise window listeners for each detached document.
+    const prefixes = hasMarkerPrefixes ? Array.from(body.getElementsByClassName("broll-marker-prefix"))
+      .filter(prefix => prefix.parentElement?.classList.contains("broll-key")) : [];
     const imgs = hasImages ? body.querySelectorAll("img[data-blob]") : [];
     if (!prefixes.length && !imgs.length) return html;
     prefixes.forEach(prefix => prefix.replaceWith(...prefix.childNodes));
