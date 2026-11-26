@@ -53,9 +53,9 @@ Scene descriptions (#1171) were closed as not planned. They are not queued work.
 
 | Work | Evidence |
 | --- | --- |
-| Collaboration: the shared-document layer on standard Yjs (slices 1–8), the relay with versioned storage, invitations, pictures, limits and verified backups (Stage 3), and sharing, joining, leaving, the **Shared** pill and popover, link passwords, the desktop file copy, relay version history with edit-author names, presence, the offline notice, phone layouts and help (Stages 4 and 5). Release builds include it. | [Build status](collaboration/native-adapter-design.md#build-status); [Stage 4 and 5](collaboration/native-adapter-design.md#stage-4-and-5-sharing-joining-version-history-and-presence); [performance record](architecture/performance-record.md#collaboration-stage-4-and-5-624bf5a25-to-ac0d3bc4b) |
+| Collaboration: the shared-document layer on standard Yjs (slices 1–8), the relay with versioned storage, invitations, pictures, limits and verified backups (Stage 3), and sharing, joining, leaving, the **Shared** pill and popover, link passwords, the desktop file copy, relay version history with edit-author names, presence with remote carets and selections, the offline notice, phone layouts and help (Stages 4 and 5). Release builds include it. | [Build status](collaboration/native-adapter-design.md#build-status); [Stage 4 and 5](collaboration/native-adapter-design.md#stage-4-and-5-sharing-joining-version-history-and-presence); [performance record](architecture/performance-record.md#collaboration-stage-4-and-5-624bf5a25-to-ac0d3bc4b) |
 
-Before collaboration reaches a published release, the owner's relay is redeployed with storage version 8, the live `wss:` smoke checks pass from the packaged desktop app and a browser, and a restore drill passes. Remote carets and selections (Stage 4 Part 15) are optional and not built.
+Before collaboration reaches a published release, the owner's relay is redeployed with storage version 8, the live `wss:` smoke checks pass from the packaged desktop app and a browser, and a restore drill passes.
 
 ## Parked and manual checks
 
