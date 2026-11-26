@@ -197,6 +197,14 @@ test("production tags: merging saved copies preserves alternate values from shar
   }]);
 });
 
+test("production tags: concurrent notes on the same saved fold retain the displaced note", () => {
+  const version = (notes: string) => [tag("t_kettle", "Kettle", { notes, sharedFold: true })];
+  const merged = mergeProductionTags(version("Base"), version("Mine"), version("Theirs"));
+  assert.deepEqual(merged, [{ id: "t_kettle", cat: "prop", name: "Kettle", owner: "", notes: "Theirs", status: "needed",
+    sharedFold: true, unmergedEdits: [{ field: "notes", value: "Mine" }] }]);
+  assert.equal(mergeProductionTags(version("Base"), version("Base"), version("Theirs"))[0]?.unmergedEdits, undefined);
+});
+
 test("production tags: saved folds with different IDs retain both primary notes and both alternatives", () => {
   const saved = (id: string, notes: string, value: string) => tag(id, "Lens", { notes, unmergedEdits: [{ field: "notes", value }] });
   const merged = mergeProductionTags([], [saved("t_first", "A", "B")], [saved("t_second", "C", "D")]);

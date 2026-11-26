@@ -310,6 +310,7 @@ waits for a new caret. App stop and entry rollback release any active wait.
 | Recovery after a peer removes a beat | The Recovery action and its Restore and Discard buttons are absent. The peer who removed an unedited beat can undo the removal to restore it and its words on both copies. | [Native hook app tests](../../src/test/shared-native-hook-mapped-app.test.mjs), [Native caller tests](../../src/test/shared-native-callers-mapped-app.test.mjs) |
 | Concurrent same-name tag creation | Both records survive. The shared reader shows one tag per category and normalized name and keeps conflicting fields in the tag's details. Removal covers every member the remover has seen. | [#1790](https://github.com/RetroGorilla/splitpage/issues/1790) |
 | Concurrent registry writes | Undo of the winning write can leave a field absent. Unnamed stored entries are hidden, and a missing status can read at its default. An entry without a rank reads before ranked entries in ID order. See [appendix H](#h-outcomes-that-lose-nothing). | [#1670](https://github.com/RetroGorilla/splitpage/pull/1670) |
+| Reuse of a retired tag name | Undo the lowest-ID creation, rename the survivor, then create the original name with a lower ID than the survivor. A shot referring to the retired ID follows the new tag with the original name. The live records keep their fields. | [#1790](https://github.com/RetroGorilla/splitpage/issues/1790) |
 | Concurrent shot prop additions | Distinct prop keys survive, with at most 40 shown. Removing a visible entry can reveal an overflow entry. | [#1678](https://github.com/RetroGorilla/splitpage/pull/1678) |
 | Concurrent shot prop moves | Two moves of one prop compete for its rank. Undo of the winning move can clear the rank and put the prop before ranked entries. Redo restores the winning order. See [section 5](#5-accepted-losses). | [#1678](https://github.com/RetroGorilla/splitpage/pull/1678) |
 | Cleared beat status | A cleared status is absent in the shared snapshot. Core reload supplies `todo`. | [#1660](https://github.com/RetroGorilla/splitpage/pull/1660) |
@@ -1013,16 +1014,17 @@ A beat loses its rank through a same-moment move race (section 10): 3 of 600 gen
 **Tags on the same letters.** A writer who untags, then retags a tag on exactly another tag's letters: which of the two reads as the outer tag follows the writers' client ids. With writer client 5 the retagged tag reads outer; with writer client 20 the other tag does. Every copy agrees and both tags stay ([format-commands.test.ts](../../tests/adapters/collab/native/format-commands.test.ts), "carried item 1, as built: across writers"). Accepted as built (Owner).
 
 **Same-name registry tags.** The shared registry reader groups live records by category and normalized name. The
-lowest live ID identifies the projected tag and its shot props. The registry cache holds the grouping until its
-inputs change. Editing notes, owner or status writes the new value and one more than the highest counter seen for
+lowest live ID identifies the projected tag and its shot props. The tag cache holds the grouping while row changes
+refresh derived shots or tags. Editing notes, owner or status writes the new value and one more than the highest counter seen for
 that field onto each observed member in one transaction. The highest counter wins and equal counters prefer the
 lowest ID. At counter zero, the first non-default value in ID order wins. A reset to the default carries its own
 counter. Undo can bring back the earlier values and counters. The reader never rewrites stored records.
+Concurrent writes to one field of an already-folded tag follow the same Yjs outcome as concurrent writes to a single tag.
 
 The card's read-only **Unmerged edit** entries show other distinct values. Each field keeps its own stored
 alternatives so resolving notes and status on different copies clears both. The saved tag records that it was
-folded even if every field agrees. When it is merged with a different ID for the same key, the file merge retains
-any displaced primary values alongside the alternatives.
+folded even if every field agrees. The file merge retains displaced primary values alongside the alternatives.
+For two saved versions of the same ID it retains displaced edits that differ from the common ancestor.
 Script exports with a comments section show these entries there.
 
 Tag creations record their category and normalized name in `tagKeys` outside Undo. After Undo removes the
@@ -1507,7 +1509,7 @@ E5's checks are the template.
 | `headings` | Per heading: `rank`, other fields; `removed` when set |
 | `names` | One name cell (`Y.Text`) per heading, written at conversion |
 | `comments`, `replies`, `people`, `tags` | The file's fields; bodies are whole strings. Tags keep field counters and per-field alternatives |
-| `tagKeys` | Original registry key of each created tag, retained when Undo removes its record |
+| `tagKeys` | Original registry key of each created tag. The map gains one entry per tag creation and has no cleanup. |
 | `shots` | The shot's file fields and a nested `props` map. Each key is the tag ID, or `n:` followed by the JSON-encoded normalized name. Its record holds the encoded name, rank and optional `removed` mark |
 | `edited` | Per beat, `{by, at}` of the last typing |
 

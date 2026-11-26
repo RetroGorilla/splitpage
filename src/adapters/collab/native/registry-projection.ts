@@ -177,24 +177,44 @@ function propNormalizer(tags: DocumentShape["productionTags"]) {
   };
 }
 
-export function projectNativeRegistries(document: DocumentShape, roots: NativeRoots, rows: () => readonly RegistryCellRow[]) {
-  const tagsRemoved = hasRemoved(roots.tags) || document.productionTags.some(tag => tag && !tag.name);
+export function projectNativeTags(stored: DocumentShape["productionTags"], roots: NativeRoots, people: ReadonlySet<string>) {
+  const tagsRemoved = hasRemoved(roots.tags) || stored.some(tag => tag && !tag.name);
+  if (tagsRemoved) {
+    stored = repairNames(stored.filter((tag): tag is DocumentTag => !!tag?.name), 80, (name, tag) => registryKey(tag.cat, name));
+    ensureTagIds(stored);
+  }
+  for (const tag of stored) {
+    if (!tag) continue;
+    if (tag.owner && !people.has(tag.owner)) tag.owner = "";
+    const record = tag.id ? roots.tags.get(tag.id) : undefined;
+    const edits = record instanceof Y.Map ? readNativeTagAlternatives(record, tag.unmergedEdits) : unmergedTagEdits(tag.unmergedEdits);
+    if (edits.length) tag.unmergedEdits = edits;
+    else delete tag.unmergedEdits;
+  }
+  const { tags, groups } = foldTags(stored, roots);
+  let lookup: ReturnType<typeof propNormalizer> | undefined;
+  return { stored, tags, groups, tagsRemoved, propLookup: () => lookup ??= propNormalizer(tags),
+    published: tags.flatMap(tag => tag?.name ? [{ owner: "", notes: "", status: TAG_STATUS_IDS[0], ...tag }] : []) };
+}
+
+export function projectNativeRegistries(document: DocumentShape, roots: NativeRoots, rows: () => readonly RegistryCellRow[],
+  projectTags: (stored: DocumentShape["productionTags"], people: ReadonlySet<string>) => ReturnType<typeof projectNativeTags>
+    = (stored, people) => projectNativeTags(stored, roots, people)) {
   const shotsRemoved = hasRemoved(roots.shots) || document.brollShots.some(shot => !shot.name);
   const seededShots = new Set<string>();
   document.people = document.people.filter(person => !!person.name);
   document.brollShots = document.brollShots.flatMap(shot => shot.name ? [{ ...newBrollShot(shot.id, {}), ...shot }] : []);
   if (hasRemoved(roots.people)) document.people = repairNames(document.people, PERSON_NAME_MAX, normalizeTagName);
-  if (tagsRemoved) {
-    const named = document.productionTags.filter((tag): tag is DocumentTag => !!tag?.name);
-    document.productionTags = repairNames(named, 80, (name, tag) => registryKey(tag.cat, name));
-  }
+  const people = new Set(document.people.map(person => person.id));
+  const { stored, tags, groups, tagsRemoved, propLookup, published } = projectTags(document.productionTags, people);
+  let derived: DocumentTag[] = [];
   if (shotsRemoved) document.brollShots = repairNames(document.brollShots, BROLL_NAME_MAX, normalizeTagName);
   if (tagsRemoved || shotsRemoved) {
     const visible = rows();
     if (tagsRemoved) {
       const { readers } = production(visible);
-      document.productionTags.push(...missingRegistryTags(document.rows, document.productionTags, readers));
-      ensureTagIds(document.productionTags);
+      derived = missingRegistryTags(document.rows, stored, readers);
+      if (derived.length) ensureTagIds([...stored, ...derived]);
     }
     // why: a surviving keyed line seeds its default shot on core reload; unkeyed lines have their own command path
     if (shotsRemoved) {
@@ -203,20 +223,11 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
       applyBrollRecords(document.brollShots, plan);
     }
   }
-  const people = new Set(document.people.map(person => person.id));
-  for (const record of [...document.productionTags, ...document.brollShots]) {
-    if (record?.owner && !people.has(record.owner)) record.owner = "";
+  for (const shot of document.brollShots) {
+    if (shot.owner && !people.has(shot.owner)) shot.owner = "";
   }
-  for (const tag of document.productionTags) {
-    if (!tag) continue;
-    const stored = tag.id ? roots.tags.get(tag.id) : undefined;
-    const edits = stored instanceof Y.Map ? readNativeTagAlternatives(stored, tag.unmergedEdits) : unmergedTagEdits(tag.unmergedEdits);
-    if (edits.length) tag.unmergedEdits = edits;
-    else delete tag.unmergedEdits;
-  }
-  const { tags, groups } = foldTags(document.productionTags, roots);
   if (document.brollShots.some(shot => shot.props?.length)) {
-    const relevantTags = propNormalizer(tags);
+    const relevantTags = derived.length ? propNormalizer([...tags, ...derived]) : propLookup();
     for (const shot of document.brollShots) {
       if (!shot.props?.length) continue;
       const props = groups.size ? shot.props.map(prop => {
@@ -226,6 +237,6 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
       shot.props = normalizeBrollProps(props, relevantTags(props));
     }
   }
-  document.productionTags = tags.flatMap(tag => tag?.name ? [{ owner: "", notes: "", status: TAG_STATUS_IDS[0], ...tag }] : []);
+  document.productionTags = derived.length ? [...published, ...derived] : published;
   return { inputs: { tags: tagsRemoved, shots: shotsRemoved, seededShots }, groups };
 }

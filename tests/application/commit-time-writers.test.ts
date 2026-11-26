@@ -196,6 +196,7 @@ const FIELDS: readonly Site[] = [
   ["adapters/collab/native/insert-commands.ts#blankBeat", "paragraphStart 1", "stated-write"],
   ["adapters/collab/native/reader.ts#NativeScriptReader", "docId 1, rev 1", "capture-read", "stored-read"],
   ["adapters/collab/native/registry-projection.ts#projectNativeRegistries", "owner 1", "stored-read"],
+  ["adapters/collab/native/registry-projection.ts#projectNativeTags", "owner 1", "stored-read"],
   ["adapters/formats/export-projections.ts#commentEntries", "createdAt 2, resolvedBy 2", "no-document"],
   ["adapters/formats/project-file.ts#buildSplitpageCopy", "docId 1", "no-document"],
   ["adapters/formats/project-file.ts#rowsFromMarkdownTable", "updatedAt 1, updatedBy 1", "file-entry"],
@@ -264,7 +265,7 @@ const FIELDS: readonly Site[] = [
 ];
 
 const RECORDS: readonly Site[] = [
-  ["adapters/collab/native/registry-projection.ts#projectNativeRegistries", "brollShots 2, people 2, productionTags 3", "stored-read", "tag-from-text", "shot-from-line"],
+  ["adapters/collab/native/registry-projection.ts#projectNativeRegistries", "brollShots 2, people 2, productionTags 1", "stored-read", "tag-from-text", "shot-from-line"],
   ["adapters/collab/native/registry-projection.ts#propNormalizer", "productionTags 1", "stored-read"],
   ["adapters/formats/csv.ts#scriptTable", "comments 2", "no-document"],
   ["adapters/formats/project-file.ts#markdownCellToHtml", "productionTags 1", "file-entry"],

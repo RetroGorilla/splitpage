@@ -8,7 +8,7 @@ import type { Run } from "../../../core/text/runs.ts";
 import { nativeBlockOf, nativeCellView, nativeItemLength, nativeRunsOf, nativeStoredOffset, nativeUnitCounts } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import { compareNativeRankedIds } from "./rank.ts";
-import { nativeRegistryRowChanged, projectNativeRegistries } from "./registry-projection.ts";
+import { nativeRegistryRowChanged, projectNativeRegistries, projectNativeTags } from "./registry-projection.ts";
 import type { NativeRegistryRowInputs } from "./registry-projection.ts";
 import type { NativeRoots } from "./roots.ts";
 import { NATIVE_SHOT_PROPS, OBSOLETE_SHOT_PROPS, nativeShotPropEntries } from "./shot-props.ts";
@@ -302,6 +302,7 @@ export class NativeScriptReader {
   private readonly seamsByRow = new Map<string, NativeNarrationSeams>();
   private registryCache: { readonly records: Registries; readonly inputs: NativeRegistryRowInputs;
     readonly groups: ReadonlyMap<string, readonly string[]> } | null = null;
+  private tagProjection: ReturnType<typeof projectNativeTags> | null = null;
   private readonly anchorsByRow = new Map<string, Set<string>>();
   private readonly rowsByAnchor = new Map<string, Map<string, CommentCell>>();
   private narration = new Map<string, readonly NativeSpanPlace[]>();
@@ -360,9 +361,10 @@ export class NativeScriptReader {
       }
     });
     observe(roots.edited, events => { for (const event of events) for (const key of event.keys.keys()) this.dirtyBeats.add(key); });
-    const invalidateRegistries = () => { this.registryCache = null; };
-    for (const root of [roots.people, roots.tags, roots.shots]) observe(root, invalidateRegistries);
-    observe(roots.tagKeys, invalidateRegistries);
+    const invalidateTags = () => { this.registryCache = null; this.tagProjection = null; };
+    for (const root of [roots.people, roots.tags]) observe(root, invalidateTags);
+    observe(roots.tagKeys, invalidateTags);
+    observe(roots.shots, () => { this.registryCache = null; });
   }
 
   close(): void {
@@ -1106,10 +1108,11 @@ export class NativeScriptReader {
     };
   }
 
-  private storedRegistries(problems: Problems): Registries {
+  private storedRegistries(problems: Problems,
+    tags = visibleRecords(this.roots.tags, "tags", problems) as DocumentShape["productionTags"]): Registries {
     return {
       people: visibleRecords(this.roots.people, "people", problems) as DocumentShape["people"],
-      productionTags: visibleRecords(this.roots.tags, "tags", problems) as DocumentShape["productionTags"],
+      productionTags: tags,
       brollShots: visibleRecords(this.roots.shots, "shots", problems) as DocumentShape["brollShots"]
     };
   }
@@ -1129,8 +1132,9 @@ export class NativeScriptReader {
     });
     const document = { ...this.collect(null), rows, ...sections.length ? { sections } : {} };
     if (this.registryCache) return deepFrozen({ ...document, ...this.registryCache.records });
-    const snapshot = { ...document, ...this.storedRegistries(null) };
-    const { inputs, groups } = projectNativeRegistries(snapshot, this.roots, () => this.rows());
+    const snapshot = { ...document, ...this.storedRegistries(null, this.tagProjection?.stored) };
+    const { inputs, groups } = projectNativeRegistries(snapshot, this.roots, () => this.rows(),
+      (tags, people) => this.tagProjection ??= projectNativeTags(tags, this.roots, people));
     const { people, productionTags, brollShots } = snapshot;
     this.registryCache = { inputs, groups, records: deepFrozen({ people, productionTags, brollShots }) };
     return deepFrozen(snapshot);

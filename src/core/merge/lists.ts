@@ -161,6 +161,16 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
     const edits = unmergedTagEdits([...(into.unmergedEdits ?? []), ...from.unmergedEdits]);
     if (edits.length) into.unmergedEdits = edits;
   }
+  function primaries(tag: TagInput): UnmergedTagEdit[] {
+    return [{ field: "notes", value: tag.notes || "" }, { field: "owner", value: tag.owner || "" },
+      { field: "status", value: tagStatusId(tag.status) || TAG_STATUS_IDS[0] }];
+  }
+  function keepDisplacedEdits(into: TagEntry, candidates: UnmergedTagEdit[]): void {
+    if (!candidates.length) return;
+    const edits = unmergedTagEdits([...(into.unmergedEdits ?? []), ...candidates]).filter(edit => edit.value !== into[edit.field]);
+    if (edits.length) into.unmergedEdits = edits;
+    else delete into.unmergedEdits;
+  }
   function entryOf(t: TagInput): TagEntry {
     const e: TagEntry = { cat: t.cat as string, name: t.name as string, owner: t.owner || "", notes: t.notes || "",
                           status: tagStatusId(t.status) || TAG_STATUS_IDS[0] };
@@ -187,6 +197,12 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
       return;
     }
     const b = baseById[k];
+    let candidates: UnmergedTagEdit[] = [];
+    if (existing.sharedFold || t.sharedFold) {
+      const prior = b ? primaries(b) : [];
+      candidates = [...primaries(existing), ...primaries(t)]
+        .filter(edit => !prior.some(base => base.field === edit.field && base.value === edit.value));
+    }
     if (b && existing.name === b.name && t.name !== b.name) existing.name = t.name;
     if (b && existing.cat === b.cat && t.cat !== b.cat) existing.cat = t.cat as string;
     if (theirKeys[k] ? mineOwnerWins(b, existing.owner, t.owner, live) : ownerGivesWay(existing.owner, t.owner, live)) {
@@ -197,26 +213,20 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
       existing.status = tagStatusId(t.status) || TAG_STATUS_IDS[0];
     }
     keepUnmergedEdits(existing, t);
+    keepDisplacedEdits(existing, candidates);
   });
   const byKey = idMap<TagEntry>();
   return out.filter(function (e) {
     const key = registryKey(e.cat, e.name);
     const first = byKey[key];
     if (!first) { byKey[key] = e; return true; }
-    const primaries = first.sharedFold || e.sharedFold || first.unmergedEdits?.length || e.unmergedEdits?.length ? [
-      { field: "notes", value: first.notes }, { field: "notes", value: e.notes },
-      { field: "owner", value: first.owner }, { field: "owner", value: e.owner },
-      { field: "status", value: first.status }, { field: "status", value: e.status }
-    ] as const : [];
+    const candidates = first.sharedFold || e.sharedFold || first.unmergedEdits?.length || e.unmergedEdits?.length
+      ? [...primaries(first), ...primaries(e)] : [];
     if (ownerGivesWay(first.owner, e.owner, live)) first.owner = e.owner;
     if (!first.notes && e.notes) first.notes = e.notes;
     if (tagStatusRank(e.status) > tagStatusRank(first.status)) first.status = e.status;
     keepUnmergedEdits(first, e);
-    if (primaries.length) {
-      const edits = unmergedTagEdits([...(first.unmergedEdits ?? []), ...primaries]).filter(edit => edit.value !== first[edit.field]);
-      if (edits.length) first.unmergedEdits = edits;
-      else delete first.unmergedEdits;
-    }
+    keepDisplacedEdits(first, candidates);
     return false;
   });
 }

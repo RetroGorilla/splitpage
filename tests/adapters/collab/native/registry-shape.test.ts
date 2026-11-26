@@ -78,6 +78,26 @@ test("narration typing reuses registry projections, even after a removal", () =>
   } finally { script.doc.destroy(); }
 });
 
+test("typing beside a removed shot's surviving key updates the shot and reuses the tag fold", () => {
+  const script = convertedScript(migrateRows({ ...source(), rows: [{ id: "r1", audioText: "Narration",
+    visualText: '<span class="broll-key" data-broll-id="bs1">B-roll:</span> Wide' }] }));
+  try {
+    writeField(script.roots.tags, "t_case", "name", "LAMP");
+    script.roots.shots.get("bs1")?.set("removed", true);
+    const before = script.reader.document();
+    assert.equal(before.productionTags.find(tag => tag?.name === "LAMP")?.sharedFold, true);
+    assert.equal(before.brollShots[0]?.audioRef, "Narration");
+    assert.equal(edit(script, { beat: "r1", cell: "narration" }, 0, 1, cells("n")).kind, "written");
+    const after = script.reader.document();
+    assert.equal(after.productionTags, before.productionTags);
+    assert.equal(after.brollShots[0]?.audioRef, "narration");
+    writeField(script.roots.tags, "t_case", "notes", "Spare lamp");
+    const edited = script.reader.document();
+    assert.notEqual(edited.productionTags, before.productionTags);
+    assert.equal(edited.productionTags.find(tag => tag?.name === "LAMP")?.notes, "Spare lamp");
+  } finally { script.doc.destroy(); }
+});
+
 test("receiving a peer's nested prop edit invalidates the warm registry projection", () => {
   const initial = migrateRows({ ...source(), brollShots: [{ id: "bs1", name: "Wide", props: [{ id: "t_orphan", name: "Orphan" }] }] });
   withCopies(initial, (left, right, settle) => {
