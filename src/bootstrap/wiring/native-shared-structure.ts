@@ -8,6 +8,8 @@ import type { SharedDocumentSession } from "../../application/session/shared-ses
 import { sceneBeforeBeat, sceneFirstBeatId, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
 import type { SceneDocument } from "../../core/document/scenes.ts";
 import { cappedText } from "../../core/document/text-policy.ts";
+import type { DocumentRow } from "../../core/document/validated.ts";
+import { toHtml } from "../../core/text/html.ts";
 import { documentReader } from "./ports/document.ts";
 import { editAllowed, sessionStamps } from "./session-owner.ts";
 import { sameNativeInsertPlacement } from "./native-shared-input.ts";
@@ -43,6 +45,13 @@ export function createNativeEditorStructure({ native, session, input, publish, r
   function anchor(beat: string, offset: number, cell: "narration" | "visual" = "narration") {
     const result = native.commands.anchorText({ beat, cell }, offset);
     return result.kind === "anchored" ? result.range : null;
+  }
+
+  // why: removing a joined row removes only its visible head and its members return as rows (design, Joined row
+  // removal), so what a removal takes out is the head's own content
+  function headOnly(row: DocumentRow): DocumentRow {
+    const head = (native.readRow(row.id)?.members.length ?? 1) > 1 ? native.readBeat(row.id) : null;
+    return head ? { ...head.fields, id: row.id, visualText: toHtml(head.visual), audioText: toHtml(head.narration) } : row;
   }
 
   return (intent: DocumentStructureIntent): CommandOutcome => {
@@ -100,6 +109,18 @@ export function createNativeEditorStructure({ native, session, input, publish, r
             landing = (before.rows[at + 1] ?? before.rows[at - 1])?.id;
             after = landing ? anchor(landing, 0) : null;
           }
+          break;
+        }
+        case "remove-beats": {
+          const wanted = new Set(intent.ids);
+          const rows = before.rows.filter(row => wanted.has(row.id)), ids = rows.map(row => row.id);
+          if (!wanted.size) return { kind: "noop" };
+          if (ids.length !== wanted.size) return owner.refuse("missing");
+          if (intent.stage && !intent.stage({ ...before, rows: before.rows.map(row => wanted.has(row.id) ? headOnly(row) : row) }, ids)) {
+            return { kind: "noop" };
+          }
+          step = native.commands.removeRows.withSelection(current?.range ?? anchor(ids[0] as string, 0), ids);
+          if (current && ids.includes(current.row)) after = null;
           break;
         }
         case "add-heading": {

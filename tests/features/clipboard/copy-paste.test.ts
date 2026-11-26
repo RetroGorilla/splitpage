@@ -24,6 +24,7 @@ Object.defineProperty(window.HTMLElement.prototype, "isContentEditable", {
   get(this: HTMLElement) { return this.getAttribute("contenteditable") === "true"; }
 });
 
+const APPLIED = { kind: "applied", generation: 1, changes: { whole: false, cells: [], rowsInserted: [], rowsRemoved: [], rowsMoved: false, runsMoved: false, docFields: [], derive: [], saveNow: false } } as const;
 const CLEAR_SCREEN: ScreenState = { loading: false, dialog: false, launcher: false, tour: false, prompter: false, writer: false, shotlist: false };
 
 function rowHtml(id: string, tile = "is-cover"): string {
@@ -69,7 +70,9 @@ function beatSelect(rowsHtml = "", screen: ScreenState = CLEAR_SCREEN) {
     writerOpen: () => false,
     startNewScript: () => false,
     nonce: () => "n1",
-    screen: () => screen
+    screen: () => screen,
+    sharing: () => false,
+    sharedCommands: { refuseUnsupported: () => false }
   };
   return { owner: mountBeatSelect(ports), edits, notices, calls, held };
 }
@@ -248,6 +251,7 @@ test("beat selection: a plain click and Esc each clear a Ctrl+click selection", 
 
 test("beat selection: Delete with a gap removes only the selected beats", () => {
   const { owner, edits, notices } = beatSelect(paintedRows());
+  edits.answer(APPLIED);
   pressOn(cellOf("r1"), { ctrlKey: true });
   pressOn(cellOf("r3"), { ctrlKey: true });
   press("Delete");
@@ -320,11 +324,34 @@ test("beat selection: a dragged range across a folded scene leaves out the folde
 
 test("scene selection: Delete removes the selected scenes through the edits port, between undo breaks, and says so", () => {
   const { owner, edits, notices, calls } = beatSelect();
+  edits.answer(APPLIED);
   selectBeats("r1", "r2");
   press("Delete");
   assert.equal(edits.ran.length, 1);
-  assert.deepEqual(calls, ["break", "flush", "break"]);
+  assert.deepEqual(calls, ["break", "flush", "break", "refresh"]);
   assert.deepEqual(notices.shown.map((n) => n.message), ["2 beats deleted."]);
+  owner.dispose();
+});
+
+test("scene selection: a standalone replacement that keeps the document id and epoch ends the selection", () => {
+  const { owner, held } = beatSelect();
+  selectBeats("r1", "r2");
+  assert.deepEqual(selectedIds(), ["r1", "r2"]);
+  const epoch = held.lifetime.epoch();
+  held.replace(scriptDoc());
+  held.lifetime.epoch = () => epoch;
+  assert.deepEqual(selectedIds(), []);
+  owner.dispose();
+});
+
+test("scene selection: a Delete whose removal changes nothing keeps the selection and reports nothing", () => {
+  const { owner, edits, notices, calls } = beatSelect();
+  selectBeats("r1", "r2");
+  press("Delete");
+  assert.equal(edits.ran.length, 1);
+  assert.deepEqual(calls, ["break"]);
+  assert.deepEqual(notices.shown, []);
+  assert.deepEqual(selectedIds(), ["r1", "r2"]);
   owner.dispose();
 });
 
@@ -362,6 +389,7 @@ test("scene clipboard: a fallback cut that finishes after the document has gone 
 
 async function fallbackCut(replaceWith: "none" | "same-ids" | "disk-merge" | "save-as") {
   const { owner, edits, held, calls } = beatSelect();
+  edits.answer(APPLIED);
   const clip = mountBeatClip({
     ids: { id: (prefix) => prefix + "1" },
     pictures: fakePictures().pictures,
@@ -411,7 +439,7 @@ test("scene clipboard: a fallback cut that finishes after Save As gave the same 
 test("scene clipboard: a fallback cut in the same script still removes the beats in one undo step", async () => {
   const { edits, calls } = await fallbackCut("none");
   assert.equal(edits.ran.length, 1);
-  assert.deepEqual(calls, ["break", "flush", "break"]);
+  assert.deepEqual(calls, ["break", "flush", "break", "refresh"]);
 });
 
 test("scene selection: dispose removes its listeners and its highlight", () => {

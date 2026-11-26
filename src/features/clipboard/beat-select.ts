@@ -1,5 +1,5 @@
 import type { BeatSelectPorts } from "./ports.ts";
-import type { DocumentView, Command } from "../../application/session/document-session.ts";
+import type { BeatRemovalStage, DocumentView, Command } from "../../application/session/document-session.ts";
 import { refsIn } from "../../../shared/blob-policy.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import { cssAttr } from "../common/dom.ts";
@@ -18,22 +18,60 @@ const SCROLL_MIN = 6;
 const SCROLL_MAX = 28;
 const NOT_A_BEAT_CLICK = "a[href], button, input, textarea, select, summary, label, .row-menu, .link-popover, .video-popover, .mini-toolbar";
 const BEAT_PICTURE = ".scene-gallery-tile";
-const HIDES_BEATS = '#rows .hidden-shot-strip, #rows .section-fold[aria-expanded="false"]';
+const SPLIT_VIEW = "#root, #rows";
+const READ_ONLY_PREVIEW = ".shared-history-preview";
+const HIDES_BEATS ='#rows .hidden-shot-strip, #rows .section-fold[aria-expanded="false"]';
 
 let ports: BeatSelectPorts | null = null;
 let track: { cell: HTMLElement; rowId: string | null; x: number; y: number; beat: boolean } | null = null;
-let sel: { anchor: string | null | undefined; focus: string | null | undefined; ids: Set<string>; doc: DocumentView | null } | null = null;
+interface BeatSelection {
+  anchor: string | null | undefined;
+  focus: string | null | undefined;
+  ids: Set<string>;
+  doc: DocumentView | null;
+  docId: string | null;
+  epoch: number;
+}
+interface BeatPayload {
+  ids: readonly string[];
+  nonce: string | null;
+  out: ReturnType<typeof buildBeatPayload>;
+}
+let sel: BeatSelection | null = null;
 let lastClicked: { id: string; doc: DocumentView | null } | null = null;
 let swallowClick = false;
 let scroll: { dir: number; speed: number; raf: number } | null = null;
 let styleEl: HTMLStyleElement | null = null;
 let menuEl: HTMLDivElement | null = null;
+const REFUSED = false;
 let pendingCut = false;
-let clipWritten: ReturnType<typeof writeBeats> | null = null;
+let commanded = false;
+let originInSplit = true;
+let clipWritten: BeatPayload | typeof REFUSED | null = null;
+
+function selectionOf(anchor: string | null | undefined, focus: string | null | undefined, ids: Set<string>): BeatSelection {
+  const doc = (ports as BeatSelectPorts).document.current();
+  return { anchor: anchor, focus: focus, ids: ids, doc: doc, docId: doc ? doc.docId : null, epoch: (ports as BeatSelectPorts).lifetime.epoch() };
+}
 
 function hasBeatSelection() {
-  if (sel && sel.doc !== (ports as BeatSelectPorts).document.current()) clearBeatSelection();
-  return !!sel;
+  if (!sel) return false;
+  const doc = (ports as BeatSelectPorts).document.current();
+  if (sel.doc === doc) return true;
+  // why: a shared publication replaces the document object for every peer edit, so the selection follows it; a
+  // standalone replacement is a reload or a new document and ends the selection
+  const present = doc && (ports as BeatSelectPorts).sharing() && doc.docId === sel.docId && (ports as BeatSelectPorts).lifetime.epoch() === sel.epoch
+    ? new Set(doc.rows.map(function (r) { return r.id; })) : null;
+  const ids = present ? new Set(Array.from(sel.ids).filter(function (id) { return present.has(id); })) : null;
+  if (!ids || !ids.size) { clearBeatSelection(); return false; }
+  const order = sel.doc ? sel.doc.rows.map(function (r) { return r.id; }) : [];
+  const kept = order.filter(function (id) { return ids.has(id); });
+  const anchorFirst = order.indexOf(sel.anchor as string) <= order.indexOf(sel.focus as string);
+  const anchor = sel.anchor && ids.has(sel.anchor) ? sel.anchor : anchorFirst ? kept[0] : kept[kept.length - 1];
+  const focus = sel.focus && ids.has(sel.focus) ? sel.focus : anchorFirst ? kept[kept.length - 1] : kept[0];
+  sel = { ...sel, anchor: anchor, focus: focus, ids: ids, doc: doc };
+  paint();
+  return true;
 }
 
 function selectedBeatIds() {
@@ -61,7 +99,8 @@ function beatsBetween(anchorId: string | null | undefined, focusId: string | nul
 
 export function selectBeats(anchorId: string | null | undefined, focusId?: string | null | undefined) {
   const focus = focusId || anchorId;
-  sel = { anchor: anchorId, focus: focus, ids: beatsBetween(anchorId, focus), doc: (ports as BeatSelectPorts).document.current() };
+  originInSplit = true;
+  sel = selectionOf(anchorId, focus, beatsBetween(anchorId, focus));
   paint();
 }
 
@@ -83,7 +122,8 @@ function selectAllBeats() {
   if (!doc.rows.length) return true;
   const ids = new Set(doc.rows.map(function (r) { return r.id; }));
   const first = (doc.rows[0] as NonNullable<typeof doc.rows[number]>).id;
-  sel = { anchor: first, focus: first, ids: ids, doc: doc };
+  sel = selectionOf(first, first, ids);
+  originInSplit = true;
   leaveText();
   paint();
   prefetchPictures();
@@ -112,16 +152,14 @@ function rangeStart() {
 function extendTo(id: string) {
   const anchor = hasBeatSelection() ? (sel as NonNullable<typeof sel>).anchor : rangeStart();
   if (!sel && (!anchor || anchor === id)) return false;
-  const doc = (ports as BeatSelectPorts).document.current();
-  sel = { anchor: anchor, focus: id, ids: beatsBetween(anchor, id), doc: doc };
+  sel = selectionOf(anchor, id, beatsBetween(anchor, id));
   return true;
 }
 
 function toggleBeat(id: string) {
-  const doc = (ports as BeatSelectPorts).document.current();
   const ids = hasBeatSelection() ? (sel as NonNullable<typeof sel>).ids : new Set<string>();
   if (ids.has(id)) ids.delete(id); else ids.add(id);
-  sel = ids.size ? { anchor: id, focus: id, ids: ids, doc: doc } : null;
+  sel = ids.size ? selectionOf(id, id, ids) : null;
 }
 
 function selectionClick(e: MouseEvent) {
@@ -306,18 +344,23 @@ function prefetchPictures() {
 
 function count(n: number) { return n === 1 ? "1 beat" : n + " beats"; }
 
-function writeBeats(cd: DataTransfer, cut: boolean) {
+function payloadOfSelection(cut: boolean): BeatPayload {
   const ids = selectedBeatIds();
   const nonce = cut ? (ports as BeatSelectPorts).nonce() : null;
   const out = buildBeatPayload((ports as BeatSelectPorts).document.current(), ids, { cut: nonce });
-  try { cd.setData(BEATS_MIME, out.json); } catch (e) { }
-  cd.setData("text/html", out.html);
-  cd.setData("text/plain", out.text);
   return { ids: ids, nonce: nonce, out: out };
 }
 
+function putBeats(cd: DataTransfer, w: BeatPayload, strict?: boolean) {
+  if (strict) cd.setData(BEATS_MIME, w.out.json);
+  else try { cd.setData(BEATS_MIME, w.out.json); } catch (e) { }
+  cd.setData("text/html", w.out.html);
+  cd.setData("text/plain", w.out.text);
+  return w;
+}
+
 function onBeforeCopy(e: Event) {
-  if (hasBeatSelection() && !inEditable()) e.preventDefault();
+  if (hasBeatSelection() && !inEditable() && !outsideSplit(e.target)) e.preventDefault();
 }
 
 function inEditable() {
@@ -326,18 +369,46 @@ function inEditable() {
 }
 
 function onCopyEvent(e: ClipboardEvent) {
-  if (!hasBeatSelection() || inEditable() || !e.clipboardData) return;
+  if (!hasBeatSelection() || inEditable() || !e.clipboardData || (!commanded && outsideSplit(e.target))) return;
   const cut = e.type === "cut" || pendingCut;
   pendingCut = false;
-  e.preventDefault();
   e.stopImmediatePropagation();
-  const w = writeBeats(e.clipboardData, cut);
-  clipWritten = w;
   if (cut) {
-    afterCut(w);
+    cutInto(e, e.clipboardData);
     return;
   }
+  e.preventDefault();
+  const w = putBeats(e.clipboardData, payloadOfSelection(false));
+  clipWritten = w;
   announceLeftOut(count(w.ids.length) + " copied", w.out.leftOut, "ok");
+}
+
+function cutInto(e: ClipboardEvent, cd: DataTransfer) {
+  if (!(ports as BeatSelectPorts).sharing()) {
+    e.preventDefault();
+    const written = putBeats(cd, payloadOfSelection(true));
+    clipWritten = written;
+    afterCut(written);
+    return;
+  }
+  const nonce = (ports as BeatSelectPorts).nonce();
+  let staged: BeatPayload | null = null;
+  let failure: { error: unknown } | null = null;
+  const entry = takeOut(selectedBeatIds(), function (live, ids) {
+    const w = { ids: ids, nonce: nonce, out: buildBeatPayload(live, ids, { cut: nonce }) };
+    try { putBeats(cd, w, true); } catch (error) { failure = { error: error }; return false; }
+    staged = w;
+    return true;
+  });
+  const w = staged as BeatPayload | null;
+  // why: a shared Cut stages what the admitted removal will take out before writing it; a refused removal or a
+  // failed write leaves the clipboard as it was, since only a cancelled event keeps the staged data
+  if (failure) { clipWritten = REFUSED; throw (failure as { error: unknown }).error; }
+  if (entry === REFUSED || !w) { clipWritten = REFUSED; return; }
+  e.preventDefault();
+  clipWritten = w;
+  setLiveCut(nonce, ((ports as BeatSelectPorts).document.current() as DocumentView).docId);
+  announceCut(w, entry);
 }
 
 function announceLeftOut(msg: string, leftOut: string[], kind?: "ok" | "warn") {
@@ -356,11 +427,14 @@ function execCopy() {
 
 function runClipboardCommand(cut: boolean) {
   pendingCut = cut;
+  commanded = true;
   clipWritten = null;
   const ok = execCopy();
   pendingCut = false;
-  if (ok && clipWritten) return;
+  commanded = false;
+  if (clipWritten === REFUSED || (ok && clipWritten)) return;
   const ids = selectedBeatIds();
+  if (cut && ids.length && (ports as BeatSelectPorts).sharedCommands.refuseUnsupported()) return;
   if (!ids.length || !navigator.clipboard) { (ports as BeatSelectPorts).notices.show("Could not reach the clipboard.", "warn"); return; }
   const nonce = cut ? (ports as BeatSelectPorts).nonce() : null;
   const started = (ports as BeatSelectPorts).document.current();
@@ -384,10 +458,14 @@ function sameDocument(started: DocumentView | null, startedId: string | null, ep
   return !!started && now === started && now.docId === startedId && (ports as BeatSelectPorts).lifetime.epoch() === epoch;
 }
 
-function afterCut(w: ReturnType<typeof writeBeats>) {
+function afterCut(w: BeatPayload) {
   setLiveCut(w.nonce, ((ports as BeatSelectPorts).document.current() as DocumentView).docId);
-  const entry = takeOut(w.ids);
-  const msg = count(w.ids.length) + " cut — paste them with Ctrl+V";
+  const entry = takeOut(w.ids.slice());
+  if (entry !== REFUSED) announceCut(w, entry);
+}
+
+function announceCut(w: BeatPayload, entry: ReturnType<BeatSelectPorts["undo"]["last"]>) {
+  const msg = count(w.ids.length) + ((ports as BeatSelectPorts).sharing() ? " cut" : " cut — paste them with Ctrl+V");
   if (w.out.leftOut.length) announceLeftOut(msg, w.out.leftOut);
   else offerUndo(msg, entry);
 }
@@ -398,15 +476,17 @@ function runBeatCommand(command: Command) {
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
-function takeOut(ids: string[]) {
+function takeOut(ids: string[], stage?: BeatRemovalStage) {
   (ports as BeatSelectPorts).undo.breakCoalescing();
   const before = (ports as BeatSelectPorts).undo.last();
-  const done = runBeatCommand(removeBeatsCommand(ids));
+  const outcome = (ports as BeatSelectPorts).edits.run(removeBeatsCommand(ids, stage));
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind !== "applied" && outcome.kind !== "committed") return REFUSED;
   sel = null;
   paint();
   (ports as BeatSelectPorts).undo.flush();
   (ports as BeatSelectPorts).undo.breakCoalescing();
-  if (done) (ports as BeatSelectPorts).production.scheduleRefresh();
+  (ports as BeatSelectPorts).production.scheduleRefresh();
   const entry = (ports as BeatSelectPorts).undo.last();
   return entry === before ? null : entry;
 }
@@ -415,7 +495,8 @@ export function deleteSelectedBeats() {
   const ids = selectedBeatIds();
   if (!ids.length) return;
   closeBeatMenu();
-  offerUndo(count(ids.length) + " deleted", takeOut(ids));
+  const entry = takeOut(ids);
+  if (entry !== REFUSED) offerUndo(count(ids.length) + " deleted", entry);
 }
 
 function offerUndo(msg: string, entry: ReturnType<BeatSelectPorts["undo"]["last"]>) {
@@ -465,7 +546,7 @@ export function pasteBeatsAt(cd: DataTransfer | null, cellEl: Element) {
 }
 
 function onPasteEvent(e: ClipboardEvent) {
-  if (!hasBeatSelection() || inEditable() || !e.clipboardData) return;
+  if (!hasBeatSelection() || inEditable() || !e.clipboardData || outsideSplit(e.target)) return;
   const clip = beatsOnClipboard(function (t: string) { return (e.clipboardData as DataTransfer).getData(t); });
   if (!clip) return;
   e.preventDefault();
@@ -489,8 +570,44 @@ export function newScriptFromSelection() {
   });
 }
 
+function inSplit(node: Node | null) {
+  const el = node && (node.nodeType === 1 ? node as Element : node.parentElement);
+  return !!el && (!!el.closest(SPLIT_VIEW) || !!(menuEl && menuEl.contains(el)));
+}
+
+function textSelectedOutside() {
+  const s = window.getSelection();
+  return !!s && s.rangeCount > 0 && [s.anchorNode, s.focusNode].some(function (n) { return !!n && n.isConnected && n !== document.body && !inSplit(n); });
+}
+
+function previewOpen() {
+  const preview = document.querySelector(READ_ONLY_PREVIEW);
+  return !!preview && !preview.closest("[hidden]");
+}
+
+function outsideSplit(target?: EventTarget | null) {
+  const node = target as Node | null | undefined;
+  if (node && node.nodeType && node !== document && node !== document.body && node !== document.documentElement) {
+    const el = node.nodeType === 1 ? node as Element : node.parentElement;
+    if (!inSplit(node) || !!(el && el.closest(READ_ONLY_PREVIEW))) return true;
+  }
+  const a = document.activeElement;
+  if (a && a !== document.body) return !inSplit(a);
+  // why: with focus on the page body the last press or text selection says where the person is working
+  return !originInSplit || textSelectedOutside() || previewOpen();
+}
+
+function noteOrigin(e: Event) {
+  const target = e.target as Node | null;
+  if (target && target !== document && target !== document.body) originInSplit = inSplit(target);
+}
+
 function onKeyDown(e: KeyboardEvent) {
   if (e.isComposing) return;
+  if (outsideSplit(e.target)) {
+    if (inEditable() && hasBeatSelection()) clearBeatSelection();
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && String(e.key).toLowerCase() === "a" && selectAllBeats()) { e.preventDefault(); return; }
   if (!hasBeatSelection()) return;
   if (menuEl && !menuEl.hidden) {
@@ -572,6 +689,7 @@ function onContextMenu(e: MouseEvent) {
 }
 
 function onDocMouseDown(e: MouseEvent) {
+  noteOrigin(e);
   if (menuEl && menuEl.contains(e.target as Node | null)) return;
   if (e.button === 2 && hasBeatSelection()) {
     const row = (e.target as Element).closest && (e.target as Element).closest("#rows .row[data-id]");
@@ -593,6 +711,8 @@ export function startBeatSelect(given: BeatSelectPorts) {
   swallowClick = false;
   scroll = null;
   pendingCut = false;
+  commanded = false;
+  originInSplit = true;
   clipWritten = null;
   const offs: (() => void)[] = [];
   function listen(target: EventTarget, type: string, fn: EventListener, opts?: boolean) {
@@ -615,6 +735,17 @@ export function startBeatSelect(given: BeatSelectPorts) {
   listen(document, "contextmenu", onContextMenu as EventListener);
   listen(window, "resize", closeBeatMenu);
   listen(window, "scroll", closeBeatMenu, true);
+  offs.push(given.document.onChange(function (change) {
+    if (!sel) return;
+    const c = change.changes;
+    const doc = given.document.current();
+    // why: a peer's text edit moves no beat, so the selection only takes the new document and keeps its paint
+    if (given.sharing() && sel.doc && doc && doc.docId === sel.docId && given.lifetime.epoch() === sel.epoch && !c.whole && !c.rowsInserted.length && !c.rowsRemoved.length && !c.rowsMoved) {
+      sel = { ...sel, doc: doc };
+      return;
+    }
+    hasBeatSelection();
+  }));
   exposeTestHook("__sceneSelectTest", function () { return {
     select: selectBeats,
     clear: clearBeatSelection,

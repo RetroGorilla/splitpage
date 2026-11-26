@@ -72,7 +72,7 @@ const READ_ONLY_CALLERS = {
   "features/broll/ports.ts:BrollPanelPorts.document": caller<BrollPanelPorts["document"]>()("current", "read", "numbering"),
   "features/broll/ports.ts:BrollPanelPorts.lifetime": caller<BrollPanelPorts["lifetime"]>()("epoch"),
   "features/clipboard/ports.ts:CellClipboardPorts.document": caller<CellClipboardPorts["document"]>()("read"),
-  "features/clipboard/ports.ts:BeatSelectPorts.document": caller<BeatSelectPorts["document"]>()("current"),
+  "features/clipboard/ports.ts:BeatSelectPorts.document": caller<BeatSelectPorts["document"]>()("current", "onChange"),
   "features/clipboard/ports.ts:BeatSelectPorts.lifetime": caller<BeatSelectPorts["lifetime"]>()("epoch"),
   "features/comments/ports.ts:CommentStatePorts.document": caller<CommentStatePorts["document"]>()("current", "read", "numbering"),
   "features/desktop/ports.ts:DesktopPorts.document": caller<DesktopPorts["document"]>()("current"),
