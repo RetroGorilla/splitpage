@@ -700,8 +700,15 @@ export function createSurface(ports: SurfacePorts): Surface {
       event.preventDefault();
       return;
     }
-    const range = selection();
+    let range = selection();
     if (!range) return;
+    // why: a delayed selectionchange must not add the heading conversion after typing in the next paragraph.
+    if (pendingHeading && (type === "insertText" || type === "insertReplacementText") &&
+        isCollapsed(range) && range.head.kind === "beat" && range.head.rowId !== pendingHeading) {
+      leavePendingHeading();
+      range = selection();
+      if (!range) return;
+    }
     if (type === "insertParagraph" || type === "insertLineBreak") {
       event.preventDefault();
       const target = range0(input) ?? range;
