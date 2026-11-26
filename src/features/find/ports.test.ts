@@ -22,7 +22,7 @@ test("rules 73 and 88: Find bulk tagging and Split replace-all refuse once befor
     sharedCommands: sharedCommandGuard(() => shared.session.read(doc => doc !== null), notices.notices),
     document: { current: () => shared.session.read(doc => doc), read: shared.session.read, onChange: shared.session.subscribe },
     edits: { edit: fail, stamps: { clock: { nowIso: () => "now" }, editor: { name: () => "Editor" } } },
-    text: { cellOf: () => [], inertBody: () => win.document.body, sanitizeHtml: String },
+    text: { cellOf: () => [], scriptCellOf: () => [], inertBody: () => win.document.body, sanitizeHtml: String },
     shotHiding: () => ({ reveal: fail }), undo: { breakCoalescing: fail }, notices: notices.notices,
     flags: { setFindOpen: () => {} }, options: { matchesCase: () => false }, bulkTag: fail, present: fakeFindPresent().present
   });
@@ -59,6 +59,7 @@ test("find uses owner ports to reveal matches", () => {
     edits: { edit: () => true, stamps: { clock: { nowIso: () => "2026-10-23T00:00:00.000Z" }, editor: { name: () => "Test" } } },
     text: {
       cellOf: (html) => [{ text: String(html || ""), marks: {} }],
+      scriptCellOf: (html) => [{ text: String(html || ""), marks: {} }],
       inertBody: () => win.document.body,
       sanitizeHtml: (html) => String(html)
     },
