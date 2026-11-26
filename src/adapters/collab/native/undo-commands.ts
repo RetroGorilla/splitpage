@@ -16,11 +16,17 @@ interface SelectionCapture {
 }
 
 export type NativeUndoOutcome =
-  | { readonly kind: "written"; readonly entry: number | null; readonly selection?: NativeUndoSelection }
-  | { readonly kind: "unchanged" }
+  | {
+    readonly kind: "written";
+    readonly entry: number | null;
+    readonly selection?: NativeUndoSelection;
+    readonly narrationPlacementLost?: true;
+  }
+  | { readonly kind: "unchanged"; readonly narrationPlacementLost?: true }
   | { readonly kind: "refused"; readonly reason: NativeRefusal };
 
 const UNCHANGED: NativeUndoOutcome = Object.freeze({ kind: "unchanged" });
+const UNCHANGED_UNPLACED: NativeUndoOutcome = Object.freeze({ kind: "unchanged", narrationPlacementLost: true });
 
 export function openNativeUndo(script: NativeScript) {
   const { meta, order, segments, beats, visuals, headings, names, comments, replies, people, tags, shots } = script.roots;
@@ -36,6 +42,10 @@ export function openNativeUndo(script: NativeScript) {
 
   function selectionOf(item: NativeUndoItem): RecordedSelection | undefined {
     return item.meta.get(selectionKey) as RecordedSelection | undefined;
+  }
+
+  function endpointOf(recorded: RecordedSelection | undefined, direction: "undo" | "redo"): NativeUndoAnchor | null | undefined {
+    return direction === "undo" ? recorded?.before : recorded?.after;
   }
 
   function record(item: NativeUndoItem, before: NativeUndoAnchor | null, prior?: RecordedSelection): void {
@@ -90,16 +100,22 @@ export function openNativeUndo(script: NativeScript) {
     if (unavailable) return Object.freeze({ kind: "refused", reason: unavailable });
     pending = null;
     manager.stopCapturing();
+    const top = (direction === "undo" ? manager.undoStack : manager.redoStack).at(-1);
+    const intended = top && endpointOf(selectionOf(top), direction);
     const inverses = direction === "undo" ? manager.redoStack : manager.undoStack;
     const depth = inverses.length;
     // why: Yjs must finish the transaction while its undoing or redoing flag is still set
     const { result: item, changed } = observeNativePress(script, manager, () => manager[direction]());
-    if (!changed) return UNCHANGED;
-    const recorded = item && selectionOf(item);
+    if (!changed) {
+      return intended?.head.target.cell === "narration" && !resolveNativeUndoSelection(script, intended, true)
+        ? UNCHANGED_UNPLACED : UNCHANGED;
+    }
+    const recorded = item ? selectionOf(item) : undefined;
     if (recorded) inverses[depth]?.meta.set(selectionKey, recorded);
-    const replay = direction === "undo" ? recorded?.before : recorded?.after;
+    const replay = endpointOf(recorded, direction);
     const selection = replay && resolveNativeUndoSelection(script, replay, true);
-    return Object.freeze({ kind: "written", entry: item ? entryOf(item) : null, ...(selection ? { selection } : {}) });
+    const placement = selection ? { selection } : replay?.head.target.cell === "narration" ? { narrationPlacementLost: true as const } : {};
+    return Object.freeze({ kind: "written", entry: item ? entryOf(item) : null, ...placement });
   }
 
   return Object.freeze({

@@ -2,28 +2,30 @@ import { selection } from "./ports/editing.ts";
 import { onDocumentReplaced, sessionEntryRefusal } from "./session-owner.ts";
 
 const SCRIPT_TEXT = '#writer-doc, .wr-flow-visual-text, #rows .cell-editable:is([data-field="audioText"], [data-field="visualText"])';
+const UNPLACED = "data-native-caret-unplaced";
 let stopWaiting: (() => void) | null = null;
 
-function inScript(node: EventTarget | null): boolean {
-  const element = node instanceof Element ? node : node instanceof Node ? node.parentElement : null;
-  return !!element?.closest(SCRIPT_TEXT);
+export function stopNativeCaretWait(scope?: "writer"): void {
+  if (!scope || document.body.getAttribute(UNPLACED) === scope) stopWaiting?.();
 }
 
-export function stopNativeCaretWait(): void {
-  stopWaiting?.();
-}
-
-export function waitForNativeCaret(): void {
+export function waitForNativeCaret(scope?: "writer"): void {
+  if (scope && document.body.getAttribute(UNPLACED) === "") return;
   stopNativeCaretWait();
+  const target = scope ? "#writer-doc" : SCRIPT_TEXT;
+  const inScript = (node: EventTarget | null): boolean => {
+    const element = node instanceof Element ? node : node instanceof Node ? node.parentElement : null;
+    return !!element?.closest(target);
+  };
   const events = new window.AbortController();
   const options = { capture: true, signal: events.signal };
-  document.body.setAttribute("data-native-caret-unplaced", "");
+  document.body.setAttribute(UNPLACED, scope ?? "");
   const offReplacement = onDocumentReplaced(() => { if (!sessionEntryRefusal()) stopNativeCaretWait(); });
   stopWaiting = () => {
     stopWaiting = null;
     events.abort();
     offReplacement();
-    document.body.removeAttribute("data-native-caret-unplaced");
+    document.body.removeAttribute(UNPLACED);
   };
   const clear = (): void => {
     const range = document.getSelection();
@@ -32,11 +34,15 @@ export function waitForNativeCaret(): void {
   };
   const block = (event: Event): void => {
     if (!inScript(event.target)) return;
+    if (scope && event.type === "beforeinput" && /^history(Undo|Redo)$/.test((event as InputEvent).inputType)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     clear();
   };
-  document.addEventListener("focusin", clear, options);
+  document.addEventListener("focusin", event => {
+    if (scope && event.target instanceof Element && event.target.matches(".empty-script-input")) stopNativeCaretWait(scope);
+    else clear();
+  }, options);
   document.addEventListener("selectionchange", clear, options);
   document.addEventListener("pointerdown", event => { if (inScript(event.target)) stopNativeCaretWait(); }, options);
   document.addEventListener("keydown", event => {
