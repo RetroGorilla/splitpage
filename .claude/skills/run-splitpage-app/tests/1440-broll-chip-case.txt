@@ -13,10 +13,27 @@ press B-roll: Boats
 key Enter
 press B-ROLL: Nets
 click #doc-title
-eval window.cases=['b-roll:','B-roll:','B-ROLL:']; window.chips=selector=>Array.from(document.querySelectorAll(selector+' .broll-key')); window.caseKept=selector=>JSON.stringify(chips(selector).map(chip=>chip.textContent))===JSON.stringify(cases); window.caseShown=selector=>chips(selector).length===cases.length&&chips(selector).every(chip=>getComputedStyle(chip,'::before').content.startsWith('"B-Roll:"')&&getComputedStyle(chip).fontSize==='0px')
+eval window.cases=['b-roll:','B-roll:','B-ROLL:']; window.chips=selector=>Array.from(document.querySelectorAll(selector+' .broll-key')); window.caseKept=selector=>JSON.stringify(chips(selector).map(chip=>chip.textContent))===JSON.stringify(cases)
+eval window.caseShown=selector=>chips(selector).length===cases.length&&chips(selector).every(chip=>{const text=getComputedStyle(chip),label=getComputedStyle(chip,'::before');return text.fontSize==='11px'&&text.webkitTextFillColor==='rgba(0, 0, 0, 0)'&&label.content.startsWith('"B-Roll:"')&&label.position==='absolute'&&label.pointerEvents==='none'&&label.webkitTextFillColor===text.color})
 expect caseKept('#rows')
 expect caseShown('#rows')
 expect cases.every(marker=>F.state().rows[0].visualText.includes('>'+marker+'</span>'))
+eval document.documentElement.dataset.theme='light'
+shot broll-chips-light
+eval document.documentElement.dataset.theme='dark'
+shot broll-chips-dark
+eval document.documentElement.dataset.theme='light'
+
+caret #rows .cell-editable[data-id="a"][data-field="visualText"] start
+key shift ArrowRight
+expect getSelection().toString().replace(/\u200b/g,'') === 'b-roll:'
+eval window.selectedChipWidth=()=>{const chip=chips('#rows')[0], range=getSelection().getRangeAt(0);if(!range.intersectsNode(chip.firstChild))return 0;const text=document.createRange();text.selectNodeContents(chip);return text.getBoundingClientRect().width}
+expect selectedChipWidth() > chips('#rows')[0].clientWidth / 2
+key ArrowLeft
+eval window.dropAfterChip=()=>{const chip=chips('#rows')[0],rect=chip.getBoundingClientRect(),data=new DataTransfer();data.setData('text/plain','test');chip.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:data,clientX:Math.floor(rect.right-2),clientY:Math.floor((rect.top+rect.bottom)/2)}))}
+eval dropAfterChip()
+expect />b-roll:<\/span>[^<]*test[^<]*Harbour/.test(F.state().rows[0].visualText)
+
 click #btn-write
 wait W.on()
 eval W.openVisual('a')

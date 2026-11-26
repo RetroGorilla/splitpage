@@ -1,21 +1,29 @@
   .broll-key {
     display: inline-block;
+    position: relative;
     box-sizing: border-box;
+    min-inline-size: calc(7ch + 12px);
     height: 18px;
     padding: 0 5px;
     margin-right: var(--space-6);
     border: 1px solid var(--broll);
     border-radius: 3px;
-    font-family: var(--font-display); font-size: 0; line-height: 16px; font-weight: 500;
+    font-family: var(--font-display); font-size: 11px; line-height: 16px; font-weight: 500;
     color: var(--broll);
+    -webkit-text-fill-color: transparent;
     vertical-align: 2px;
     cursor: pointer;
   }
-  /* why: the original marker text remains in the editor DOM for copying and saving. */
+  /* why: the original marker text keeps its layout for selection and drop placement. */
   .broll-key::before {
     content: "B-Roll:";
     content: "B-Roll:" / "";
-    font-size: 11px;
+    position: absolute;
+    inset: 0;
+    text-align: center;
+    white-space: nowrap;
+    -webkit-text-fill-color: currentColor;
+    pointer-events: none;
   }
   .broll-key:hover { background: color-mix(in srgb, var(--broll) 14%, transparent); }
   .broll-badge { background: var(--broll); color: var(--accent-contrast); }
