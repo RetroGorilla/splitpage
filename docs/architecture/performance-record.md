@@ -485,9 +485,9 @@ The undo rows have one key, so p95 equals p50. The other standalone cases moved 
 
 No standalone case is slower than its spread, and every standalone p50 is well inside its limit. Stage 4 and 5 leave standalone typing flat at 2.4 and 2.6 ms. Shared Split and Writer typing with two editors are flat at 1.6 to 1.8 ms. With 300 beats and a peer moving between beats, Split typing stays at about 6 ms and Writer typing at 11.3 ms p50 in both base and head, so the parts after presence added nothing there. That Writer figure is above the 8 ms standalone typing limit; no shared limit has been set. Its p95 rose from 18.9 to 25.5 ms with one base run at 31.3 ms, so three rounds do not separate a change from noise. Both runs are traceable to the commands above.
 
-## Stage 4 Part 15 (remote carets and selections), 4c402da29 to 452ce26d8
+## Stage 4 Part 15 (remote carets and selections), 4c402da29 to 452ce26d8 (three rounds under load)
 
-Recorded 2026-11-26 on Windows with Node v24.22.1 by `node tools/perf-ab.mjs 4c402da29 452ce26d8 --only shared,shared-long --rounds 3`. Base `4c402da29` is the Stage 4 Part 16 merge; head `452ce26d8` adds remote carets and selections in Split and Writer. Other work ran on the machine during this run (no `perf.lock` isolation), so absolute timings sit higher than in the isolated `ac0d3bc4b` run above.
+Recorded 2026-11-26 on Windows with Node v24.22.1 by `node tools/perf-ab.mjs 4c402da29 452ce26d8 --only shared,shared-long --rounds 3`. Base `4c402da29` is the Stage 4 Part 16 merge; head `452ce26d8` adds remote carets and selections in Split and Writer. Both sides used the Part 15 harness. Other work ran on the machine without `perf.lock` isolation, and the Part 15 moving-peer fixture sends carets near the edits; base timings here differ from the earlier isolated `ac0d3bc4b` run, which used a different peer setup and moving-peer workload (for example, moving-peer Writer p50 is 24.5 ms here vs 11.3 ms there).
 
 ### Input latency, median of 3 rounds (ms)
 
@@ -514,7 +514,7 @@ Run medians and tails (base / head, p50 then p95):
 
 ### Reading it
 
-Shared Split and Writer typing p50 rose by 0.3 ms (1.9 to 2.2 ms, +15.8%) and 0.4 ms (2.1 to 2.5 ms, +19.0%). On 300 beats with a moving peer sending carets near the edits, Split typing p50 moved from 12 to 12.6 ms (+5.0%) and Writer typing p50 moved from 24.5 to 28.6 ms (+16.7%), with wide per-round spread in both base (15.9 to 33.3 ms) and head (16.5 to 31.7 ms). The `Range.getClientRects` calls come from measuring peer caret and selection boxes in the overlay. No shared performance budget is set here; the budget for the moving-peer cases is open for the owner.
+Shared Split and Writer typing p50 rose by 0.3 ms (1.9 to 2.2 ms, +15.8%) and 0.4 ms (2.1 to 2.5 ms, +19.0%). On 300 beats with a moving peer sending carets near the edits, Split typing p50 moved from 12 to 12.6 ms (+5.0%) and Writer typing p50 moved from 24.5 to 28.6 ms (+16.7%), with wide per-round spread in both base (15.9 to 33.3 ms) and head (16.5 to 31.7 ms). The largest measured change across these three rounds under load is moving-peer Split p95, from 21 to 32.7 ms (+55.7%), with two of three head runs (29.8, 32.7, 34 ms) above the highest base run (30.2 ms). The `Range.getClientRects` calls come from measuring peer caret and selection boxes in the overlay; the short Writer fixture recorded zero overlay rectangle reads because the peer was in a visual field with no matching Writer box open. No shared performance budget is set; both moving-peer limits remain open for the owner.
 
 ## Comparing two commits
 

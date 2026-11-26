@@ -152,9 +152,12 @@ The Stage 4 and 5 plan of 2026-11-23 is on `main` through `452ce26d8`. Part 16 t
 - **Part 14 (`f6b609cb9`):** phone layouts, keyboard use and announcements, the Collaboration section of the help,
   and the [relay setup guide](relay-setup.md).
 - **Part 15 (`452ce26d8`):** remote carets and selections. Peers send their caret or selection as two Yjs relative
-  positions in presence, checked strictly on receive. An overlay outside the editable cells draws each peer's caret,
-  selection and name flag in Split and Writer (including open Writer visual boxes), mapped through painted-but-unshared
-  text, and hides them in Present. Writer selections that cross beats clamp to the focus beat.
+  positions in presence, checked strictly on receive. An overlay outside the editable cells draws marks in Split and
+  Writer, mapped through painted-but-unshared text, only after the shared session connects and syncs and only for a
+  resolvable position in a visible beat field. A Writer visual caret needs the matching visual box open in the receiving
+  view; otherwise only the "Visual in use" indicator can appear. Present mode suppresses marks on either side, and
+  scene headings have no remote mark. Writer selections that cross beats clamp to the focus beat. Redraws are queued
+  on presence, view, focus, scroll, resize and changes to the shown text surface.
 - **Part 16 (`4c402da29`):** release builds (`node build.mjs`, desktop staging, the portable package and the relay image) include
   the collaboration UI, its help section and `wss:` in the connection policy. Test hooks, `__sharedTest`, the test
   build's `ws://127.0.0.1:*` policy and the loopback HTTP relay stay in test builds only. The desktop build setting
