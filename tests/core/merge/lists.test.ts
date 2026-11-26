@@ -186,6 +186,37 @@ test("production tags: of two entries for one name, the first keeps its own owne
   assert.deepEqual(out, [{ cat: "prop", name: "Ladder", owner: "p1", notes: "first", status: "have", id: "t_a" }]);
 });
 
+test("production tags: merging saved copies preserves alternate values from sharing", () => {
+  const note = { field: "notes", value: "Bring the spare" } as const;
+  const other = { field: "notes", value: "Check the case" } as const;
+  const status = { field: "status", value: "have" } as const;
+  const mine = [tag("t_lens", "Lens", { unmergedEdits: [note, other] }), tag("t_other", "lens", { unmergedEdits: [status] })];
+  const theirs = [tag("t_lens", "Lens", { unmergedEdits: [note] })];
+  assert.deepEqual(mergeProductionTags([], mine, theirs), [{
+    id: "t_lens", cat: "prop", name: "Lens", owner: "", notes: "", status: "needed", unmergedEdits: [note, other, status]
+  }]);
+});
+
+test("production tags: concurrent notes on the same saved fold retain the displaced note", () => {
+  const version = (notes: string) => [tag("t_kettle", "Kettle", { notes, sharedFold: true })];
+  const merged = mergeProductionTags(version("Base"), version("Mine"), version("Theirs"));
+  assert.deepEqual(merged, [{ id: "t_kettle", cat: "prop", name: "Kettle", owner: "", notes: "Theirs", status: "needed",
+    sharedFold: true, unmergedEdits: [{ field: "notes", value: "Mine" }] }]);
+  assert.equal(mergeProductionTags(version("Base"), version("Base"), version("Theirs"))[0]?.unmergedEdits, undefined);
+});
+
+test("production tags: saved folds with different IDs retain both primary notes and both alternatives", () => {
+  const saved = (id: string, notes: string, value: string) => tag(id, "Lens", { notes, unmergedEdits: [{ field: "notes", value }] });
+  const merged = mergeProductionTags([], [saved("t_first", "A", "B")], [saved("t_second", "C", "D")]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0]?.notes, "C");
+  assert.deepEqual(merged[0]?.unmergedEdits?.map(edit => edit.value).sort(), ["A", "B", "D"]);
+  const resolved = (id: string, notes: string) => tag(id, "Lens", { notes, sharedFold: true });
+  const result = mergeProductionTags([], [resolved("t_first", "A")], [resolved("t_second", "C")]);
+  assert.deepEqual(result[0]?.unmergedEdits, [{ field: "notes", value: "A" }]);
+  assert.equal(result[0]?.sharedFold, true);
+});
+
 test("b-roll props: additions on both sides, removals, an ancestor with no list, and the cap", () => {
   const K = prop("t_kettle", "Kettle"), L = prop("t_ladder", "Ladder"), T = prop("t_tripod", "Tripod");
   assert.deepEqual(mergeBrollProps([K], [K, L], [K, T]), [K, T, L]);

@@ -1,3 +1,6 @@
+import { cappedLongText, plainText } from "./text-policy.ts";
+import type { UnmergedTagEdit } from "./validated.ts";
+
 export const TAG_CATEGORY_IDS = ["prop", "location", "cast", "vfx", "sound", "gear"] as const;
 
 export type TagCategoryId = (typeof TAG_CATEGORY_IDS)[number];
@@ -60,6 +63,24 @@ export function tagKey(cat: string, name: unknown): string {
 
 export function registryKey(cat: string, name: unknown): string {
   return cat + " " + normalizeTagName(name);
+}
+
+export function unmergedTagEdits(value: unknown): UnmergedTagEdit[] {
+  const edits: UnmergedTagEdit[] = [];
+  if (!Array.isArray(value)) return edits;
+  const seen = new Set<string>();
+  for (const entry of value as unknown[]) {
+    if (!entry || typeof entry !== "object" || !("field" in entry) || !("value" in entry) || typeof entry.value !== "string") continue;
+    const field = entry.field;
+    if (field !== "notes" && field !== "owner" && field !== "status") continue;
+    const text = field === "status" ? tagStatusId(entry.value) : cappedLongText(plainText(entry.value), 2000);
+    if (!text) continue;
+    const key = field + " " + text;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    edits.push({ field, value: text });
+  }
+  return edits;
 }
 
 const TAG_ID_RE = /^t_[a-z0-9]{1,16}(-[0-9]{1,6})?$/;

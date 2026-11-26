@@ -54,7 +54,7 @@ export function nativeShotPropEntries(map: Y.Map<unknown>, bad?: (key: string) =
   return entries.sort((a, b) => compareNativeRankedIds(a.key, a.rank, b.key, b.rank));
 }
 
-export function resolveNativeShotPropEntries(entries: readonly NativeShotPropEntry[], resolve: (props: unknown) => (BrollProp | null)[]) {
+export function resolveNativeShotPropEntries(entries: readonly NativeShotPropEntry[], resolve: (props: BrollProp[]) => (BrollProp | null)[]) {
   const active = entries.filter(entry => !entry.removed);
   const props = resolve(active.map(entry => entry.prop));
   return active.flatMap((entry, at) => {

@@ -14,17 +14,22 @@ type PropWrite = (map: Y.Map<unknown>) => void;
 type Write = () => void;
 type Drop = Pick<NativeShotPropEntry, "key" | "rank">;
 
-export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape["productionTags"]) {
+export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape["productionTags"], tagGroup: (id: string) => readonly string[] | undefined) {
   const stored = shot.get(NATIVE_SHOT_PROPS);
   if (!(stored instanceof Y.Map)) return null;
   const map: Y.Map<unknown> = stored;
   const bad = new Set<string>();
   const entries = nativeShotPropEntries(map, key => { bad.add(key); });
-  const resolved = resolveNativeShotPropEntries(entries, props => resolveBrollProps(props, tags));
+  const canonical = (id: string) => tagGroup(id)?.[0] ?? id;
+  const resolved = resolveNativeShotPropEntries(entries, props => resolveBrollProps(props.map(prop => ({ ...prop, id: canonical(prop.id) })), tags));
   const shown = shownNativeShotPropEntries(resolved);
   const active = entries.filter(entry => !entry.removed);
   const byKey = new Map(entries.map(entry => [entry.key, entry]));
   const byRef = new Map(shown.map(entry => [brollPropKey(entry.prop.id, entry.prop.name), entry]));
+  function members(entry: (typeof shown)[number]): readonly string[] {
+    const group = tagGroup(entry.prop.id);
+    return group ? resolved.filter(other => other.prop.id === entry.prop.id).map(other => other.key) : [entry.key];
+  }
 
   function plan(writes: Write[], changes: readonly PropWrite[]): void {
     if (changes.length === 0) return;
@@ -41,21 +46,22 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
   function remove(writes: Write[], ref: string): void {
     const key = ref.startsWith("n:") && !bad.has(ref) ? "n:" + encodeNativeValue(ref.slice(2)) : ref;
     if (bad.has(key)) { plan(writes, [map => { map.delete(key); }]); return; }
-    const entry = byRef.get(ref);
-    if (entry) plan(writes, [map => { propRecord(map, entry.key).set("removed", true); }]);
+    const entry = byRef.get(canonical(ref));
+    if (entry) plan(writes, members(entry).map(key => map => { propRecord(map, key).set("removed", true); }));
   }
 
   function move(writes: Write[], ref: string, before: string | null): "missing" | "value" | null {
-    const moving = byRef.get(ref), right = before === null ? undefined : byRef.get(before);
+    const moving = byRef.get(canonical(ref)), right = before === null ? undefined : byRef.get(canonical(before));
     if (!moving || before !== null && !right) return "missing";
     const at = shown.findIndex(entry => entry.key === moving.key);
     if (moving === right || shown[at + 1] === right) return null;
-    const order = active.filter(entry => entry.key !== moving.key);
+    const memberKeys = new Set(members(moving));
+    const order = active.filter(entry => !memberKeys.has(entry.key));
     const lastShown = shown.at(-1);
     const drop = right ? order.findIndex(entry => entry.key === right.key) : order.findIndex(entry => entry.key === lastShown?.key) + 1;
     const placement = dropRank(moving.key, order[drop - 1], order[drop]);
     if (!placement) return "value";
-    plan(writes, [map => { writeRank(propRecord(map, moving.key), placement.rank); }]);
+    plan(writes, [...memberKeys].map(key => map => { writeRank(propRecord(map, key), placement.rank); }));
     return null;
   }
 
@@ -93,7 +99,7 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
     plan(writes, changes);
   }
 
-  return { activeCount: active.length, damaged: bad.size > 0,
+  return { distinctCount: shown.length, damaged: bad.size > 0,
     hasName: (name: string) => shown.some(({ prop }) => normalizeTagName(prop.name) === name),
     add, remove, move, replace };
 }

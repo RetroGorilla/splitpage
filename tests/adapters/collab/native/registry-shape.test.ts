@@ -2,14 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
-import { normalizeBrollProps } from "../../../../src/core/document/broll.ts";
+import { mintTagId } from "../../../../src/core/document/tags.ts";
 import { addBrollProp, removeBrollProp } from "../../../../src/core/production/records.ts";
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
+import { formatNativeText } from "../../../../src/adapters/collab/native/format-commands.ts";
 import { changeNativeRegistry } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import { transactNativeCommand } from "../../../../src/adapters/collab/native/script.ts";
 import { projectNativeRegistries } from "../../../../src/adapters/collab/native/registry-projection.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { removeNativeRows } from "../../../../src/adapters/collab/native/structure-commands.ts";
+import { anchorNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { encodeNativeValue, mintNativeId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
 import { cells, convertedScript, edit, joinedScript } from "./helpers.ts";
 
@@ -34,20 +36,18 @@ test("snapshot indexes the tag registry once for 2,000 one-prop shots", () => {
   } finally { script.doc.destroy(); }
 });
 
-test("the snapshot prop lookup preserves the first named tag and exact ID lookups", () => {
+test("the snapshot prop lookup resolves aliases and idless references to the lowest tag ID", () => {
   const script = convertedScript(source());
   try {
     const productionTags = [
-      { id: "t_first", cat: "prop", name: "Lamp" }, { id: "t_second", cat: "prop", name: "lamp" },
+      { id: "t_second", cat: "prop", name: "lamp" }, { id: "t_first", cat: "prop", name: "Lamp" },
       { id: "t_other", cat: "gear", name: "Strap" }
     ];
     const props = [{ id: "t_second", name: "Stale" }, { id: "", name: "Lamp" }, { id: "t_other", name: "Old" }];
     const brollShots = [{ id: "bs1", name: "Wide", props }];
     const document = { ...source(), productionTags, brollShots };
-    const expected = normalizeBrollProps(props, productionTags);
     projectNativeRegistries(document, script.roots, () => { throw new Error("No removed records"); });
-    assert.deepEqual(document.brollShots[0]?.props, expected);
-    assert.deepEqual(expected.map(prop => prop.id), ["t_second", "t_first", "t_other"]);
+    assert.deepEqual(document.brollShots[0]?.props, [{ id: "t_first", name: "Lamp" }, { id: "t_other", name: "Strap" }]);
   } finally { script.doc.destroy(); }
 });
 
@@ -78,6 +78,26 @@ test("narration typing reuses registry projections, even after a removal", () =>
       assert.equal(after.productionTags, before.productionTags);
       assert.equal(after.brollShots, before.brollShots);
     }
+  } finally { script.doc.destroy(); }
+});
+
+test("typing beside a removed shot's surviving key updates the shot and reuses the tag fold", () => {
+  const script = convertedScript(migrateRows({ ...source(), rows: [{ id: "r1", audioText: "Narration",
+    visualText: '<span class="broll-key" data-broll-id="bs1">B-roll:</span> Wide' }] }));
+  try {
+    writeField(script.roots.tags, "t_case", "name", "LAMP");
+    script.roots.shots.get("bs1")?.set("removed", true);
+    const before = script.reader.document();
+    assert.equal(before.productionTags.find(tag => tag?.name === "LAMP")?.sharedFold, true);
+    assert.equal(before.brollShots[0]?.audioRef, "Narration");
+    assert.equal(edit(script, { beat: "r1", cell: "narration" }, 0, 1, cells("n")).kind, "written");
+    const after = script.reader.document();
+    assert.equal(after.productionTags, before.productionTags);
+    assert.equal(after.brollShots[0]?.audioRef, "narration");
+    writeField(script.roots.tags, "t_case", "notes", "Spare lamp");
+    const edited = script.reader.document();
+    assert.notEqual(edited.productionTags, before.productionTags);
+    assert.equal(edited.productionTags.find(tag => tag?.name === "LAMP")?.notes, "Spare lamp");
   } finally { script.doc.destroy(); }
 });
 
@@ -128,6 +148,25 @@ test("a removed registry follows new inline tags and narration on a surviving ke
     assert.equal(removed.productionTags.some(tag => tag?.name === "Case"), false);
     assert.deepEqual(removed.brollShots, []);
   } finally { script.doc.destroy(); }
+});
+
+test("a tag derived after concurrent removal and inline marking retains its saved alternatives", () => {
+  const id = mintTagId("prop", "Kettle");
+  const unmergedEdits = [{ field: "notes", value: "Bring the spare" }];
+  const initial = migrateRows({ ...source(), rows: [{ id: "r1", audioText: "Kettle" }],
+    productionTags: [{ cat: "prop", name: "Kettle", id, notes: "For the close-up", unmergedEdits }] });
+  withCopies(initial, (left, right, settle) => {
+    assert.equal(changeNativeRegistry(left, { kind: "remove", collection: "tags", ids: [id] }).kind, "written");
+    assert.deepEqual(left.reader.document().productionTags, []);
+    const selection = anchorNativeText(right, { beat: "r1", cell: "narration" }, 0, 6);
+    assert.ok(selection.kind === "anchored");
+    assert.equal(formatNativeText(right, selection.range, { kind: "tag", id: "t:prop:Kettle", on: true }).kind, "written");
+    settle();
+    for (const copy of [left, right]) {
+      assert.deepEqual(copy.reader.document().productionTags,
+        [{ cat: "prop", name: "Kettle", id, notes: "", owner: "", status: "needed", unmergedEdits }]);
+    }
+  });
 });
 
 function withCopies(document: ValidatedDocument, run: (left: NativeScript, right: NativeScript, settle: () => void) => void): void {
