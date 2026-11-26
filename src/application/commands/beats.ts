@@ -1,7 +1,7 @@
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { sceneFirstBeatId, scenesAfterRemoval, scenesInOrder, startsParagraph, withSceneFirstBeat, writeScenes } from "../../core/document/scenes.ts";
 import { changeSet } from "../session/change-set.ts";
-import type { Command, DocumentView, Plan } from "../session/document-session.ts";
+import type { Command, DocumentView, Plan, RemovedBeatsListener } from "../session/document-session.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 import { applyParagraphFlags, paragraphCells, paragraphFlagsAfterOrder } from "./paragraphs.ts";
 import type { DocumentScene } from "../../core/document/scenes.ts";
@@ -74,11 +74,11 @@ export function pasteBeatsCommand(paste: BeatPaste): Command {
   };
 }
 
-export function removeBeatsCommand(rowIds: readonly string[]): Command {
+export function removeBeatsCommand(rowIds: readonly string[], removed?: RemovedBeatsListener): Command {
   return {
     name: "remove-scenes",
     needs: "edit",
-    structure: { kind: "remove-beats", ids: rowIds },
+    structure: { kind: "remove-beats", ids: rowIds, ...(removed ? { removed } : {}) },
     plan: function (doc): Plan | null {
       const gone = rowIds.filter(function (id, at) { return present(doc, id) && rowIds.indexOf(id) === at; });
       if (!gone.length) return null;

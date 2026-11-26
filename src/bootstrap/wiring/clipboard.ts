@@ -5,6 +5,8 @@ import { pictures as portPictures } from "./ports/pictures.ts";
 import { text as portText } from "./ports/text.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { screen as portScreen } from "./ports/screen.ts";
+import { sharedCommandGuard } from "./ports/shared-command-notices.ts";
+import { sharedSession } from "./session-owner.ts";
 import { brollSeedOf, recordPastedBroll } from "../../application/production/broll-records.ts";
 import { startCellClipboard as mountCellClipboard } from "../../features/clipboard/cell-clipboard.ts";
 import type { CellClipboardPorts, CopyPasteMount, BeatClipPorts, BeatSelectPorts } from "../../features/clipboard/ports.ts";
@@ -68,7 +70,9 @@ export function mountCopyPasteFeature(): CopyPasteMount {
       writerOpen: () => viewFlags().writerOpen(),
       startNewScript,
       nonce,
-      screen: portScreen
+      screen: portScreen,
+      sharing: sharedSession,
+      sharedCommands: sharedCommandGuard(sharedSession, portNotices)
     };
     const cells = mountCellClipboard(cellPorts);
     const beats = mountBeatClip(clipPorts);

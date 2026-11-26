@@ -8,6 +8,8 @@ import type { SharedDocumentSession } from "../../application/session/shared-ses
 import { sceneBeforeBeat, sceneFirstBeatId, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
 import type { SceneDocument } from "../../core/document/scenes.ts";
 import { cappedText } from "../../core/document/text-policy.ts";
+import type { DocumentRow } from "../../core/document/validated.ts";
+import { toHtml } from "../../core/text/html.ts";
 import { documentReader } from "./ports/document.ts";
 import { editAllowed, sessionStamps } from "./session-owner.ts";
 import { sameNativeInsertPlacement } from "./native-shared-input.ts";
@@ -45,6 +47,13 @@ export function createNativeEditorStructure({ native, session, input, publish, r
     return result.kind === "anchored" ? result.range : null;
   }
 
+  // why: removing a joined row removes only its visible head and its members return as rows (design, Joined row
+  // removal), so what a removal takes out is the head's own content
+  function headOnly(row: DocumentRow): DocumentRow {
+    const head = (native.readRow(row.id)?.members.length ?? 1) > 1 ? native.readBeat(row.id) : null;
+    return head ? { ...row, ...head.fields, id: row.id, audioText: toHtml(head.narration), visualText: toHtml(head.visual) } : row;
+  }
+
   return (intent: DocumentStructureIntent): CommandOutcome => {
     const owner = session(), typing = input();
     if (!owner || !typing) return { kind: "rejected", reason: "closed" };
@@ -66,6 +75,7 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       const current = moving ? null : typing.currentCaret();
       let after: NativeUndoSelectionInput | null = (movedSelection?.kind === "ready" ? movedSelection.range : current?.range) ?? null;
       let landing: string | undefined;
+      let removal: readonly DocumentRow[] | null = null;
       let step;
       switch (intent.kind) {
         case "insert-beat": {
@@ -103,9 +113,11 @@ export function createNativeEditorStructure({ native, session, input, publish, r
           break;
         }
         case "remove-beats": {
-          const ids = [...new Set(intent.ids)];
-          if (!ids.length) return { kind: "noop" };
-          if (!ids.every(id => before.rows.some(row => row.id === id))) return owner.refuse("missing");
+          const wanted = new Set(intent.ids);
+          const rows = before.rows.filter(row => wanted.has(row.id)), ids = rows.map(row => row.id);
+          if (!wanted.size) return { kind: "noop" };
+          if (ids.length !== wanted.size) return owner.refuse("missing");
+          removal = rows.map(headOnly);
           step = native.commands.removeRows.withSelection(current?.range ?? anchor(ids[0] as string, 0), ids);
           if (current && ids.includes(current.row)) after = null;
           break;
@@ -159,6 +171,7 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       } else if (!inserting && movedSelection?.kind === "ready") {
         typing.show(movedSelection.selection);
       }
+      if (removal && intent.kind === "remove-beats") intent.removed?.(removal);
       return { kind: "applied", generation: owner.generation(), changes };
     } catch (error) {
       report(error);

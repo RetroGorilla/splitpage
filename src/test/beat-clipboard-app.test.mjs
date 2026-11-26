@@ -166,6 +166,30 @@ test("cutting selected scenes is one remove-scenes transaction with one undo ent
   assert.deepEqual(ids(), ["r1", "r2", "r3"]);
 });
 
+test("a cut whose clipboard write fails keeps the selected scenes and their selection", async () => {
+  await open();
+  window.__sceneSelectTest.select("r2", "r3");
+  const cd = clipboardWith({});
+  cd.setData = (type, value) => {
+    if (type === "text/html") throw new Error("clipboard write failed");
+    cd.store[type] = value;
+  };
+  const was = counters();
+  const errors = [];
+  const observe = (event) => { errors.push(event.error && event.error.message); event.preventDefault(); };
+  window.addEventListener("error", observe);
+  try {
+    cutEvent(cd);
+  } finally {
+    window.removeEventListener("error", observe);
+  }
+  assert.deepEqual(errors, ["clipboard write failed"]);
+  assert.deepEqual(ids(), ["r1", "r2", "r3"]);
+  assert.deepEqual(window.__sceneSelectTest.ids(), ["r2", "r3"]);
+  assert.equal(liveSession().generation(), was.generation);
+  assert.deepEqual(undoSizes(), was.sizes);
+});
+
 test("deleting selected scenes is one transaction, and its undo brings the scenes and the comment's place back", async () => {
   await open();
   window.__sceneSelectTest.select("r1", "r2");

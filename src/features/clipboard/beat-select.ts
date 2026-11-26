@@ -1,5 +1,5 @@
 import type { BeatSelectPorts } from "./ports.ts";
-import type { DocumentView, Command } from "../../application/session/document-session.ts";
+import type { DocumentView, Command, RemovedBeatsListener } from "../../application/session/document-session.ts";
 import { refsIn } from "../../../shared/blob-policy.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import { cssAttr } from "../common/dom.ts";
@@ -22,7 +22,20 @@ const HIDES_BEATS = '#rows .hidden-shot-strip, #rows .section-fold[aria-expanded
 
 let ports: BeatSelectPorts | null = null;
 let track: { cell: HTMLElement; rowId: string | null; x: number; y: number; beat: boolean } | null = null;
-let sel: { anchor: string | null | undefined; focus: string | null | undefined; ids: Set<string>; doc: DocumentView | null } | null = null;
+interface BeatSelection {
+  anchor: string | null | undefined;
+  focus: string | null | undefined;
+  ids: Set<string>;
+  doc: DocumentView | null;
+  docId: string | null;
+  epoch: number;
+}
+interface BeatPayload {
+  ids: readonly string[];
+  nonce: string | null;
+  out: ReturnType<typeof buildBeatPayload>;
+}
+let sel: BeatSelection | null = null;
 let lastClicked: { id: string; doc: DocumentView | null } | null = null;
 let swallowClick = false;
 let scroll: { dir: number; speed: number; raf: number } | null = null;
@@ -30,11 +43,24 @@ let styleEl: HTMLStyleElement | null = null;
 let menuEl: HTMLDivElement | null = null;
 const REFUSED = false;
 let pendingCut = false;
-let clipWritten: ReturnType<typeof payloadOfSelection> | typeof REFUSED | null = null;
+let clipWritten: BeatPayload | typeof REFUSED | null = null;
+
+function selectionOf(anchor: string | null | undefined, focus: string | null | undefined, ids: Set<string>): BeatSelection {
+  const doc = (ports as BeatSelectPorts).document.current();
+  return { anchor: anchor, focus: focus, ids: ids, doc: doc, docId: doc ? doc.docId : null, epoch: (ports as BeatSelectPorts).lifetime.epoch() };
+}
 
 function hasBeatSelection() {
-  if (sel && sel.doc !== (ports as BeatSelectPorts).document.current()) clearBeatSelection();
-  return !!sel;
+  if (!sel) return false;
+  const doc = (ports as BeatSelectPorts).document.current();
+  if (sel.doc === doc) return true;
+  const present = doc && doc.docId === sel.docId && (ports as BeatSelectPorts).lifetime.epoch() === sel.epoch
+    ? new Set(doc.rows.map(function (r) { return r.id; })) : null;
+  const ids = present ? new Set(Array.from(sel.ids).filter(function (id) { return present.has(id); })) : null;
+  if (!ids || !ids.size) { clearBeatSelection(); return false; }
+  sel = { ...sel, ids: ids, doc: doc };
+  paint();
+  return true;
 }
 
 function selectedBeatIds() {
@@ -62,7 +88,7 @@ function beatsBetween(anchorId: string | null | undefined, focusId: string | nul
 
 export function selectBeats(anchorId: string | null | undefined, focusId?: string | null | undefined) {
   const focus = focusId || anchorId;
-  sel = { anchor: anchorId, focus: focus, ids: beatsBetween(anchorId, focus), doc: (ports as BeatSelectPorts).document.current() };
+  sel = selectionOf(anchorId, focus, beatsBetween(anchorId, focus));
   paint();
 }
 
@@ -84,7 +110,7 @@ function selectAllBeats() {
   if (!doc.rows.length) return true;
   const ids = new Set(doc.rows.map(function (r) { return r.id; }));
   const first = (doc.rows[0] as NonNullable<typeof doc.rows[number]>).id;
-  sel = { anchor: first, focus: first, ids: ids, doc: doc };
+  sel = selectionOf(first, first, ids);
   leaveText();
   paint();
   prefetchPictures();
@@ -113,16 +139,14 @@ function rangeStart() {
 function extendTo(id: string) {
   const anchor = hasBeatSelection() ? (sel as NonNullable<typeof sel>).anchor : rangeStart();
   if (!sel && (!anchor || anchor === id)) return false;
-  const doc = (ports as BeatSelectPorts).document.current();
-  sel = { anchor: anchor, focus: id, ids: beatsBetween(anchor, id), doc: doc };
+  sel = selectionOf(anchor, id, beatsBetween(anchor, id));
   return true;
 }
 
 function toggleBeat(id: string) {
-  const doc = (ports as BeatSelectPorts).document.current();
   const ids = hasBeatSelection() ? (sel as NonNullable<typeof sel>).ids : new Set<string>();
   if (ids.has(id)) ids.delete(id); else ids.add(id);
-  sel = ids.size ? { anchor: id, focus: id, ids: ids, doc: doc } : null;
+  sel = ids.size ? selectionOf(id, id, ids) : null;
 }
 
 function selectionClick(e: MouseEvent) {
@@ -307,14 +331,14 @@ function prefetchPictures() {
 
 function count(n: number) { return n === 1 ? "1 beat" : n + " beats"; }
 
-function payloadOfSelection(cut: boolean) {
+function payloadOfSelection(cut: boolean): BeatPayload {
   const ids = selectedBeatIds();
   const nonce = cut ? (ports as BeatSelectPorts).nonce() : null;
   const out = buildBeatPayload((ports as BeatSelectPorts).document.current(), ids, { cut: nonce });
   return { ids: ids, nonce: nonce, out: out };
 }
 
-function putBeats(cd: DataTransfer, w: ReturnType<typeof payloadOfSelection>) {
+function putBeats(cd: DataTransfer, w: BeatPayload) {
   try { cd.setData(BEATS_MIME, w.out.json); } catch (e) { }
   cd.setData("text/html", w.out.html);
   cd.setData("text/plain", w.out.text);
@@ -346,13 +370,29 @@ function onCopyEvent(e: ClipboardEvent) {
 }
 
 function cutInto(e: ClipboardEvent, cd: DataTransfer) {
-  const w = payloadOfSelection(true);
-  const entry = takeOut(w.ids);
-  // why: a refused removal leaves the clipboard as it was, and the event's default copies no beat selection
-  if (entry === REFUSED) { clipWritten = REFUSED; return; }
+  if (!(ports as BeatSelectPorts).sharing()) {
+    e.preventDefault();
+    const written = putBeats(cd, payloadOfSelection(true));
+    clipWritten = written;
+    afterCut(written);
+    return;
+  }
+  const nonce = (ports as BeatSelectPorts).nonce();
+  const shown = (ports as BeatSelectPorts).document.current() as DocumentView;
+  let taken: BeatPayload | null = null;
+  const entry = takeOut(selectedBeatIds(), function (rows) {
+    const live = new Map(rows.map(function (r) { return [r.id, r] as const; }));
+    const ids = rows.map(function (r) { return r.id; });
+    const doc: DocumentView = { ...shown, rows: shown.rows.map(function (r) { return live.get(r.id) || r; }) };
+    taken = { ids: ids, nonce: nonce, out: buildBeatPayload(doc, ids, { cut: nonce }) };
+  });
+  const w = taken as BeatPayload | null;
+  // why: a shared removal is admitted first and copies what it took out; a refused one leaves the clipboard as it
+  // was, since the event's default copies no beat selection
+  if (entry === REFUSED || !w) { clipWritten = REFUSED; return; }
   e.preventDefault();
   clipWritten = putBeats(cd, w);
-  setLiveCut(w.nonce, ((ports as BeatSelectPorts).document.current() as DocumentView).docId);
+  setLiveCut(nonce, ((ports as BeatSelectPorts).document.current() as DocumentView).docId);
   announceCut(w, entry);
 }
 
@@ -377,6 +417,7 @@ function runClipboardCommand(cut: boolean) {
   pendingCut = false;
   if (clipWritten === REFUSED || (ok && clipWritten)) return;
   const ids = selectedBeatIds();
+  if (cut && ids.length && (ports as BeatSelectPorts).sharedCommands.refuseUnsupported()) return;
   if (!ids.length || !navigator.clipboard) { (ports as BeatSelectPorts).notices.show("Could not reach the clipboard.", "warn"); return; }
   const nonce = cut ? (ports as BeatSelectPorts).nonce() : null;
   const started = (ports as BeatSelectPorts).document.current();
@@ -400,14 +441,14 @@ function sameDocument(started: DocumentView | null, startedId: string | null, ep
   return !!started && now === started && now.docId === startedId && (ports as BeatSelectPorts).lifetime.epoch() === epoch;
 }
 
-function afterCut(w: ReturnType<typeof payloadOfSelection>) {
+function afterCut(w: BeatPayload) {
   setLiveCut(w.nonce, ((ports as BeatSelectPorts).document.current() as DocumentView).docId);
-  const entry = takeOut(w.ids);
+  const entry = takeOut(w.ids.slice());
   if (entry !== REFUSED) announceCut(w, entry);
 }
 
-function announceCut(w: ReturnType<typeof payloadOfSelection>, entry: ReturnType<BeatSelectPorts["undo"]["last"]>) {
-  const msg = count(w.ids.length) + " cut — paste them with Ctrl+V";
+function announceCut(w: BeatPayload, entry: ReturnType<BeatSelectPorts["undo"]["last"]>) {
+  const msg = count(w.ids.length) + ((ports as BeatSelectPorts).sharing() ? " cut" : " cut — paste them with Ctrl+V");
   if (w.out.leftOut.length) announceLeftOut(msg, w.out.leftOut);
   else offerUndo(msg, entry);
 }
@@ -418,18 +459,17 @@ function runBeatCommand(command: Command) {
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
-function takeOut(ids: string[]) {
+function takeOut(ids: string[], removed?: RemovedBeatsListener) {
   (ports as BeatSelectPorts).undo.breakCoalescing();
   const before = (ports as BeatSelectPorts).undo.last();
-  const outcome = (ports as BeatSelectPorts).edits.run(removeBeatsCommand(ids));
+  const outcome = (ports as BeatSelectPorts).edits.run(removeBeatsCommand(ids, removed));
   if (outcome.kind === "failed") throw outcome.error;
-  if (outcome.kind === "rejected") return REFUSED;
-  const done = outcome.kind === "applied" || outcome.kind === "committed";
+  if (outcome.kind !== "applied" && outcome.kind !== "committed") return REFUSED;
   sel = null;
   paint();
   (ports as BeatSelectPorts).undo.flush();
   (ports as BeatSelectPorts).undo.breakCoalescing();
-  if (done) (ports as BeatSelectPorts).production.scheduleRefresh();
+  (ports as BeatSelectPorts).production.scheduleRefresh();
   const entry = (ports as BeatSelectPorts).undo.last();
   return entry === before ? null : entry;
 }

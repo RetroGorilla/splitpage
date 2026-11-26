@@ -1,6 +1,6 @@
 import type { SharedOperation } from "../../core/collab/operations.ts";
 import type { SharedCommandDescription } from "../../core/collab/undo-record.ts";
-import type { ValidatedDocument } from "../../core/document/validated.ts";
+import type { DocumentRow, ValidatedDocument } from "../../core/document/validated.ts";
 import type { FlowSelectionPair } from "../../core/flow/flow.ts";
 import { isDocumentObject } from "../../core/migrate.ts";
 import { WHOLE_DOCUMENT, changeSet, combined, isEmpty, needsReconciliation } from "./change-set.ts";
@@ -42,10 +42,12 @@ export interface Command {
   readonly plan: (doc: DocumentView, capability: CapabilityPort) => Plan | CommandRefusal | null;
 }
 
+export type RemovedBeatsListener = (rows: readonly DeepReadonly<DocumentRow>[]) => void;
+
 export type DocumentStructureIntent =
   | { readonly kind: "insert-beat"; readonly id: string | null; readonly focus?: "narration" | "visual" }
   | { readonly kind: "remove-beat"; readonly id: string }
-  | { readonly kind: "remove-beats"; readonly ids: readonly string[] }
+  | { readonly kind: "remove-beats"; readonly ids: readonly string[]; readonly removed?: RemovedBeatsListener }
   | { readonly kind: "remove-heading"; readonly id: string }
   | { readonly kind: "add-heading"; readonly id: string; readonly beat: string; readonly name: string }
   | { readonly kind: "rename-heading"; readonly id: string; readonly name: string }

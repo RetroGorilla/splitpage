@@ -6,7 +6,7 @@ import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { ScreenState } from "../../application/screen.ts";
-import type { DocumentEdits } from "../../application/session/document-edits.ts";
+import type { DocumentEdits, SharedCommandGuard } from "../../application/session/document-edits.ts";
 import type { CommonDocumentSession, DeepReadonly } from "../../application/session/document-session.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
@@ -61,6 +61,8 @@ export interface BeatSelectPorts {
   readonly startNewScript: () => boolean;
   readonly nonce: () => string;
   readonly screen: () => ScreenState;
+  readonly sharing: () => boolean;
+  readonly sharedCommands: SharedCommandGuard;
 }
 
 export interface CopyPasteMount {
