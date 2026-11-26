@@ -74,11 +74,20 @@ export function createSidePanels(document: Document, ports: SidePanelsPorts): Si
     sync();
   }
 
+  function closeIfOverlayingScript(id: string): void {
+    if (!shown(id)) return;
+    const root = document.getElementById("root");
+    if (!root || !document.defaultView) return;
+    const style = document.defaultView.getComputedStyle(root);
+    if (style.getPropertyValue("--side-panels-beside-script").trim() !== "1") close(id);
+  }
+
   return {
     registerPanel: (id, closed) => register(closedHooks, id, closed),
     registerPage: (id, closePage) => register(pages, id, closePage),
     open,
     close,
+    closeIfOverlayingScript,
     closeAll,
     sync,
     applyWidth

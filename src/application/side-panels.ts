@@ -3,6 +3,7 @@ export interface SidePanels {
   readonly registerPage: (id: string, close: () => void) => () => void;
   readonly open: (id: string) => void;
   readonly close: (id: string) => void;
+  readonly closeIfOverlayingScript: (id: string) => void;
   readonly closeAll: () => void;
   readonly sync: () => void;
   readonly applyWidth: (id: string, width: number) => void;

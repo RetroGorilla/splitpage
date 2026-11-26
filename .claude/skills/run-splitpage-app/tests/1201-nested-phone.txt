@@ -14,10 +14,19 @@ mouse click (function(){var r=document.getElementById('tag-open-hint').getBoundi
 expect document.querySelector('#rows [data-tag-cat="sound"] [data-tag-cat="prop"]') !== null
 expect document.querySelector('#rows .cell-editable').textContent.replace(/\u200b/g,'') === 'rain on umbrella'
 mouse click (function(){var r=document.querySelector('#rows [data-tag-cat="sound"]').getBoundingClientRect();return {x:r.left+3,y:r.top+r.height/2};})()
+expect !document.getElementById('production-panel').hidden
 click #tag-edit-action
+wait document.getElementById('production-panel').getAnimations().every(animation=>animation.playState!=='running')
 expect document.getElementById('production-panel').hidden
 expect document.querySelector('#rows [data-tag-cat="sound"]').getAttribute('contenteditable') === 'true'
 expect document.querySelector('#rows [data-tag-cat="prop"]').getAttribute('contenteditable') === 'false'
+eval window.soundTag=()=>document.querySelector('#rows [data-tag-cat="sound"]')
+mouse click (function(){const text=document.createRange();text.selectNodeContents(soundTag().firstChild);const r=text.getBoundingClientRect();return {x:r.left+1,y:r.top+r.height/2};})()
+expect getSelection().isCollapsed && soundTag().contains(getSelection().anchorNode)
+press heavy
+key Space
+expect soundTag().textContent.replaceAll('\u200b','').replaceAll('\u00a0',' ') === 'heavy rain on umbrella'
+expect soundTag().querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'
 click #tag-edit-action
 expect document.querySelector('#rows [data-tag-cat="sound"]').getAttribute('contenteditable') === 'false'
 quit

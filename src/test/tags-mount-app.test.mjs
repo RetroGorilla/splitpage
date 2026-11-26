@@ -35,6 +35,32 @@ function fire(target, type, props = {}) {
   return event;
 }
 
+for (const layout of ["beside", "overlay"]) {
+  test("Edit tag keeps the script available in the " + layout + " layout", () => {
+    open();
+    const root = document.getElementById("root");
+    if (layout === "beside") root.style.setProperty("--side-panels-beside-script", "1");
+    try {
+      const panel = document.getElementById("production-panel");
+      const tag = document.querySelector("#rows .tag-anchor");
+      tag.getClientRects = () => [tag.getBoundingClientRect()];
+      assert.equal(panel.hidden, false);
+      fire(tag, "mousedown");
+      const edit = document.getElementById("tag-edit-action");
+      assert.equal(edit.hidden, false);
+      assert.equal(panel.hidden, false);
+      edit.click();
+      assert.equal(tag.getAttribute("contenteditable"), "true");
+      assert.equal(panel.hidden, layout === "overlay");
+      edit.click();
+      assert.equal(tag.getAttribute("contenteditable"), "false");
+      assert.equal(panel.hidden, layout === "overlay");
+    } finally {
+      root.style.removeProperty("--side-panels-beside-script");
+    }
+  });
+}
+
 for (const work of ["card", "touch"]) {
   for (const scenario of ["dispose and reopen", "same-ID replacement", "stale completion after remount", "normal completion"]) {
     test("tags app: " + work + ", " + scenario, async () => {
