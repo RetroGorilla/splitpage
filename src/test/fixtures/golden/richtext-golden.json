@@ -1136,7 +1136,7 @@
     },
     "name chip: dirty, blank and nested": {
       "input": "<span class=\"who-anchor\" data-who=\"  @@Ann   Lee \">@x</span> <span class=\"who-anchor\" data-who=\"\">kept text</span> <span class=\"who-anchor\">no name</span> <strong><span class=\"who-anchor\" data-who=\"Bo&lt;b&gt;\"><em>@Bo</em></span></strong> <span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"who-anchor\" data-who=\"Cy\">@Cy</span></span>",
-      "sanitized": "<span class=\"who-anchor\" data-who=\"Ann Lee\" contenteditable=\"false\">@Ann Lee</span> kept text no name <strong><span class=\"who-anchor\" data-who=\"Bo<b>\" contenteditable=\"false\">@Bo&lt;b&gt;</span></strong> <span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"who-anchor\" data-who=\"Cy\" contenteditable=\"false\">@Cy</span></span>",
+      "sanitized": "<span class=\"who-anchor\" data-who=\"Ann Lee\" contenteditable=\"false\">@Ann Lee</span> kept text no name <strong><span class=\"who-anchor\" data-who=\"Bo&lt;b&gt;\" contenteditable=\"false\">@Bo&lt;b&gt;</span></strong> <span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"who-anchor\" data-who=\"Cy\" contenteditable=\"false\">@Cy</span></span>",
       "fromHtml": [
         {
           "atom": "who",
@@ -1172,7 +1172,7 @@
         }
       ],
       "media": [],
-      "toHtml": "<span class=\"who-anchor\" data-who=\"Ann Lee\" contenteditable=\"false\">@Ann Lee</span> kept text no name <strong><span class=\"who-anchor\" data-who=\"Bo<b>\" contenteditable=\"false\">@Bo&lt;b&gt;</span></strong> <span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"who-anchor\" data-who=\"Cy\" contenteditable=\"false\">@Cy</span></span>",
+      "toHtml": "<span class=\"who-anchor\" data-who=\"Ann Lee\" contenteditable=\"false\">@Ann Lee</span> kept text no name <strong><span class=\"who-anchor\" data-who=\"Bo&lt;b&gt;\" contenteditable=\"false\">@Bo&lt;b&gt;</span></strong> <span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"who-anchor\" data-who=\"Cy\" contenteditable=\"false\">@Cy</span></span>",
       "markdown": "kept text no name",
       "markdownOfInput": "kept text no name",
       "storedFromDom": "<span class=\"who-anchor\" data-who=\"  @@Ann   Lee \">@x</span> <span class=\"who-anchor\" data-who=\"\">kept text</span> <span class=\"who-anchor\">no name</span> <strong><span class=\"who-anchor\" data-who=\"Bo&lt;b&gt;\"><em>@Bo</em></span></strong> <span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"who-anchor\" data-who=\"Cy\">@Cy</span></span>"
@@ -2500,7 +2500,7 @@
     },
     {
       "href": "https://example.com/a\"b<c>&d",
-      "html": "<a class=\"video-embed-card\" href=\"https://example.com/a&quot;b<c>&amp;d\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· example.com</span></a>"
+      "html": "<a class=\"video-embed-card\" href=\"https://example.com/a&quot;b&lt;c&gt;&amp;d\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· example.com</span></a>"
     }
   ]
 }

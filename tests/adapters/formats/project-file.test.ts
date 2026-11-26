@@ -8,6 +8,7 @@ import type { DocumentOrigin } from "../../../src/core/migrate.ts";
 import { editStamp } from "../../../src/application/commands/save-stamps.ts";
 import { buildExportDocument } from "../../../src/core/document/export-document.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
+import { SCHEMA_VERSION } from "../../../src/core/document/fields.ts";
 import { migrateRows } from "../../../src/bootstrap/document-ports.ts";
 
 interface Calls {
@@ -59,6 +60,31 @@ test("parseProjectFileState: a .splitpage file goes through the services' docume
   assert.equal(parsed.state.title, "T");
   assert.deepEqual(calls.origins, [{ kind: "file" }]);
   assert.deepEqual(await parseProjectFileState(file("b.splitpage", "{\"rows\":7}"), null, services), { error: "not-splitpage" });
+});
+
+test("opening and re-saving a script preserves legacy angle brackets inside stored attributes", async () => {
+  const { services } = fakes();
+  const legacy = '<a href="https://example.com/?q=<A>&amp;literal=&amp;lt;" target="_blank" rel="noopener">&lt;A&gt;</a>';
+  const canonical = '<a href="https://example.com/?q=&lt;A&gt;&amp;literal=&amp;lt;" target="_blank" rel="noopener">&lt;A&gt;</a>';
+  function write(source: ValidatedDocument): string {
+    const doc = buildExportDocument(source, "2026-01-01T00:00:00Z", { production: [], commentNumbers: {}, broll: [] });
+    return buildSplitpageFile(doc, services);
+  }
+  const fresh = write(migrateRows({
+    schema: SCHEMA_VERSION, docId: "d" + "a".repeat(32), title: "T", rows: [{ id: "a", audioText: canonical }]
+  }));
+  const existing = fresh.replace(JSON.stringify(canonical), JSON.stringify(legacy));
+  assert.notEqual(existing, fresh);
+  const parsed = await parseProjectFileState(file("existing.splitpage", existing), null, services);
+  assert.ok(parsed && "state" in parsed);
+  assert.equal(parsed.state.rows[0]?.audioText, legacy);
+  assert.equal(write(parsed.state), existing);
+
+  const dirty = existing.replace(JSON.stringify(legacy), JSON.stringify(legacy.replace("<a ", '<a onclick="return false" ')));
+  const repaired = await parseProjectFileState(file("dirty.splitpage", dirty), null, services);
+  assert.ok(repaired && "state" in repaired);
+  assert.equal(repaired.state.rows[0]?.audioText, canonical);
+  assert.equal(write(repaired.state), fresh);
 });
 
 test("parseProjectFileState: a saved page is read from its state-data script without the inert body, which is only the fallback", async () => {

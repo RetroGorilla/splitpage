@@ -23,6 +23,7 @@ export interface RichTextPorts {
 export interface RichText {
   inertBody: (html: unknown) => HTMLElement;
   sanitize: (html: unknown) => string;
+  sanitizeStored: (html: unknown) => string;
   decode: (html: unknown, opts?: DecodeOptions | null) => Run[];
   createCellReader: (seal: Seal, opts?: DecodeOptions | null) => CellReader;
   storedHtmlFromDom: <T>(html: T) => T | string;
@@ -34,10 +35,24 @@ export interface RichText {
 
 const STORED_IMG_ATTRS: ReadonlySet<string> = new Set(["class", "data-blob", "data-w", "data-h", "data-mime"]);
 
+function mapAttributeValues(html: string, map: (value: string) => string): string {
+  return html.replace(/<[a-z][a-z0-9-]*(?: [a-z0-9-]+="[^"]*")+>/g, tag => tag.replace(/"[^"]*"/g, map));
+}
+
 export function createRichText(ports: RichTextPorts): RichText {
   const Parser = ports.DOMParser;
   const images = ports.images;
   const ids = ports.ids;
+  let escapesAttributeAngles: boolean | undefined;
+
+  function serializedMarkup(html: string, doc: Document): string {
+    if (escapesAttributeAngles === undefined) {
+      const probe = doc.createElement("span");
+      probe.setAttribute("title", "<>");
+      escapesAttributeAngles = probe.outerHTML.includes("&lt;&gt;");
+    }
+    return escapesAttributeAngles ? html : mapAttributeValues(html, value => value.replaceAll("<", "&lt;").replaceAll(">", "&gt;"));
+  }
 
   function parsedBody(text: string): HTMLElement {
     return new Parser().parseFromString("<!doctype html><body>" + text, "text/html").body;
@@ -54,7 +69,15 @@ export function createRichText(ports: RichTextPorts): RichText {
     const doc = body.ownerDocument;
     const out = doc.createElement("div");
     walkSanitize(body, out, { doc: doc, images: images, ids: ids, split: splitBudget(text.length) });
-    return withoutLoneSurrogates(out.innerHTML);
+    return withoutLoneSurrogates(serializedMarkup(out.innerHTML, doc));
+  }
+
+  function sanitizeStored(html: unknown): string {
+    const clean = sanitize(html);
+    if (typeof html !== "string" || html === clean || !/&[lg]t;/.test(clean)) return clean;
+    // why: A saved script can keep its old attribute bytes only if every other byte is already sanitised.
+    const legacy = mapAttributeValues(clean, value => value.replaceAll("&lt;", "<").replaceAll("&gt;", ">"));
+    return html === legacy ? html : clean;
   }
 
   function decode(html: unknown, opts?: DecodeOptions | null): Run[] {
@@ -91,12 +114,16 @@ export function createRichText(ports: RichTextPorts): RichText {
   return {
     inertBody: inertBody,
     sanitize: sanitize,
+    sanitizeStored: sanitizeStored,
     decode: decode,
     createCellReader: function (seal, opts) { return createCellReader(function (html) { return decode(html, opts); }, seal); },
     storedHtmlFromDom: storedHtmlFromDom,
     htmlToMarkdown: htmlToMarkdown,
     videoCardElement: cardElement,
-    videoCardHtml: function (href) { return cardElement(href).outerHTML; },
+    videoCardHtml: function (href) {
+      const card = cardElement(href);
+      return serializedMarkup(card.outerHTML, card.ownerDocument);
+    },
     imageRefOf: function (node) { return imageRefOf(node, images); }
   };
 }

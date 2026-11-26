@@ -14,7 +14,7 @@ function escText(t: string): string {
   return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\u00a0/g, "&nbsp;");
 }
 function escAttr(t: unknown): string {
-  return String(t).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/\u00a0/g, "&nbsp;");
+  return escText(String(t)).replace(/"/g, "&quot;");
 }
 
 const FORMAT_TAG: Record<FormatMark, string> = { hl: "mark", b: "strong", i: "em", u: "u", s: "s" };
