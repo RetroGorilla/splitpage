@@ -106,7 +106,7 @@ async function creationBody(request: IncomingMessage, limit: number): Promise<{ 
 export function ownerRequests(secret: string | undefined, limit: number, commands: Commands, deployment?: string,
   origins: ReadonlySet<string> = new Set()) {
   const authorize = managementAuthorizer(secret);
-  const attempts = new Map<string, { failures: number; checks: number; until: number }>();
+  const attempts = new Map<string, { failures: number; until: number }>();
   let exchangesInFlight = 0;
   let nextSweep = 0;
   const attemptPeriod = 60_000;
@@ -118,7 +118,7 @@ export function ownerRequests(secret: string | undefined, limit: number, command
     }
     let record = attempts.get(name);
     if (!record || record.until <= now) {
-      record = { failures: 0, checks: 0, until: now + attemptPeriod };
+      record = { failures: 0, until: now + attemptPeriod };
       attempts.set(name, record);
     }
     return record;
@@ -156,15 +156,7 @@ export function ownerRequests(secret: string | undefined, limit: number, command
         if (!request.complete || response.destroyed) return true;
         if (!commands.activeLink(name, token)) throw new RequestError(403);
         const stored = commands.readPassword(name);
-        const attempt = stored || value === null ? attemptWindow(name) : undefined;
-        if (value === null && attempt) {
-          if (attempt.checks >= 60) {
-            response.setHeader("Retry-After", "60");
-            reply(429);
-            return true;
-          }
-          attempt.checks += 1;
-        }
+        const attempt = stored && value !== null ? attemptWindow(name) : undefined;
         if (!stored) reply(200, { token });
         else if (value === null) reply(428);
         else if (exchangesInFlight >= 8 || (attempt && attempt.failures >= 5)) {

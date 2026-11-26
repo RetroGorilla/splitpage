@@ -94,11 +94,14 @@ with the intended recipients.
 
 When a returning copy needs a replacement credential, the app posts
 `{"password":null}` to the existing `/api/scripts/<script-id>/password-exchange`
-endpoint to check that the stored guest link is still active. The relay checks
-the link again when the guest submits the password. The relay allows 60 checks
-per minute per script, with a separate budget for password attempts. An exhausted
-check budget returns HTTP 429 with `Retry-After: 60`. The app offers a retry after
-temporary failures. You can update the app before updating the relay.
+endpoint to check that the stored guest link is still active. The app offers a
+retry after temporary failures. For a protected link, **Re-enter password** uses
+the successful check to open the password prompt. The relay checks the link again
+when the guest submits the password.
+
+You can update the app before updating the relay. Until the relay is updated,
+guests who hit the device limit see the generic “Too many password attempts”
+message.
 
 ## Back up and rehearse a restore
 

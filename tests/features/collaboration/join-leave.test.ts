@@ -137,7 +137,7 @@ for (const [reason, message] of [
 
     const recovery = mountPasswordDialog({
       title: "Re-enter password", submit: "Reconnect",
-      check: async () => "password-required", save: async () => reason
+      recovery: { check: async () => "password-required" }, save: async () => reason
     });
     t.after(recovery.dispose);
     await Promise.resolve();

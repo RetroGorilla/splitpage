@@ -48,6 +48,7 @@ interface RetainedSharingControls {
   readonly link: string | null;
   readonly canManage: () => Promise<boolean>;
   readonly passwordRequired: boolean;
+  readonly recoveryPasswordRequired: boolean | null;
   readonly manage: (operation: "promote" | "reset" | "stop" | "check-link" | "set-password" | "remove-password", password?: string) => Promise<void>;
   readonly reenter: (password: string | null, signal: AbortSignal) => Promise<string | null>;
   readonly retryPasswordCheck: () => void;
@@ -374,6 +375,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       let liveRelay: ReturnType<typeof openNativeRelay> | undefined;
       const recoveryLifetime = new AbortController();
       let retryPasswordCheck: (() => void) | undefined;
+      let recoveryPasswordRequired: boolean | null = null;
       const connect = () => {
         if (entry.relayUrl && pictureBinding) {
           pictureBinding.bindCopy(replica);
@@ -412,12 +414,13 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
                   const outcome = await checkLinkPasswordRecovery(origin, entry.script, linkToken, recoveryLifetime.signal);
                   if (!sessionCurrent() || recoveryLifetime.signal.aborted || membership !== previous
                     || owner.snapshot().passwordRecoveryCheck !== "checking") return;
-                  if (outcome === "retryable") {
+                  if (outcome.kind === "retryable") {
                     owner.setPasswordRecoveryCheck("retryable");
                     return;
                   }
                   retryPasswordCheck = undefined;
-                  owner.setRefusal(outcome === "denied" ? "access-removed"
+                  recoveryPasswordRequired = outcome.kind === "eligible" ? outcome.passwordRequired : null;
+                  owner.setRefusal(outcome.kind === "denied" ? "access-removed"
                     : event.reason === "password-changed" ? "password-changed" : "device-credential-expired");
                 };
                 retryPasswordCheck = () => { void check(); };
@@ -501,6 +504,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           role: membership?.role ?? "guest",
           link: membership?.role === "owner" ? link?.href ?? null : null,
           passwordRequired: membership?.linkPasswordRequired ?? false,
+          recoveryPasswordRequired,
           retryPasswordCheck() { retryPasswordCheck?.(); },
           async canManage() {
             if (!manage || !pictureOrigin || membership?.role !== "guest") return false;
@@ -522,7 +526,10 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
               const result = await exchangePassword(pictureOrigin, entry.script, guestLinkToken, password, lifetime);
               lifetime.throwIfAborted();
               if (result.kind === "failed") {
-                if (result.reason === "access-removed") owner.setRefusal(result.reason);
+                if (result.reason === "access-removed") {
+                  recoveryPasswordRequired = null;
+                  owner.setRefusal(result.reason);
+                }
                 return result.reason;
               }
               const next = { role: "guest" as const, token: result.token, guestLinkToken };
@@ -533,6 +540,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
               }
               stagedCredential.commit();
               membership = next;
+              recoveryPasswordRequired = null;
               owner.clearRefusal();
               pictureBinding?.replaceToken(relay.session(), next.token);
               relay.reconnectWithToken(next.token);
@@ -573,6 +581,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
               }
               finishStop = stopSharing;
               if (operation === "promote") {
+                recoveryPasswordRequired = null;
                 collaborationState().clearRefusal();
                 pictureBinding?.replaceToken(liveRelay.session(), membership.token);
                 liveRelay.reconnectWithToken(membership.token);

@@ -80,10 +80,10 @@ let recoveryDialog: ReturnType<typeof mountPasswordDialog> | undefined;
 function openPasswordRecovery(): void {
   if (recoveryDialog && !recoveryDialog.signal.aborted) return;
   const controls = retainedSharingControls();
-  if (!controls) return;
+  if (!controls || controls.recoveryPasswordRequired === null) return;
   recoveryDialog = mountPasswordDialog({
     title: "Re-enter password", submit: "Reconnect",
-    check: signal => controls.reenter(null, signal),
+    recovery: controls.recoveryPasswordRequired ? {} : { check: signal => controls.reenter(null, signal) },
     save: controls.reenter
   });
 }

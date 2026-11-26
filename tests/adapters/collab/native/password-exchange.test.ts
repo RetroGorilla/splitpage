@@ -5,16 +5,17 @@ import { checkLinkPasswordRecovery, exchangeLinkPassword } from "../../../../src
 const linkToken = "a".repeat(43);
 
 for (const [status, body, outcome] of [
-  [428, null, "eligible"], [200, { token: linkToken }, "eligible"],
-  [200, { token: "b".repeat(43) }, "retryable"], [200, null, "retryable"],
-  [403, null, "denied"], [404, null, "denied"],
-  [405, null, "retryable"], [429, null, "retryable"], [503, null, "retryable"]
+  [428, null, { kind: "eligible", passwordRequired: true }],
+  [200, { token: linkToken }, { kind: "eligible", passwordRequired: false }],
+  [200, { token: "b".repeat(43) }, { kind: "retryable" }], [200, null, { kind: "retryable" }],
+  [403, null, { kind: "denied" }], [404, null, { kind: "denied" }],
+  [405, null, { kind: "retryable" }], [429, null, { kind: "retryable" }], [503, null, { kind: "retryable" }]
 ] as const) {
-  test(`recovery check maps HTTP ${status} to ${outcome}`, async t => {
+  test(`recovery check maps HTTP ${status} to ${outcome.kind}`, async t => {
     const respond: typeof globalThis.fetch = async () =>
       body ? Response.json(body, { status }) : new Response(null, { status });
     const fetch = t.mock.method(globalThis, "fetch", respond);
-    assert.equal(await checkLinkPasswordRecovery("https://relay.example", "script", linkToken, t.signal), outcome);
+    assert.deepEqual(await checkLinkPasswordRecovery("https://relay.example", "script", linkToken, t.signal), outcome);
     const request = fetch.mock.calls[0]?.arguments[1];
     assert.ok(request);
     assert.equal(request.method, "POST");
@@ -26,9 +27,15 @@ for (const [status, body, outcome] of [
 for (const error of [new TypeError("Relay unreachable"), new DOMException("Timed out", "TimeoutError")]) {
   test(`recovery check is retryable after ${error.name}`, async t => {
     t.mock.method(globalThis, "fetch", async () => { throw error; });
-    assert.equal(await checkLinkPasswordRecovery("https://relay.example", "script", "link", t.signal), "retryable");
+    assert.deepEqual(await checkLinkPasswordRecovery("https://relay.example", "script", "link", t.signal), { kind: "retryable" });
   });
 }
+
+test("a null-password exchange can be retried after HTTP 429 without reporting failed password attempts", async t => {
+  t.mock.method(globalThis, "fetch", async () => new Response(null, { status: 429 }));
+  const result = await exchangeLinkPassword("https://relay.example", "script", linkToken, null, t.signal);
+  assert.deepEqual(result, { kind: "failed", reason: "relay-unreachable" });
+});
 
 for (const [status, body, reason] of [
   [428, null, "password-required"],

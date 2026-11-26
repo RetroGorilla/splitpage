@@ -27,6 +27,7 @@ after(() => {
 for (const [scenario, title] of [
   ["eligible", "a returning guest can re-enter the password after their device credential is pruned"],
   ["changed", "a returning guest can re-enter a changed password using the existing relay exchange"],
+  ["removed", "a returning guest can reconnect after the owner removes the password"],
   ["reset", "a pruned device cannot re-enter after the guest link is reset"],
   ["retry", "an unavailable relay keeps password recovery retryable until the link check succeeds"]
 ] as const) {
@@ -60,9 +61,10 @@ for (const [scenario, title] of [
       copy.session.close();
       await copy.closed;
     }
-    if (scenario === "changed") {
+    if (scenario === "changed" || scenario === "removed") {
       const response = await run.owner(`scripts/${scriptId}/password`, {
-        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: recoveryPassword })
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: scenario === "removed" ? null : recoveryPassword })
       }, owner.token);
       assert.equal(response.status, 204);
     } else {
@@ -74,17 +76,19 @@ for (const [scenario, title] of [
       assert.equal(response.status, 200);
     }
     let checks = 0;
-    if (scenario === "retry") {
-      const fetchFromRelay = globalThis.fetch;
-      t.mock.method(globalThis, "fetch", (input: URL, init?: RequestInit) => {
-        if (init?.method === "POST" && init.body === JSON.stringify({ password: null }) && input.pathname.endsWith("/password-exchange")) {
-          checks++;
-          if (checks === 1) return Promise.resolve(new Response(null, { status: 503 }));
-          if (checks === 2) return Promise.reject(new TypeError("Relay unavailable"));
+    const fetchFromRelay = globalThis.fetch;
+    t.mock.method(globalThis, "fetch", (input: URL, init?: RequestInit) => {
+      if (init?.method === "POST" && init.body === JSON.stringify({ password: null }) && input.pathname.endsWith("/password-exchange")) {
+        checks++;
+        if (scenario === "retry") {
+          if (checks === 1) return Promise.resolve(new Response(null, { status: 429 }));
+          if (checks === 2) return Promise.resolve(new Response(null, { status: 503 }));
+          if (checks === 3) return Promise.reject(new TypeError("Relay unavailable"));
         }
-        return fetchFromRelay(input, init);
-      });
-    }
+        if (scenario === "removed" && checks === 2) return Promise.resolve(new Response(null, { status: 429 }));
+      }
+      return fetchFromRelay(input, init);
+    });
     const app = (window as unknown as { __sharedTest: {
       enterRetained: (entry: RetainedSharedScript) => Promise<SharedSwitchOutcome>;
       leave: () => SharedSwitchOutcome | Promise<SharedSwitchOutcome>;
@@ -94,7 +98,7 @@ for (const [scenario, title] of [
       const reenter = document.querySelector<HTMLButtonElement>("#collab-access-reenter-password");
       if (scenario === "retry") {
         const retry = document.querySelector<HTMLButtonElement>("#collab-access-retry");
-        for (const attempt of [1, 2]) {
+        for (const attempt of [1, 2, 3]) {
           while (!collaborationSnapshot().refusal && (!retry || retry.hidden || retry.disabled)) {
             await delay(10, undefined, { signal: t.signal });
           }
@@ -130,21 +134,43 @@ for (const [scenario, title] of [
       }
       assert.equal(reenter?.hidden, false);
       assert.match(document.getElementById("collab-access-text")?.textContent ?? "",
-        scenario === "changed" ? /The link password changed/ : /Re-enter the link password/);
+        scenario === "changed" || scenario === "removed" ? /The link password changed/ : /Re-enter the link password/);
+      const checksBeforeDialog = scenario === "retry" ? 4 : 1;
+      assert.equal(checks, checksBeforeDialog);
       reenter?.click();
+      if (scenario === "removed") {
+        const retry = document.querySelector<HTMLButtonElement>("#link-password-modal [type=submit]");
+        assert.ok(retry);
+        while (retry.disabled) await delay(10, undefined, { signal: t.signal });
+        assert.equal(retry.textContent, "Try again");
+        assert.match(document.querySelector("#link-password-modal [role=status]")?.textContent ?? "", /Could not reach the relay/);
+        retry.click();
+        while (!collaborationSnapshot().relay.connected || !collaborationSnapshot().relay.firstSyncDone) {
+          await delay(10, undefined, { signal: t.signal });
+        }
+        assert.equal(collaborationSnapshot().refusal, null);
+        assert.equal(checks, checksBeforeDialog + 2);
+        assert.equal(document.getElementById("link-password-modal"), null);
+        return;
+      }
       const field = document.querySelector<HTMLInputElement>("#link-password-modal input");
       const reconnect = document.querySelector<HTMLButtonElement>("#link-password-modal [type=submit]");
       assert.ok(field && reconnect);
-      while (reconnect.disabled) await delay(10, undefined, { signal: t.signal });
+      assert.equal(checks, checksBeforeDialog);
+      assert.equal(reconnect.disabled, false);
+      assert.equal(field.autocomplete, "current-password");
+      assert.equal(document.activeElement, field);
       field.value = recoveryPassword;
       reconnect.click();
       while (!collaborationSnapshot().relay.connected || !collaborationSnapshot().relay.firstSyncDone) {
         await delay(10, undefined, { signal: t.signal });
       }
       assert.equal(collaborationSnapshot().refusal, null);
+      assert.equal(checks, checksBeforeDialog);
       assert.equal(document.getElementById("link-password-modal"), null);
       assert.equal(document.getElementById("collab-access-banner")?.hidden, true);
     } finally {
+      document.querySelector<HTMLButtonElement>("#link-password-modal [data-dialog-cancel]")?.click();
       assert.deepEqual(await app.leave(), { ok: true });
     }
   });

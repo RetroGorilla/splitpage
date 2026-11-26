@@ -154,9 +154,8 @@ The Stage 4 and 5 plan of 2026-11-23 is on `main` through `452ce26d8`. Part 16 t
   Before offering **Re-enter password**, a returning copy checks that the stored guest link is active and the
   script is still shared. It posts `{"password":null}` to the existing password exchange, which returns HTTP 428
   for a protected link or echoes the active unprotected link token. Neither response issues a new credential.
-  A temporary failure lets the guest retry, and the relay checks the link again at password submission.
-  Null-password checks use the per-script attempt window with a separate budget of 60 checks per minute.
-  An exhausted budget returns HTTP 429 with `Retry-After: 60`. The client can update before the relay.
+  A temporary failure lets the guest retry. For a protected link, **Re-enter password** uses the successful
+  check to open the password prompt. The relay checks the link again at submission. The client can update before the relay.
 - **Part 14 (`f6b609cb9`):** phone layouts, keyboard use and announcements, the Collaboration section of the help,
   and the [relay setup guide](relay-setup.md).
 - **Part 15 (`452ce26d8`):** remote carets and selections. Peers send their caret or selection as two Yjs relative

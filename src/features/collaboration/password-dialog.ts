@@ -15,14 +15,14 @@ export function mountPasswordDialog(options: {
   readonly title: string;
   readonly submit: string;
   readonly save: (password: string, signal: AbortSignal) => Promise<string | null>;
-  readonly check?: (signal: AbortSignal) => Promise<string | null>;
+  readonly recovery?: { readonly check?: (signal: AbortSignal) => Promise<string | null> };
   readonly remove?: () => Promise<string | null>;
 }) {
   const dialog = mountCollaborationDialog("link-password-modal", `
     <form class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="link-password-title" tabindex="-1">
       <div class="modal-header"><h2 id="link-password-title">${options.title}</h2></div>
       <label class="modal-hint">Link password
-        <input type="password" maxlength="${LINK_PASSWORD_MAX}" autocomplete="${options.check ? "current-password" : "new-password"}">
+        <input type="password" maxlength="${LINK_PASSWORD_MAX}" autocomplete="${options.recovery ? "current-password" : "new-password"}">
       </label>
       <p class="modal-hint" role="status"></p>
       <div class="modal-footer">
@@ -40,33 +40,41 @@ export function mountPasswordDialog(options: {
   const submit = part("[type=submit]") as HTMLButtonElement;
   const form = part("form") as HTMLFormElement;
   const status = part("[role=status]");
-  const check = options.check;
-  const checking = check !== undefined;
+  const check = options.recovery?.check;
+  const recovering = options.recovery !== undefined;
+  let retryCheck = false;
   remove.hidden = !options.remove;
   cancel.onclick = dispose;
   signal.addEventListener("abort", () => { field.value = ""; }, { once: true });
 
-  async function run(work: () => Promise<string | null>): Promise<void> {
+  async function run(work: () => Promise<string | null>, checkingLink = false): Promise<void> {
     field.value = "";
     field.disabled = submit.disabled = remove.disabled = true;
-    cancel.disabled = !checking;
-    status.textContent = checking ? "Checking access…" : "Saving password settings…";
-    (checking ? cancel : form).focus();
+    cancel.disabled = !recovering;
+    status.textContent = recovering ? "Checking access…" : "Saving password settings…";
+    (recovering ? cancel : form).focus();
     const reason = await work().catch(() => "failed");
     if (signal.aborted) return;
     if (reason === null) { dispose(); return; }
     cancel.disabled = false;
     const unavailable = reason === "access-removed";
-    field.disabled = submit.disabled = unavailable;
+    retryCheck = checkingLink && reason === "relay-unreachable";
+    field.disabled = unavailable || retryCheck;
+    submit.disabled = unavailable;
+    submit.textContent = retryCheck ? "Try again" : options.submit;
     remove.disabled = false;
-    status.textContent = reason === "password-required" ? "" : checking ? passwordFailure(reason)
+    status.textContent = reason === "password-required" ? "" : recovering ? passwordFailure(reason)
       : "Could not change the link password. Check the relay connection and try again.";
-    (unavailable ? cancel : field).focus();
+    (unavailable ? cancel : retryCheck ? submit : field).focus();
   }
 
   form.onsubmit = event => {
     event.preventDefault();
     if (submit.disabled) return;
+    if (retryCheck && check) {
+      void run(() => check(signal), true);
+      return;
+    }
     const value = field.value;
     if (!validLinkPassword(value)) {
       status.textContent = "Enter a link password.";
@@ -76,7 +84,7 @@ export function mountPasswordDialog(options: {
     void run(() => options.save(value, signal));
   };
   remove.onclick = () => { if (options.remove && !remove.disabled) void run(options.remove); };
-  if (check) void run(() => check(signal));
+  if (check) void run(() => check(signal), true);
   else field.focus();
   return dialog;
 }
