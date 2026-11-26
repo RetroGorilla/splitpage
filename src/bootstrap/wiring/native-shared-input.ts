@@ -979,7 +979,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return anchor && head ? { anchor, head } : null;
   }
 
-  function leaveHeadingLine(force = false): void {
+  function leaveHeadingLine(force = false, beforeEdit?: () => void): true | undefined {
     if (!pendingHeading || draggingHeading || stopped || draft?.composing || native.isClosingOrClosed()) return;
     const focus = document.activeElement?.id === "writer-doc";
     const control = writerControls()?.writerFlowControl();
@@ -993,6 +993,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const point = range?.head;
     if (!force && point?.kind === "beat" && (point.rowId === beat ? newline === -1 || point.offset <= newline
       : writerNarration.cell(beat)?.parentElement === writerNarration.cell(point.rowId)?.parentElement && newline === -1)) return;
+    beforeEdit?.();
     pendingHeading = null;
     try {
       const refusal = admissionRefusal();
@@ -1014,13 +1015,22 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
           : beatPos(landing, Math.max(0, point.offset - consumed));
       const after = keep && { anchor: remap(keep.anchor), head: remap(keep.head) };
       step.recordAfter(writerSelection(after));
+      native.endTypingGroup();
       publish();
       if (focus && after) control?.place(after, true);
       if (notice) notices.show(notice, "warn");
+      return true;
     } catch (error) {
       report(error);
       refuseCommand(UNSUPPORTED);
     }
+  }
+
+  function settleHeadingBeforeEdit(narration: Element | null, beforeEdit?: () => void): true | undefined {
+    if (!pendingHeading) return;
+    const first = narration?.parentElement?.firstElementChild;
+    if (first?.getAttribute("data-id") === pendingHeading && !first.querySelector("br")) return;
+    return leaveHeadingLine(false, beforeEdit);
   }
 
   function structureCaret(cell: Element, selected = false) {
@@ -1340,7 +1350,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     writerControls()?.writerFlowControl()?.place({ anchor: at, head: at });
   }
 
-  function write(input: InputEvent, cell: Element): void {
+  function write(input: InputEvent, cell: Element, relativeTarget?: CellRange | null): void {
     const deletion = /^delete(Content|Word|SoftLine|HardLine)(Backward|Forward)$/.test(input.inputType);
     const text = input.data ?? "";
     const isTitle = cell instanceof HTMLInputElement;
@@ -1349,7 +1359,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (input.isComposing || !(deletion || insertAllowed)) { refuseCommand(UNSUPPORTED); return; }
     const refusal = admissionRefusal();
     if (refusal) { refuseCommand(refusal); return; }
-    const ranged = isTitle ? titleInputRange(input, cell) : inputRange(input, cell);
+    const selected = relativeTarget && cellSelection(cell);
+    const ranged = relativeTarget === undefined
+      ? isTitle ? titleInputRange(input, cell) : inputRange(input, cell)
+      : selected && { from: selected.from + relativeTarget.from, to: selected.to + relativeTarget.to };
     if (ranged === "boundary") return;
     const selection = ranged;
     if (!selection || deletion && selection.from === selection.to) { session.refuse(deletion ? UNSUPPORTED : STALE); return; }
@@ -1499,7 +1512,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (!reason && buffered.field === "visualText" && buffered.cell.closest("#rows")) updateSplitVisualWhoList(buffered.beat);
   }
 
-  function intercept(event: Event): void {
+  function intercept(event: Event, relativeTarget?: CellRange | null): void {
     const target = event.target instanceof Element ? event.target : null;
     if (event.type === "drop" && target?.closest("#rows .row") && rowDrag().dragging()) return;
     const button = event.type === "click" ? target?.closest("#rows .mini-toolbar button[data-cmd], #writer .wr-fmt[data-cmd]") ?? null : null;
@@ -1629,6 +1642,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     }
     if (bufferedTarget && !stopped) {
       if (event.type.startsWith("composition")) {
+        if (writer && event.type === "compositionstart" && settleHeadingBeforeEdit(narration)) {
+          intercept(event);
+          return;
+        }
         event.stopImmediatePropagation();
         try { composition(event as CompositionEvent, bufferedTarget); }
         catch (error) { report(error); stop(PENDING); }
@@ -1671,6 +1688,25 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         if (stopped !== "full" && (narration || titleInput) && !splitting && !joining && !moving && !mark && !line && !adding
           && event.type !== "paste" && !inputType?.startsWith("delete")) session.refuse(stopped);
         return;
+      }
+      if (pendingHeading && (writer || narration?.closest("#writer-doc"))) {
+        const paste = event.type === "paste" ? (event as ClipboardEvent).clipboardData : null;
+        const text = paste?.getData("text/plain");
+        const edits = moving || joining || splitting || line || removeHeading ||
+          mark && !document.getSelection()?.isCollapsed ||
+          text && !/[\r\n]/.test(text) && paste?.types.every(type => type === "text/plain") ||
+          commandInput && (inputType === "insertText" || inputType?.startsWith("delete") || !!heading);
+        // why: heading conversion can repaint the narration cell and remap its selection before the edit.
+        let nextTarget: CellRange | null | undefined;
+        const rememberTarget = input && narration && !heading ? () => {
+          const selected = cellSelection(narration);
+          const target = inputRange(input, narration);
+          nextTarget = selected && target ? { from: target.from - selected.from, to: target.to - selected.to } : null;
+        } : undefined;
+        if (edits && settleHeadingBeforeEdit(narration, rememberTarget)) {
+          intercept(event, nextTarget);
+          return;
+        }
       }
       if (titleInput) {
         if (event.type === "paste") {
@@ -1731,7 +1767,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
           return;
         }
       }
-      if (event.type === "beforeinput" && editableText && event.cancelable) { write(event as InputEvent, editableText); return; }
+      if (event.type === "beforeinput" && editableText && event.cancelable) { write(event as InputEvent, editableText, relativeTarget); return; }
       if (event.type === "input" && cell) restoreUnsupportedInput(cell);
       session.refuse(UNSUPPORTED);
     } catch (error) {

@@ -17,6 +17,7 @@ press *
 expect beat().querySelector('em')?.textContent === 'word'
 eval document.removeEventListener('selectionchange',delaySelectionChange,true); document.dispatchEvent(new Event('selectionchange'))
 eval window.headingsBeforeUndo=JSON.stringify(F.state().sections || [])
+expect F.state().sections?.some(s=>s.name === 'Heading')
 key ctrl KeyZ
 expect beat().textContent.replace(/\u200B/g,'') === '*word*' && !beat().querySelector('em')
 expect JSON.stringify(F.state().sections || []) === headingsBeforeUndo && W.check().length === 0

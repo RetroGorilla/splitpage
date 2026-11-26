@@ -1,0 +1,35 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; window.S=window.__sharedTest; F.openFile(new File([JSON.stringify({schema:2,title:'Pending heading undo',paragraphsDecided:true,rows:[{id:'a',audioText:'',visualText:''},{id:'b',audioText:'Body',visualText:'',paragraphStart:true}],comments:[]})],'heading-undo.splitpage'))
+wait F.state().title === 'Pending heading undo'
+eval S.enter()
+click #btn-write
+wait W.on()
+eval window.root=()=>document.getElementById('writer-doc'); window.point=(id,offset)=>({kind:'beat',rowId:id,offset}); window.at=(id,offset)=>{const p=point(id,offset); W.place({anchor:p,head:p})}; window.hold=event=>event.stopImmediatePropagation(); window.delay=offset=>{at('a',9); document.dispatchEvent(new Event('selectionchange')); document.addEventListener('selectionchange',hold,true); at('b',offset)}; window.deliver=()=>{document.removeEventListener('selectionchange',hold,true); document.dispatchEvent(new Event('selectionchange'))}; window.paste=()=>{const data=new DataTransfer();data.setData('text/plain','Paste ');root().dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}))}; at('a',0)
+eval window.state=()=>S.read().app; window.rows=()=>state().rows; window.heading=()=>state().sections?.some(s=>s.name === 'Heading') === true; window.body=()=>rows().find(r=>r.id==='b')?.audioText
+press #
+key Space
+press Heading
+key Enter
+expect heading() && !rows().some(r=>r.id==='a')
+key ctrl KeyZ
+expect !heading() && rows()[0].audioText === '# Heading'
+eval delay(0)
+eval paste()
+expect body() === 'Paste Body'
+eval deliver()
+expect heading()
+key ctrl KeyZ
+expect heading() && body() === 'Body' && rows().length === 1
+key ctrl KeyZ
+expect !heading() && rows()[0].audioText === '# Heading' && body() === 'Body'
+eval delay(0)
+press one
+key Space
+expect body() === 'one Body'
+eval deliver()
+expect heading()
+key ctrl KeyZ
+expect heading() && body() === 'Body' && rows().length === 1
+key ctrl KeyZ
+expect !heading() && rows()[0].audioText === '# Heading' && body() === 'Body'
