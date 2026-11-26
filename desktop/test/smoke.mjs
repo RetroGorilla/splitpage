@@ -6347,16 +6347,23 @@ async function caseTabOpenedDuringCloseCheck(target, fixturesDir, how) {
     record(tag + ": a new tab gets an unsaved edit while the check still runs", !!edited && !!dirtyC && took < 1800 && app.proc.exitCode === null, "took " + took + " ms");
 
     const exited = await waitForExit(app.proc, 30000);
-    record(tag + ": answering 'close' to exactly two questions closes and the app exits", exited === true && app.proc.exitCode === 0,
-      "exited=" + exited + " exitCode=" + app.proc.exitCode + " (a third question is answered Cancel and keeps it open)");
+    const exitedCleanly = exited === true && app.proc.exitCode === 0;
+    const session = readSession(userDataDir);
+    const newTabDiscarded = ((session && session.discardedTabIds) || []).includes(tabCId);
+    const promptTrace = exitedCleanly && newTabDiscarded ? "" : " " + JSON.stringify({
+      originalTabId: held[marker].id,
+      newTabId: tabCId,
+      questions: app.getStderr().split(/\r?\n/).filter(line => line.startsWith("[splitpage] test question "))
+    });
+    record(tag + ": answering 'close' to exactly two questions closes and the app exits", exitedCleanly,
+      "exited=" + exited + " exitCode=" + app.proc.exitCode + (exitedCleanly ? "" : promptTrace));
     try { cdpC.close(); } catch {}
     cdpC = null;
     closeHeld(held);
     held = {};
-    app = null;
-    const session = readSession(userDataDir);
+    if (exited) app = null;
     record(tag + ": the second question was about the new tab, whose edit is discarded as answered",
-      ((session && session.discardedTabIds) || []).includes(tabCId), JSON.stringify(session));
+      newTabDiscarded, JSON.stringify(session) + (newTabDiscarded ? "" : promptTrace));
   } finally {
     if (cdpC) { try { cdpC.close(); } catch {} }
     closeHeld(held);
