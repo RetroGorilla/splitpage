@@ -99,7 +99,8 @@ export function domToPos(cellEl: Node, node: Node, offset: number): number | nul
   if (node !== cellEl && !cellEl.contains(node)) return null;
   const atom = closestAtom(node);
   if (atom && cellEl.contains(atom)) {
-    const atStart = offset === 0 && (node === atom || node === atom.firstChild);
+    const atStart = offset === 0 && (node === atom || node === atom.firstChild ||
+      (node === atom.firstChild?.firstChild && atom.classList.contains("broll-key")));
     return atStart ? posBefore(cellEl, atom) : posAfterNode(cellEl, atom);
   }
   if (node.nodeType === TEXT) return posBefore(cellEl, node) + textCount(node, offset);

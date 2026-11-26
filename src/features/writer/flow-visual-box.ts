@@ -4,7 +4,7 @@ import { hasSetLength } from "../../core/document/timing.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import { posToDom } from "../common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
-import { ensureTrailingCaretSpot } from "../common/dom.ts";
+import { ensureTrailingCaretSpot, setEditableTextHtml } from "../common/dom.ts";
 
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 
@@ -85,7 +85,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
   function rejected(): boolean {
     if (!ports.blocked()) return false;
     dirty = false;
-    cell.innerHTML = first ? "" : shownHtml;
+    setEditableTextHtml(cell, first ? "" : shownHtml);
     const at = posToDom(cell, Number.MAX_SAFE_INTEGER);
     window.getSelection()?.setBaseAndExtent(at.node, at.offset, at.node, at.offset);
     return true;
@@ -128,7 +128,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
     first = !isCollapsed(range);
     dirty = false;
     cell.dataset.id = row.id;
-    cell.innerHTML = first ? "" : row.visualText ?? "";
+    setEditableTextHtml(cell, first ? "" : row.visualText ?? "");
     shownHtml = row.visualText ?? "";
     pictures.innerHTML = first ? "" : ports.thumbnails(row);
     box.hidden = false;
@@ -167,7 +167,7 @@ export function createFlowVisualBox(ports: FlowVisualBoxPorts) {
         shownHtml = row.visualText ?? "";
         const kept = doc.activeElement === cell ? cellSelection(cell) : null;
         const restore = ports.beforeWrite?.(cell);
-        cell.innerHTML = shownHtml;
+        setEditableTextHtml(cell, shownHtml);
         if (kept) {
           ensureTrailingCaretSpot(cell);
           setCellSelection(cell, kept.from, kept.to);

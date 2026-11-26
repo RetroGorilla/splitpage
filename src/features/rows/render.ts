@@ -17,7 +17,7 @@ import { sceneHeaderHtml, sceneRowEntries } from "./scene-rows.ts";
 import { sceneGroups } from "../../core/document/scenes.ts";
 import { videoLinkLabel } from "../../core/document/gallery.ts";
 import { rowIndexOf } from "../../core/document/rows.ts";
-import { ensureTrailingCaretSpot } from "../common/dom.ts";
+import { decorateBrollMarkers, ensureTrailingCaretSpot } from "../common/dom.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import { writerCaretBeat, writerFocusTarget } from "../common/writer-focus.ts";
 import { safeHref } from "../../core/document/text-policy.ts";
@@ -421,7 +421,9 @@ function rowPartEl(rowEl: Element, part: PatchedPart): Element | null {
 function nodeFromHtml(html: string): Element {
   if (!state.partTemplate) state.partTemplate = document.createElement("template");
   state.partTemplate.innerHTML = html;
-  return state.partTemplate.content.firstElementChild as Element;
+  const el = state.partTemplate.content.firstElementChild as Element;
+  if (html.includes("broll-key")) decorateBrollMarkers(el);
+  return el;
 }
 
 function newRowEl(row: Row): SignedRow {

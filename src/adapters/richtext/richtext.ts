@@ -62,10 +62,15 @@ export function createRichText(ports: RichTextPorts): RichText {
   }
 
   function storedHtmlFromDom<T>(html: T): T | string {
-    if (typeof html !== "string" || html.indexOf("data-blob") === -1) return html;
+    if (typeof html !== "string") return html;
+    const hasImages = html.includes("data-blob");
+    const hasMarkerPrefixes = html.includes('class="broll-marker-prefix"');
+    if (!hasImages && !hasMarkerPrefixes) return html;
     const body = inertBody(html);
-    const imgs = body.querySelectorAll("img[data-blob]");
-    if (!imgs.length) return html;
+    const prefixes = hasMarkerPrefixes ? body.querySelectorAll(".broll-key > .broll-marker-prefix") : [];
+    const imgs = hasImages ? body.querySelectorAll("img[data-blob]") : [];
+    if (!prefixes.length && !imgs.length) return html;
+    prefixes.forEach(prefix => prefix.replaceWith(...prefix.childNodes));
     imgs.forEach(function (img) {
       Array.from(img.attributes).forEach(function (a) {
         if (!STORED_IMG_ATTRS.has(a.name)) img.removeAttribute(a.name);

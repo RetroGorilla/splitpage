@@ -45,7 +45,7 @@ import { expandHiddenShotStrip } from "./hide-shot.ts";
 import { shotHiding } from "./shot-hiding.ts";
 import { restoreMergeSnapshot } from "./session-merge.ts";
 import { installMergeBanner } from "./document-merge.ts";
-import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";
+import { ensureTrailingCaretSpot, setEditableTextHtml } from "../../features/common/dom.ts";
 import { safeId } from "../../adapters/identity/safe-id.ts";
 import { sanitizeHtml, storedHtmlFromDom } from "../richtext.ts";
 import { cssAttr } from "../../features/common/dom.ts";
@@ -657,7 +657,7 @@ const editorFocusPorts: EditorFocusPorts = {
   blurredCell: function (cellEl) {
     if (nativeEditorActive()) return;
     const clean = sanitizeHtml(cellEl.innerHTML);
-    if (clean !== storedHtmlFromDom(cellEl.innerHTML)) cellEl.innerHTML = clean;
+    if (clean !== storedHtmlFromDom(cellEl.innerHTML)) setEditableTextHtml(cellEl, clean);
     cellEditing().sync(cellEl);
     if (!undoGuard().applying()) anchorBrollInLeftCell(cellEl);
   },

@@ -1,4 +1,5 @@
 import { acceptGhostOnTab, dismissesTagGhost, plainTagKeydown } from "../../features/common/tag-completion-keys.ts";
+import { setEditableTextHtml } from "../../features/common/dom.ts";
 import { startWriter } from "../../features/writer/writer.ts";
 import { writerActions as definitions } from "../../features/writer/actions.ts";
 import type { WriterFeaturePorts } from "../../features/writer/ports.ts";
@@ -226,7 +227,7 @@ export function mountWriterRuntimeFeature() {
               if (nativeEditorActive()) return;
               if (paintGuard().painting() || undoGuard().applying() || screenIsStale()) return;
               const clean = text.sanitizeHtml(beat.innerHTML);
-              if (clean !== text.storedHtmlFromDom(beat.innerHTML)) beat.innerHTML = clean;
+              if (clean !== text.storedHtmlFromDom(beat.innerHTML)) setEditableTextHtml(beat, clean);
               writerEditing.cells().sync(beat);
               anchorBrollInLeftCell(beat);
             },

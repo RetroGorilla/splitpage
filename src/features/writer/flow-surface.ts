@@ -13,6 +13,7 @@ import { hasSetLength } from "../../core/document/timing.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import type { MarkName, Marks, Run } from "../../core/text/runs.ts";
 import { domKeys, domToPos, posToDom } from "../common/cell-dom.ts";
+import { setEditableTextHtml } from "../common/dom.ts";
 import { createFlowBeatMenu } from "./flow-beat-menu.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { CommonDocumentSession } from "../../application/session/document-session.ts";
@@ -269,10 +270,10 @@ export function createSurface(ports: SurfacePorts): Surface {
           el.className = "wr-beat";
           el.setAttribute("data-id", row.id);
           el.setAttribute("data-field", "audioText");
-          el.innerHTML = html;
+          setEditableTextHtml(el, html);
           rendered.set(el, html);
         } else if (rendered.get(el) !== html) {
-          el.innerHTML = html;
+          setEditableTextHtml(el, html);
           rendered.set(el, html);
         }
         keptBeats.delete(row.id);
@@ -733,7 +734,7 @@ export function createSurface(ports: SurfacePorts): Surface {
           const made = typeWithMarks(ports.doc(), range.head, data, marks, ports.flow);
           const updated = made && "rows" in made ? made.rows.find(item => item.id === row.id) : null;
           if (updated && made && "rows" in made) {
-            beat.innerHTML = beatHtml(ports.flow.cells(updated.audioText));
+            setEditableTextHtml(beat, beatHtml(ports.flow.cells(updated.audioText)));
             place(made.selection);
             ports.beatInput?.(input, beat);
             syncBeatEl(beat, range.head.offset < 2);

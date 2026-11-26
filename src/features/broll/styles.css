@@ -1,8 +1,6 @@
   .broll-key {
     display: inline-block;
-    position: relative;
     box-sizing: border-box;
-    min-inline-size: calc(7ch + 12px);
     height: 18px;
     padding: 0 5px;
     margin-right: var(--space-6);
@@ -10,17 +8,21 @@
     border-radius: 3px;
     font-family: var(--font-display); font-size: 11px; line-height: 16px; font-weight: 500;
     color: var(--broll);
-    -webkit-text-fill-color: transparent;
     vertical-align: 2px;
     cursor: pointer;
   }
-  /* why: the original marker text keeps its layout for selection and drop placement. */
-  .broll-key::before {
+  /* why: the original marker prefix keeps its layout for selection and drop placement. */
+  .broll-marker-prefix {
+    display: inline-block;
+    position: relative;
+    white-space: nowrap;
+    -webkit-text-fill-color: transparent;
+  }
+  .broll-marker-prefix::before {
     content: "B-Roll:";
     content: "B-Roll:" / "";
     position: absolute;
     inset: 0;
-    text-align: center;
     white-space: nowrap;
     -webkit-text-fill-color: currentColor;
     pointer-events: none;

@@ -9,13 +9,15 @@ const { openBrollPanel, openBrollPage } = await import("../features/broll/panel.
 const { mountBrollEventsFeature: mountBrollFeature } = await import("../bootstrap/wiring/production.ts");
 const { documentTransitions } = await import("../bootstrap/wiring/transition-owners.ts");
 const { render } = await import("../features/rows/render.ts");
+const { storedHtmlFromDom } = await import("../bootstrap/richtext.ts");
+const { domToPos } = await import("../features/common/cell-dom.ts");
 after(closeApp);
 
-function open() {
+function open(visualText = "Scene") {
   documentTransitions().open({
     from: { raw: {
       schema: 2, docId: "dbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", title: "B-roll lifetime",
-      rows: [{ id: "r1", status: "todo", visualText: "Scene", audioText: "One" }],
+      rows: [{ id: "r1", status: "todo", visualText, audioText: "One" }],
       brollShots: [{ id: "b_one", name: "First shot", origin: "list", status: "unshot", notes: "", props: [] }]
     } },
     reason: "broll-lifetime"
@@ -23,6 +25,22 @@ function open() {
   render();
   openBrollPanel();
 }
+
+test("only the standard B-roll marker prefix is decorated in the editor", () => {
+  const html = '<span class="broll-key" data-broll-id="bs_standard" contenteditable="false">B-roll: and words</span>' +
+    '<br><span class="broll-key" data-broll-id="bs_variant" contenteditable="false">broll:</span> harbour';
+  open(html);
+  const cell = document.querySelector('#rows .cell-editable[data-field="visualText"]');
+  const [standard, variant] = cell.querySelectorAll(".broll-key");
+  const prefix = standard.querySelector(".broll-marker-prefix");
+  assert.equal(prefix?.textContent, "B-roll:");
+  assert.equal(standard.lastChild.textContent, " and words");
+  assert.equal(variant.childElementCount, 0);
+  assert.equal(domToPos(cell, prefix.firstChild, 0), 0);
+  assert.equal(domToPos(cell, prefix.firstChild, prefix.textContent.length), 1);
+  assert.equal(storedHtmlFromDom(cell.innerHTML), html);
+  assert.equal(currentDocument().rows[0].visualText, html);
+});
 
 function fire(target, type, props = {}) {
   const event = new window.MouseEvent(type, { bubbles: true, cancelable: true });

@@ -16,7 +16,7 @@ import { toHtml } from "../../core/text/html.ts";
 import { cellLength } from "../../core/text/runs.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
 import { createFlowVisualBox } from "./flow-visual-box.ts";
-import { ensureTrailingCaretSpot } from "../common/dom.ts";
+import { ensureTrailingCaretSpot, setEditableTextHtml } from "../common/dom.ts";
 import { clipboardContent, clipboardEndsInBlock } from "../common/clipboard-blocks.ts";
 import { inheritOpenedTags } from "../common/clipboard-tags.ts";
 
@@ -159,7 +159,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
       const line = piece === pasted.cell && !html && data.getData("text/plain") === "\n" ? breakLine(old, selection.from, selection.to) : null;
       const next = line ?? insertCell(deleteRange(old, selection.from, selection.to), selection.from, piece);
       const restore = ports.visualBeforeWrite?.(cell);
-      cell.innerHTML = toHtml(next.cell);
+      setEditableTextHtml(cell, toHtml(next.cell));
       ensureTrailingCaretSpot(cell);
       const at = line?.pos ?? selection.from + cellLength(pasted.cell);
       setCellSelection(cell, at, at);

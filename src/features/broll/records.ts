@@ -16,7 +16,7 @@ import { holdsMedia } from "../../core/production/tags.ts";
 import { deleteRange, insertBrollKey, insertText, replaceWithBrollKey } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { projection } from "../../core/text/runs.ts";
-import { isInsideTagOrLink } from "../common/dom.ts";
+import { isInsideTagOrLink, setEditableTextHtml } from "../common/dom.ts";
 import type { BrollRecordsMount, BrollRecordsPorts } from "./ports.ts";
 
 interface BrollStatusLook {
@@ -167,7 +167,7 @@ export function createBrollRecords(ports: BrollRecordsPorts): BrollRecordsMount 
         const outcome = ports.edits.run(cellTextCommand(row.id, "visualText", cellRuns(ports.scriptCellOf(copy.visualText)), ports.edits.text));
         if (outcome.kind === "failed") throw outcome.error;
         if (outcome.kind !== "applied" && outcome.kind !== "committed") return false;
-        cellEl.innerHTML = row.visualText ?? "";
+        setEditableTextHtml(cellEl, row.visualText ?? "");
         ports.caretSpot(cellEl);
         return true;
       });

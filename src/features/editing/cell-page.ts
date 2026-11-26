@@ -1,6 +1,7 @@
 import type { CellPage } from "../../application/editing/cell-editing.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
+import { setEditableTextHtml } from "../common/dom.ts";
 
 export interface CellPagePorts {
   readonly storedHtml: (html: string) => string;
@@ -24,7 +25,7 @@ export function createCellPage(ports: CellPagePorts): CellPage<Element, unknown>
     selection: cellSelection,
     write: function (cellEl, html) {
       restore = ports.beforeWrite?.(cellEl) ?? null;
-      cellEl.innerHTML = html as string;
+      setEditableTextHtml(cellEl, html as string);
       ports.caretSpot(cellEl);
     },
     focus: function (cellEl, sel) {

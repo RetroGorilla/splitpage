@@ -16,9 +16,10 @@ import type { Marks, Run } from "../../core/text/runs.ts";
 import type { NativePlainMark } from "../../adapters/collab/native/format-commands.ts";
 import { domToPos, posToDom, readSelection } from "../../features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
+import { setEditableTextHtml } from "../../features/common/dom.ts";
 import { noteFieldPainted, renderRow } from "../../features/rows/render.ts";
 import { undoGesture } from "../../features/undo/routes.ts";
-import { scriptCellOf } from "../richtext.ts";
+import { scriptCellOf, storedHtmlFromDom } from "../richtext.ts";
 import { guardUnload } from "../startup/page-lifetime.ts";
 import { narrationAt, narrationSurfaceOf, shownNarrationSurface, visualTextSurface, writerNarration, writerSelectionCells } from "./native-narration-surfaces.ts";
 import { rowDrag } from "./editor-owners.ts";
@@ -854,7 +855,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const row = documentReader.current()?.rows.find(candidate => candidate.id === id);
       if (row) {
         const field = cell.getAttribute("data-field");
-        if (field === "audioText" || field === "visualText") cell.innerHTML = row[field] ?? "";
+        if (field === "audioText" || field === "visualText") setEditableTextHtml(cell, row[field] ?? "");
         renderRow(id);
       }
     } else writerControls()?.restoreWriterPaint();
@@ -2029,5 +2030,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 }
 
 export function keepNativeFieldPaint(buffered: Pick<Draft, "cell" | "beat" | "field">, row: Parameters<typeof noteFieldPainted>[2] | undefined): void {
-  if (buffered.field !== "title" && row?.[buffered.field] === buffered.cell.innerHTML) noteFieldPainted(buffered.cell, buffered.field, row);
+  if (buffered.field === "title" || !row) return;
+  const html = buffered.cell.innerHTML;
+  const stored = row[buffered.field];
+  if (stored === html || (html.includes("broll-marker-prefix") && stored === storedHtmlFromDom(html))) {
+    noteFieldPainted(buffered.cell, buffered.field, row);
+  }
 }

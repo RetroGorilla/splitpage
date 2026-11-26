@@ -14,7 +14,7 @@ key Enter
 press B-ROLL: Nets
 click #doc-title
 eval window.cases=['b-roll:','B-roll:','B-ROLL:']; window.chips=selector=>Array.from(document.querySelectorAll(selector+' .broll-key')); window.caseKept=selector=>JSON.stringify(chips(selector).map(chip=>chip.textContent))===JSON.stringify(cases)
-eval window.caseShown=selector=>chips(selector).length===cases.length&&chips(selector).every(chip=>{const text=getComputedStyle(chip),label=getComputedStyle(chip,'::before');return text.fontSize==='11px'&&text.webkitTextFillColor==='rgba(0, 0, 0, 0)'&&label.content.startsWith('"B-Roll:"')&&label.position==='absolute'&&label.pointerEvents==='none'&&label.webkitTextFillColor===text.color})
+eval window.showsCanonicalPrefix=chip=>{const prefix=chip.querySelector('.broll-marker-prefix');if(!prefix)return false;const text=getComputedStyle(prefix),label=getComputedStyle(prefix,'::before');return text.fontSize==='11px'&&text.webkitTextFillColor==='rgba(0, 0, 0, 0)'&&label.content.startsWith('"B-Roll:"')&&label.position==='absolute'&&label.pointerEvents==='none'&&label.webkitTextFillColor===text.color}; window.caseShown=selector=>chips(selector).length===cases.length&&chips(selector).every(showsCanonicalPrefix)
 expect caseKept('#rows')
 expect caseShown('#rows')
 expect cases.every(marker=>F.state().rows[0].visualText.includes('>'+marker+'</span>'))
@@ -27,8 +27,8 @@ eval document.documentElement.dataset.theme='light'
 caret #rows .cell-editable[data-id="a"][data-field="visualText"] start
 key shift ArrowRight
 expect getSelection().toString().replace(/\u200b/g,'') === 'b-roll:'
-eval window.selectedChipWidth=()=>{const chip=chips('#rows')[0], range=getSelection().getRangeAt(0);if(!range.intersectsNode(chip.firstChild))return 0;const text=document.createRange();text.selectNodeContents(chip);return text.getBoundingClientRect().width}
-expect selectedChipWidth() > chips('#rows')[0].clientWidth / 2
+eval window.selectedChipWidth=chip=>{const range=getSelection().getRangeAt(0);if(!range.intersectsNode(chip.firstChild))return 0;const text=document.createRange();text.selectNodeContents(chip);return text.getBoundingClientRect().width}
+expect selectedChipWidth(chips('#rows')[0]) > chips('#rows')[0].clientWidth / 2
 key ArrowLeft
 eval window.dropAfterChip=()=>{const chip=chips('#rows')[0],rect=chip.getBoundingClientRect(),data=new DataTransfer();data.setData('text/plain','test');chip.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:data,clientX:Math.floor(rect.right-2),clientY:Math.floor((rect.top+rect.bottom)/2)}))}
 eval dropAfterChip()
@@ -40,3 +40,16 @@ eval W.openVisual('a')
 expect caseKept('.wr-flow-visual-text')
 expect caseShown('.wr-flow-visual-text')
 expect cases.every(marker=>F.state().rows[0].visualText.includes('>'+marker+'</span>'))
+
+click #wr-close
+wait !W.on()
+eval window.legacy='<span class="broll-key" data-broll-id="bs_legacy" contenteditable="false">B-roll: and words</span>'; window.short='<span class="broll-key" data-broll-id="bs_short" contenteditable="false">broll:</span> Harbour'; F.openFile(new File([JSON.stringify({schema:2,title:'B-roll marker variants',paragraphsDecided:true,rows:[{id:'legacy',audioText:'Alpha',visualText:legacy},{id:'short',audioText:'Beta',visualText:short}],comments:[]})],'broll-variants.splitpage'))
+wait F.state().title === 'B-roll marker variants'
+eval window.legacyChip=chips('#rows')[0]; window.shortChip=chips('#rows')[1]; window.hasVisibleText=chip=>getComputedStyle(chip).webkitTextFillColor===getComputedStyle(chip).color
+expect showsCanonicalPrefix(legacyChip) && legacyChip.firstChild.textContent==='B-roll:' && legacyChip.lastChild.nodeType===3 && legacyChip.lastChild.textContent===' and words' && hasVisibleText(legacyChip)
+expect shortChip.textContent==='broll:' && shortChip.childElementCount===0 && hasVisibleText(shortChip) && getComputedStyle(shortChip,'::before').content==='none'
+caret #rows .cell-editable[data-id="short"][data-field="visualText"] start
+key shift ArrowRight
+expect getSelection().toString().replace(/\u200b/g,'') === 'broll:'
+expect selectedChipWidth(shortChip) > shortChip.clientWidth / 2
+expect F.state().rows[0].visualText===legacy && F.state().rows[1].visualText===short
