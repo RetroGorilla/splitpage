@@ -30,7 +30,6 @@ export interface TagPanelMount extends TagPanelCommands {
 }
 
 export interface PlainTagPorts {
-  readonly panels: Pick<SidePanels, "close">;
   readonly document: Pick<DocumentReader, "current">;
   readonly cells: Pick<CellEditing<Element>, "edit" | "open">;
   readonly undo: Pick<UndoControl, "breakCoalescing">;

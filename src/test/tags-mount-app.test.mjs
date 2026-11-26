@@ -35,6 +35,24 @@ function fire(target, type, props = {}) {
   return event;
 }
 
+test("the Production panel stays open through Edit tag and Done", () => {
+  open();
+  const panel = document.getElementById("production-panel");
+  const tag = document.querySelector("#rows .tag-anchor");
+  tag.getClientRects = () => [tag.getBoundingClientRect()];
+  assert.equal(panel.hidden, false);
+  fire(tag, "mousedown");
+  const edit = document.getElementById("tag-edit-action");
+  assert.equal(edit.hidden, false);
+  assert.equal(panel.hidden, false);
+  edit.click();
+  assert.equal(tag.getAttribute("contenteditable"), "true");
+  assert.equal(panel.hidden, false);
+  edit.click();
+  assert.equal(tag.getAttribute("contenteditable"), "false");
+  assert.equal(panel.hidden, false);
+});
+
 for (const work of ["card", "touch"]) {
   for (const scenario of ["dispose and reopen", "same-ID replacement", "stale completion after remount", "normal completion"]) {
     test("tags app: " + work + ", " + scenario, async () => {
