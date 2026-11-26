@@ -9,7 +9,8 @@ const { openBrollPanel, openBrollPage } = await import("../features/broll/panel.
 const { mountBrollEventsFeature: mountBrollFeature } = await import("../bootstrap/wiring/production.ts");
 const { documentTransitions } = await import("../bootstrap/wiring/transition-owners.ts");
 const { render } = await import("../features/rows/render.ts");
-const { storedHtmlFromDom } = await import("../bootstrap/richtext.ts");
+const { writerControls } = await import("../bootstrap/wiring/writer.ts");
+const { scriptCellOf, storedHtmlFromDom } = await import("../bootstrap/richtext.ts");
 const { domToPos } = await import("../features/common/cell-dom.ts");
 after(closeApp);
 
@@ -40,6 +41,65 @@ test("only the standard B-roll marker prefix is decorated in the editor", () => 
   assert.equal(domToPos(cell, prefix.firstChild, prefix.textContent.length), 1);
   assert.equal(storedHtmlFromDom(cell.innerHTML), html);
   assert.equal(currentDocument().rows[0].visualText, html);
+});
+
+test("the script cell reader reuses the stored HTML key for decorated marker text", () => {
+  const markup = '<span class="broll-key" data-broll-id="bs_readback" contenteditable="false">';
+  const decorated = markup + '<span class="broll-marker-prefix">B-roll:</span></span> ';
+  const stored = markup + 'B-roll:</span> ';
+  const parser = window.DOMParser.prototype;
+  const parse = parser.parseFromString;
+  let decoratedParses = 0;
+  parser.parseFromString = function (source, type) {
+    if (source.includes('class="broll-marker-prefix"')) decoratedParses++;
+    return parse.call(this, source, type);
+  };
+  try {
+    const reads = Array.from({ length: 10 }, (_, i) => {
+      const suffix = "0123456789".slice(0, i + 1);
+      const runs = scriptCellOf(stored + suffix);
+      return [runs, scriptCellOf(decorated + suffix), storedHtmlFromDom(decorated + suffix), stored + suffix];
+    });
+    assert.equal(decoratedParses, 0);
+    for (const [runs, read, html, expected] of reads) {
+      assert.equal(read, runs);
+      assert.equal(html, expected);
+    }
+  } finally {
+    parser.parseFromString = parse;
+  }
+});
+
+test("Split drag and Writer Visual copy send the original B-roll markup", () => {
+  const marker = '<span class="broll-key" data-broll-id="bs_transfer" contenteditable="false">b-roll:</span>';
+  open(marker + " harbour");
+  const writer = writerControls();
+  try {
+    for (const [selector, type, transfer] of [
+      ["#rows .broll-key", "dragstart", "dataTransfer"],
+      [".wr-flow-visual-text .broll-key", "copy", "clipboardData"]
+    ]) {
+      if (type === "copy") {
+        writer.openWriter();
+        writer.writerFlowControl().openVisual("r1");
+      }
+      const tag = document.querySelector(selector);
+      const range = document.createRange();
+      range.selectNode(tag);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      const data = new Map();
+      const event = new window.Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, transfer, { value: { setData: (format, value) => data.set(format, value) } });
+      tag.dispatchEvent(event);
+      assert.equal(event.defaultPrevented, type === "copy");
+      assert.equal(data.get("text/html"), marker);
+      assert.equal(data.get("text/plain"), "b-roll:");
+    }
+  } finally {
+    writer.closeWriter();
+  }
 });
 
 function fire(target, type, props = {}) {

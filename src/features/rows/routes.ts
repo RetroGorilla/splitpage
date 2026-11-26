@@ -1,5 +1,6 @@
 import { safeHref } from "../../core/document/text-policy.ts";
 import { linkOpenedBy } from "../common/link-press.ts";
+import { writeUndecoratedBrollSelection } from "../common/dom.ts";
 
 export interface RowRoutePorts {
   readonly mac: boolean;
@@ -81,11 +82,16 @@ export function mountRowRoutes(mount: RowRoutesMount): RowRoutes {
 
   function onDragStart(e: Event): void {
     const row = closest(e, ".row");
-    if (!row || !row.getAttribute("draggable")) return;
+    if (!row) return;
+    const data = (e as DragEvent).dataTransfer;
+    if (!row.getAttribute("draggable")) {
+      const cell = closest(e, ".cell-editable");
+      if (cell && ports.scriptCell(cell)) writeUndecoratedBrollSelection(cell, data);
+      return;
+    }
     const rowId = idOf(row);
     ports.setDragging(rowId);
     row.classList.add("is-dragging");
-    const data = (e as DragEvent).dataTransfer;
     try {
       if (data) {
         data.effectAllowed = "move";

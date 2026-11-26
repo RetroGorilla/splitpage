@@ -19,16 +19,20 @@ expect caseKept('#rows')
 expect caseShown('#rows')
 expect cases.every(marker=>F.state().rows[0].visualText.includes('>'+marker+'</span>'))
 eval document.documentElement.dataset.theme='light'
+wait document.body.getAnimations().every(animation=>animation.playState!=='running')
 shot broll-chips-light
 eval document.documentElement.dataset.theme='dark'
+wait document.body.getAnimations().every(animation=>animation.playState!=='running')
 shot broll-chips-dark
 eval document.documentElement.dataset.theme='light'
 
 caret #rows .cell-editable[data-id="a"][data-field="visualText"] start
 key shift ArrowRight
 expect getSelection().toString().replace(/\u200b/g,'') === 'b-roll:'
-eval window.selectedChipWidth=chip=>{const range=getSelection().getRangeAt(0);if(!range.intersectsNode(chip.firstChild))return 0;const text=document.createRange();text.selectNodeContents(chip);return text.getBoundingClientRect().width}
-expect selectedChipWidth(chips('#rows')[0]) > chips('#rows')[0].clientWidth / 2
+eval window.selectionCoversLabel=chip=>{const prefix=chip.querySelector('.broll-marker-prefix');const text=document.createRange();text.selectNodeContents(chip);const label=prefix?prefix.getBoundingClientRect():text.getBoundingClientRect();return label.width>0&&Array.from(getSelection().getRangeAt(0).getClientRects()).some(rect=>Math.abs(rect.left-label.left)<1&&Math.abs(rect.right-label.right)<1&&rect.bottom>label.top&&rect.top<label.bottom)}
+expect selectionCoversLabel(chips('#rows')[0])
+eval window.markupIsPlain=html=>html.includes('>b-roll:</span>')&&!html.includes('broll-marker-prefix')&&!html.includes('text-fill-color'); window.splitDrag=new DataTransfer(); chips('#rows')[0].dispatchEvent(new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:splitDrag}))
+expect markupIsPlain(splitDrag.getData('text/html')) && splitDrag.getData('text/plain') === 'b-roll:'
 key ArrowLeft
 eval window.dropAfterChip=()=>{const chip=chips('#rows')[0],rect=chip.getBoundingClientRect(),data=new DataTransfer();data.setData('text/plain','test');chip.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:data,clientX:Math.floor(rect.right-2),clientY:Math.floor((rect.top+rect.bottom)/2)}))}
 eval dropAfterChip()
@@ -40,6 +44,10 @@ eval W.openVisual('a')
 expect caseKept('.wr-flow-visual-text')
 expect caseShown('.wr-flow-visual-text')
 expect cases.every(marker=>F.state().rows[0].visualText.includes('>'+marker+'</span>'))
+caret .wr-flow-visual-text start
+key shift ArrowRight
+eval window.writerCopy=new DataTransfer(); document.querySelector('.wr-flow-visual-text').dispatchEvent(new ClipboardEvent('copy',{bubbles:true,cancelable:true,clipboardData:writerCopy}))
+expect markupIsPlain(writerCopy.getData('text/html')) && writerCopy.getData('text/plain') === 'b-roll:'
 
 click #wr-close
 wait !W.on()
@@ -51,5 +59,5 @@ expect shortChip.textContent==='broll:' && shortChip.childElementCount===0 && ha
 caret #rows .cell-editable[data-id="short"][data-field="visualText"] start
 key shift ArrowRight
 expect getSelection().toString().replace(/\u200b/g,'') === 'broll:'
-expect selectedChipWidth(shortChip) > shortChip.clientWidth / 2
+expect selectionCoversLabel(shortChip)
 expect F.state().rows[0].visualText===legacy && F.state().rows[1].visualText===short
