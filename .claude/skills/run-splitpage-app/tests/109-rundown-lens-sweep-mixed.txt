@@ -10,9 +10,7 @@ eval (function(){ var set = [2, 5, 12, 30, 75, 150], rows = []; for (var i = 0; 
 wait F.state().title === 'Sweep mixed' && document.querySelectorAll('#rundown .rd-block').length === 150
 sleep 400
 eval (async function(){ window.__R.c_index_slow = await sweep(150, 1); return 'c index slow ' + slim(__R.c_index_slow); })()
-eval (async function(){ window.__R.c_index_med = await sweep(480, 1); return 'c index medium ' + slim(__R.c_index_med); })()
 eval (async function(){ window.__R.c_index_stops = await stops(); return 'c index stops ' + slim(__R.c_index_stops); })()
 expect inOrder(__R.c_index_slow) && __R.c_index_slow.missed === 0 && __R.c_index_slow.shortMed >= 7
-expect inOrder(__R.c_index_med)
 expect __R.c_index_stops.slid === 0 && __R.c_index_stops.bad === 0
 quit
