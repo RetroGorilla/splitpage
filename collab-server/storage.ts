@@ -7,7 +7,7 @@ import { RelayError } from "./config.ts";
 export const DB_NAME = "relay.sqlite";
 export const BACKUP_LOCK_NAME = "relay-backup-lock.sqlite";
 const APPLICATION_ID = 0x53504c54;
-const STORAGE_VERSION = 8;
+const STORAGE_VERSION = 9;
 export const MAX_DEVICE_CREDENTIALS_PER_SCRIPT = 96;
 const DOCUMENTS_SCHEMA = "CREATE TABLE documents (name TEXT PRIMARY KEY NOT NULL, state BLOB NOT NULL) STRICT";
 const VERSION_GENERATION = "version_generation INTEGER NOT NULL DEFAULT 0 CHECK (version_generation >= 0)";
@@ -47,7 +47,10 @@ const V7_INVITATIONS_SCHEMA = V6_INVITATIONS_SCHEMA.replace(") STRICT", `, ${PAR
 const DEVICE_INDEX = "CREATE INDEX script_device_credentials ON invitations(script) WHERE kind = 'device'";
 const V7_SCHEMAS = { ...V6_SCHEMAS, invitations: V7_INVITATIONS_SCHEMA };
 const VERSION_EDITORS_SCHEMA = "CREATE TABLE version_editors (script TEXT NOT NULL REFERENCES documents(name) ON DELETE CASCADE, name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80), generation INTEGER NOT NULL CHECK (generation > 0), PRIMARY KEY (script, name)) STRICT";
-const CURRENT_SCHEMAS = { ...V7_SCHEMAS, version_editors: VERSION_EDITORS_SCHEMA };
+const V8_SCHEMAS = { ...V7_SCHEMAS, version_editors: VERSION_EDITORS_SCHEMA };
+const DEVICE_REVOCATIONS_SCHEMA = "CREATE TABLE device_revocations (token_hash BLOB PRIMARY KEY NOT NULL CHECK (length(token_hash) = 32), parent_link TEXT NOT NULL REFERENCES invitations(id)) STRICT";
+const CREATE_DEVICE_REVOCATIONS = DEVICE_REVOCATIONS_SCHEMA + "; CREATE INDEX device_revocations_link ON device_revocations(parent_link)";
+const CURRENT_SCHEMAS = { ...V8_SCHEMAS, device_revocations: DEVICE_REVOCATIONS_SCHEMA };
 
 function schemasFor(version: number): Record<string, string> | undefined {
   if (version === 1) return V1_SCHEMAS;
@@ -57,6 +60,7 @@ function schemasFor(version: number): Record<string, string> | undefined {
   if (version === 5) return V5_SCHEMAS;
   if (version === 6) return V6_SCHEMAS;
   if (version === 7) return V7_SCHEMAS;
+  if (version === 8) return V8_SCHEMAS;
   if (version === STORAGE_VERSION) return CURRENT_SCHEMAS;
   return undefined;
 }
@@ -135,7 +139,7 @@ export function openWriter(directory: string): DatabaseSync {
     db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
     verifyDurability(db);
     if (created) {
-      db.exec(`BEGIN; PRAGMA application_id=${APPLICATION_ID}; ${V5_DOCUMENTS_SCHEMA}; ${V4_SCRIPTS_SCHEMA}; ${V4_CREATIONS_SCHEMA}; ${V7_INVITATIONS_SCHEMA}; ${CREATE_PICTURES}; ${CREATE_VERSIONS}; ${PASSWORD_SCHEMA}; ${DEVICE_INDEX}; ${VERSION_EDITORS_SCHEMA}; PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
+      db.exec(`BEGIN; PRAGMA application_id=${APPLICATION_ID}; ${V5_DOCUMENTS_SCHEMA}; ${V4_SCRIPTS_SCHEMA}; ${V4_CREATIONS_SCHEMA}; ${V7_INVITATIONS_SCHEMA}; ${CREATE_PICTURES}; ${CREATE_VERSIONS}; ${PASSWORD_SCHEMA}; ${DEVICE_INDEX}; ${VERSION_EDITORS_SCHEMA}; ${CREATE_DEVICE_REVOCATIONS}; PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
     } else if (version < STORAGE_VERSION) {
       db.exec("BEGIN IMMEDIATE");
       try {
@@ -171,7 +175,8 @@ export function openWriter(directory: string): DatabaseSync {
           UPDATE invitations SET revoked = 1, revocation_reason = 'access-removed'
             WHERE kind = 'device' AND parent_link IS NULL AND (revoked = 0 OR revocation_reason = 'password-changed')`);
         }
-        db.exec(`${VERSION_EDITORS_SCHEMA}; PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
+        if (version < 8) db.exec(VERSION_EDITORS_SCHEMA);
+        db.exec(`${CREATE_DEVICE_REVOCATIONS}; PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
       } catch (error) {
         db.exec("ROLLBACK");
         throw error;

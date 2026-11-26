@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { isSha256Hex } from "../shared/blob-policy.ts";
-import { LINK_PASSWORD_MAX, PASSWORD_SHARE_TYPE, validLinkPassword } from "../shared/link-password.ts";
+import { DEVICE_CREDENTIAL_HEADER, LINK_PASSWORD_MAX, PASSWORD_SHARE_TYPE, validLinkPassword } from "../shared/link-password.ts";
 import type { AbandonResult, InvitationRole, IssuedInvitation, scriptAccess } from "./access.ts";
 import { RelayError } from "./config.ts";
 import { managementAuthorizer } from "./management-auth.ts";
@@ -143,18 +143,25 @@ export function ownerRequests(secret: string | undefined, limit: number, command
         if (origin !== undefined && !origins.has(origin)) throw new RequestError(403);
         if (origin) response.setHeader("Access-Control-Allow-Origin", origin);
         if (method === "OPTIONS") {
-          if (!origin || request.headers["access-control-request-method"] !== "POST") throw new RequestError(403);
-          response.setHeader("Access-Control-Allow-Methods", "POST");
-          response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+          const requestedMethod = request.headers["access-control-request-method"];
+          if (!origin || (requestedMethod !== "POST" && requestedMethod !== "HEAD")) throw new RequestError(403);
+          response.setHeader("Access-Control-Allow-Methods", "HEAD, POST");
+          response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, " + DEVICE_CREDENTIAL_HEADER);
           reply(204);
           return true;
         }
-        if (method !== "POST") throw new RequestError(405);
+        if (method !== "POST" && method !== "HEAD") throw new RequestError(405);
         const token = bearerToken(request);
-        if (!token || !commands.activeLink(name, token)) throw new RequestError(403);
+        const device = request.headers[DEVICE_CREDENTIAL_HEADER.toLowerCase()];
+        if (device !== undefined && (typeof device !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(device))) throw new RequestError(403);
+        if (!token || !commands.activeLink(name, token, device)) throw new RequestError(403);
+        if (method === "HEAD") {
+          reply(204);
+          return true;
+        }
         const value = await readPasswordBody(request);
         if (!request.complete || response.destroyed) return true;
-        if (!commands.activeLink(name, token)) throw new RequestError(403);
+        if (!commands.activeLink(name, token, device)) throw new RequestError(403);
         const stored = commands.readPassword(name);
         const attempt = stored && value !== null ? attemptWindow(name) : undefined;
         if (!stored) reply(200, { token });
@@ -165,7 +172,7 @@ export function ownerRequests(secret: string | undefined, limit: number, command
         } else {
           exchangesInFlight += 1;
           try {
-            const result = await commands.exchange(name, token, value, stored);
+            const result = await commands.exchange(name, token, value, stored, device);
             if (result.kind === "exchanged") reply(200, { token: result.token });
             else if (result.kind === "wrong-password") {
               if (attempt) attempt.failures += 1;

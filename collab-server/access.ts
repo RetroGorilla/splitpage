@@ -75,6 +75,14 @@ export function scriptAccess(db: DatabaseSync, isConnected: (id: string) => bool
   const deviceRows = db.prepare(`SELECT id FROM invitations WHERE script = ? AND kind = 'device'
     ORDER BY CASE WHEN revoked = 0 THEN 2 WHEN revocation_reason = 'password-changed' THEN 1 ELSE 0 END, rowid`);
   const pruneDevice = db.prepare("DELETE FROM invitations WHERE id = ? AND kind = 'device'");
+  const rememberDeviceRevocation = db.prepare(`INSERT INTO device_revocations (token_hash, parent_link)
+    SELECT device.token_hash, link.id FROM invitations AS device JOIN invitations AS link ON link.id = device.parent_link
+    WHERE device.id = ? AND device.kind = 'device' AND device.revoked = 1
+      AND device.revocation_reason IS NOT 'password-changed' AND link.revoked = 0`);
+  const revokedDevice = db.prepare(`SELECT 1 FROM device_revocations JOIN invitations AS link ON link.id = device_revocations.parent_link
+    WHERE device_revocations.token_hash = ? AND link.script = ?`);
+  const clearLinkRevocations = db.prepare("DELETE FROM device_revocations WHERE parent_link = ?");
+  const clearScriptRevocations = db.prepare("DELETE FROM device_revocations WHERE parent_link IN (SELECT id FROM invitations WHERE script = ? AND kind = 'link')");
   const revokeAll = db.prepare("UPDATE invitations SET revoked = 1 WHERE script = ? AND revoked = 0");
   const clearUntouched = db.prepare("UPDATE scripts SET untouched = 0 WHERE name = ? AND untouched = 1");
   const remove = db.prepare("UPDATE scripts SET status = 'deleted', untouched = 0 WHERE name = ?");
@@ -123,10 +131,17 @@ export function scriptAccess(db: DatabaseSync, isConnected: (id: string) => bool
     return row.kind === "link" && row.protected ? "password-changed" : null;
   }
 
-  function activeLinkId(name: string, token: string): string | null {
+  function exchangeLinkId(name: string, token: string, deviceToken?: string): string | null {
     const invitation = match.get(tokenHash(token), name);
-    return invitation?.kind === "link" && invitation.revoked === 0 && state.get(name)?.status === "active"
-      ? String(invitation.id) : null;
+    if (invitation?.kind !== "link" || invitation.revoked !== 0 || state.get(name)?.status !== "active") return null;
+    if (deviceToken !== undefined) {
+      const hash = tokenHash(deviceToken);
+      const device = match.get(hash, name);
+      if (device && (device.kind !== "device" || device.parent_link !== invitation.id
+        || (device.revoked === 1 && device.revocation_reason !== "password-changed"))) return null;
+      if (!device && revokedDevice.get(hash, name)) return null;
+    }
+    return String(invitation.id);
   }
 
   return {
@@ -194,6 +209,7 @@ export function scriptAccess(db: DatabaseSync, isConnected: (id: string) => bool
           removeUntouched.run(row.script);
           erasePassword.run(row.script);
           revokeAll.run(row.script);
+          clearScriptRevocations.run(row.script);
           removeDocument.run(row.script);
           retireVersions.run(row.script);
           outcome = "deleted";
@@ -233,8 +249,9 @@ export function scriptAccess(db: DatabaseSync, isConnected: (id: string) => bool
         if (status !== "active") {
           failure = { reason: status === "pending" ? "script-pending" : status === "deleted" ? "script-deleted" : "script-unknown" };
         } else {
-          const invitation = match.get(tokenHash(token), name);
-          if (!invitation) failure = { reason: "permission-denied" };
+          const hash = tokenHash(token);
+          const invitation = match.get(hash, name);
+          if (!invitation) failure = { reason: revokedDevice.get(hash, name) ? "access-removed" : "permission-denied" };
           else if (invitation.revoked) failure = { reason: String(invitation.revocation_reason ?? "invitation-revoked") };
           else if (invitation.kind === "link" && password.get(name)) failure = { reason: "password-changed" };
           else {
@@ -290,17 +307,17 @@ export function scriptAccess(db: DatabaseSync, isConnected: (id: string) => bool
     isValid(id: string): boolean {
       return refusal(id) === null;
     },
-    activeLink(name: string, token: string): boolean {
-      return activeLinkId(name, token) !== null;
+    activeLink(name: string, token: string, deviceToken?: string): boolean {
+      return exchangeLinkId(name, token, deviceToken) !== null;
     },
     hasPassword(name: string): boolean {
       return password.get(name) !== undefined;
     },
-    async exchange(name: string, token: string, value: string, stored: LinkPasswordKey) {
+    async exchange(name: string, token: string, value: string, stored: LinkPasswordKey, deviceToken?: string) {
       const key = await passwordKey(value, stored.salt);
       db.exec("BEGIN IMMEDIATE");
       try {
-        const parent = activeLinkId(name, token);
+        const parent = exchangeLinkId(name, token, deviceToken);
         const samePassword = parent && hashesMatch(readPassword(name)?.salt, stored.salt);
         if (!samePassword || !timingSafeEqual(stored.key, key)) {
           db.exec("COMMIT");
@@ -314,7 +331,10 @@ export function scriptAccess(db: DatabaseSync, isConnected: (id: string) => bool
             db.exec("COMMIT");
             return { kind: "device-limit" } as const;
           }
-          for (const id of evictable) pruneDevice.run(id);
+          for (const id of evictable) {
+            rememberDeviceRevocation.run(id);
+            pruneDevice.run(id);
+          }
         }
         clearUntouched.run(name);
         const device = mintInvitation(name, "Guest device", "guest", null, "device", parent);
@@ -377,6 +397,7 @@ export function scriptAccess(db: DatabaseSync, isConnected: (id: string) => bool
             inactive = true;
           } else {
             revokeGuests.run(name);
+            clearScriptRevocations.run(name);
             clearUntouched.run(name);
             issued = mintInvitation(name, "Guest", "guest", null, "link");
           }
@@ -390,7 +411,16 @@ export function scriptAccess(db: DatabaseSync, isConnected: (id: string) => bool
       return issued;
     },
     revoke(id: string): boolean {
-      return revoke.run(id, id).changes !== 0;
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const changed = revoke.run(id, id).changes !== 0;
+        clearLinkRevocations.run(id);
+        db.exec("COMMIT");
+        return changed;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
     },
     deleteScript(name: string): boolean {
       db.exec("BEGIN IMMEDIATE");
@@ -398,6 +428,7 @@ export function scriptAccess(db: DatabaseSync, isConnected: (id: string) => bool
         const deleted = remove.run(name).changes !== 0;
         if (deleted) {
           erasePassword.run(name);
+          clearScriptRevocations.run(name);
           retireVersions.run(name);
         }
         db.exec("COMMIT");

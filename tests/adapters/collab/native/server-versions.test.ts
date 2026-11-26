@@ -227,7 +227,7 @@ test("a version only consumes editor names through its stored generation, includ
   kit.provision(NAME);
   {
     using v7 = new DatabaseSync(join(kit.directory, DB_NAME));
-    v7.exec("DROP TABLE version_editors; PRAGMA user_version = 7");
+    v7.exec("DROP TABLE version_editors; DROP TABLE device_revocations; PRAGMA user_version = 7");
   }
   using db = openWriter(kit.directory);
   const store = versionStorage(db);

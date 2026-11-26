@@ -7,10 +7,10 @@ import { openNativeRelay } from "../../adapters/collab/native/relay.ts";
 import { sharedPresence } from "./ports/presence.ts";
 import type { NativeRelayEvent } from "../../adapters/collab/native/relay.ts";
 import { InvitationSnapshotError, readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
-import { exchangeLinkPassword } from "../../adapters/collab/native/password-exchange.ts";
+import { checkLinkPasswordRecovery, exchangeLinkPassword } from "../../adapters/collab/native/password-exchange.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { canReenterLinkPassword, isPermanentCollaborationRefusal, localWriteErrorMessage } from "../../application/collaboration/state.ts";
-import type { CollaborationLocalWriteError } from "../../application/collaboration/state.ts";
+import type { CollaborationLocalWriteError, CollaborationPermanentRefusal } from "../../application/collaboration/state.ts";
 import { sanitizeHtml } from "../richtext.ts";
 import { guardUnload, waitDuringLifetime } from "../startup/page-lifetime.ts";
 import { collaborationState, setSharedRetryLocalWrite } from "./collaboration-owner.ts";
@@ -154,7 +154,7 @@ export function createRetainedPictureBinding(options: {
     reconnect() { pictures?.reconnect(); },
     retryStorage() { pictures?.retryStorage(); },
     finishPreparation() { pictures?.finishPreparation(); },
-    onRelayEvent(event: NativeRelayEvent) {
+    onRelayEvent(event: NativeRelayEvent, recovery?: Promise<CollaborationPermanentRefusal | null>) {
       if (!options.sessionCurrent()) return;
       if (event.kind === "status") {
         if (permanentlyStopped) return;
@@ -173,7 +173,13 @@ export function createRetainedPictureBinding(options: {
         const permanent = isPermanentCollaborationRefusal(event.reason);
         if (permanent) {
           permanentlyStopped = true;
-          collaborationState().setRefusal(event.reason);
+          const owner = collaborationState();
+          if (recovery) {
+            owner.setRelay({ ...owner.snapshot().relay, connected: false, firstSyncDone: false });
+            void recovery.then(reason => {
+              if (reason && options.sessionCurrent()) owner.setRefusal(reason);
+            });
+          } else owner.setRefusal(event.reason);
         }
         detach();
         options.onRelayConnected?.(false);
@@ -370,6 +376,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         })
         : null;
       let liveRelay: ReturnType<typeof openNativeRelay> | undefined;
+      const recoveryLifetime = new AbortController();
       const connect = () => {
         if (entry.relayUrl && pictureBinding) {
           pictureBinding.bindCopy(replica);
@@ -394,12 +401,21 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
                 return;
               }
               if (event.kind === "session-replaced" && sessionCurrent()) collaborationState().dismissOfflineClashes();
-              if (event.kind === "authentication-failed" && event.reason === "permission-denied" && exchangePassword
-                && membership?.role === "guest" && membership.guestLinkToken) {
-                pictureBinding.onRelayEvent({ ...event, reason: "device-credential-expired" });
-              } else {
-                pictureBinding.onRelayEvent(event);
+              const previous = membership;
+              if (event.kind === "authentication-failed" && exchangePassword && pictureOrigin && previous?.role === "guest"
+                && (event.reason === "password-changed" || (event.reason === "permission-denied" && previous.guestLinkToken))) {
+                const linkToken = previous.guestLinkToken ?? previous.token;
+                const deviceToken = previous.token === linkToken ? undefined : previous.token;
+                const recovery = checkLinkPasswordRecovery(pictureOrigin, entry.script, linkToken, recoveryLifetime.signal, deviceToken)
+                  .then(eligible => {
+                    if (recoveryLifetime.signal.aborted || membership !== previous) return null;
+                    if (!eligible) return "access-removed";
+                    return event.reason === "password-changed" ? "password-changed" : "device-credential-expired";
+                  });
+                pictureBinding.onRelayEvent(event, recovery);
+                return;
               }
+              pictureBinding.onRelayEvent(event);
             }
           });
           liveRelay = relay;
@@ -460,7 +476,6 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         } finally { ingress?.(); }
       };
       const manage = replica.membership?.manage;
-      const recoveryLifetime = new AbortController();
       const history = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && entry.relayUrl && pictureOrigin
         ? createSharedHistory(pictureOrigin, entry.script, recoveryLifetime.signal, () => membership?.token ?? "",
           () => sessionCurrent() && !recoveryLifetime.signal.aborted && collaborationState().snapshot().relay.connected,
@@ -493,8 +508,9 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
             managing = true;
             const lifetime = AbortSignal.any([signal, recoveryLifetime.signal]);
             const guestLinkToken = previous.guestLinkToken ?? previous.token;
+            const deviceToken = previous.token === guestLinkToken ? undefined : previous.token;
             try {
-              const result = await exchangePassword(pictureOrigin, entry.script, guestLinkToken, password, lifetime);
+              const result = await exchangePassword(pictureOrigin, entry.script, guestLinkToken, password, lifetime, deviceToken);
               lifetime.throwIfAborted();
               if (result.kind === "failed") {
                 if (result.reason === "access-removed") owner.setRefusal(result.reason);

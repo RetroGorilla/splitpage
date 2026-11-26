@@ -132,6 +132,12 @@ export function verifyCopy(source: DatabaseSync, copy: DatabaseSync): void {
     ? "SELECT id, script, label, token_hash, revoked, role, creation_id FROM invitations ORDER BY id"
     : "SELECT id, script, label, token_hash, revoked FROM invitations ORDER BY id");
   if (version >= 6) verifyRows(source, copy, "link passwords", "SELECT script, salt, key FROM link_passwords ORDER BY script");
+  if (version >= 9) {
+    verifyRows(source, copy, "device revocations", "SELECT token_hash, parent_link FROM device_revocations ORDER BY token_hash");
+    if (copy.prepare("PRAGMA foreign_key_check(device_revocations)").get()) {
+      throw new RelayError("Relay backup contains an orphaned device revocation.");
+    }
+  }
   if (version >= 8) {
     verifyRows(source, copy, "pending version editors", "SELECT script, name, generation FROM version_editors ORDER BY script, name");
     if (copy.prepare("PRAGMA foreign_key_check(version_editors)").get()) {
@@ -258,6 +264,7 @@ export async function restoreRelay(archive: string, target: string, copyDatabase
       copyPictures(copy, version, archive, staging);
       copy.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; UPDATE invitations SET revoked = 1 WHERE revoked = 0");
       if (version >= 6) copy.exec("UPDATE invitations SET revocation_reason = 'access-removed' WHERE revocation_reason = 'password-changed'");
+      if (version >= 9) copy.exec("DELETE FROM device_revocations");
     }
     requireUnusedTarget(directory);
     renameSync(staging, directory);
