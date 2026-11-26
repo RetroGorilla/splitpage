@@ -391,8 +391,8 @@ export function fakeTourFlags() {
 export function fakeSidePanels() {
   let closed = 0;
   const closedPanels: string[] = [];
-  const sidePanels: Pick<SidePanels, "close" | "closeAll"> = {
-    close: id => { closedPanels.push(id); }, closeAll: () => { closed++; }
+  const sidePanels: Pick<SidePanels, "close" | "closeAll" | "closeIfOverlayingScript"> = {
+    close: id => { closedPanels.push(id); }, closeAll: () => { closed++; }, closeIfOverlayingScript: () => {}
   };
   return { sidePanels, closed: () => closed, closedPanels };
 }

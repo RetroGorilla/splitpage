@@ -32,7 +32,7 @@ interface BeatInsertOptions {
 }
 type BeatPasteOptions = Pick<BeatInsertOptions, "afterRowId" | "mint" | "stamp"> & { title?: string | undefined };
 import type { BeatClipPorts } from "./ports.ts";
-import type { DocumentView } from "../../application/session/document-session.ts";
+import type { DeepReadonly, DocumentView } from "../../application/session/document-session.ts";
 import type { DocumentShape, DocumentComment, DocumentTag, DocumentShot, ValidatedDocument, DocumentRow } from "../../core/document/validated.ts";
 import type { Run } from "../../core/text/runs.ts";
 import { normalizeBrollProps } from "../../core/document/broll.ts";
@@ -81,13 +81,13 @@ function cellIdsOf(rows: readonly DocumentRow[], pick: (cell: readonly Run[], ou
   return out;
 }
 
-export function buildBeatPayload(state: DocumentView | null, rowIds: readonly string[], opts?: { cut?: string | null; dataUrl?: BeatClipPorts["pictures"]["dataUrlFor"]; cap?: number }) {
+export function buildBeatPayload(state: DeepReadonly<DocumentShape> | null, rowIds: readonly string[], opts?: { cut?: string | null; dataUrl?: BeatClipPorts["pictures"]["dataUrlFor"]; cap?: number }) {
   opts = opts || {};
   const want = Object.create(null) as Record<string, boolean>;
   (rowIds || []).forEach(function (id) { want[id] = true; });
-  const membership = paragraphMembership(state as DocumentView);
+  const membership = paragraphMembership({ rows: state?.rows ?? [], sections: state?.sections });
   let previousParagraph: string | undefined;
-  const rows = ((state as DocumentView).rows || []).filter(function (r) { return r && want[r.id]; }).map(function (r) {
+  const rows = (state?.rows ?? []).filter(function (r) { return r && want[r.id]; }).map(function (r) {
     const row = clone(r);
     const paragraph = membership.get(r.id);
     if (previousParagraph !== undefined && paragraph !== previousParagraph) row.paragraphStart = true;
@@ -100,7 +100,7 @@ export function buildBeatPayload(state: DocumentView | null, rowIds: readonly st
   const marked = cellIdsOf(rows, function (cell, out) {
     commentIds(cell).forEach(function (id) { out[id] = true; });
   });
-  const comments = ((state as DocumentView).comments || []).filter(function (c) {
+  const comments = (state?.comments ?? []).filter(function (c) {
     if (!c || c.field === "title") return false;
     return rowSet[c.rowId as string] || marked[c.anchorId || c.id];
   }).map(clone);
@@ -116,16 +116,16 @@ export function buildBeatPayload(state: DocumentView | null, rowIds: readonly st
   const keyIds = cellIdsOf(rows, function (cell, out) {
     cell.forEach(function (r) { if (r.atom && r.id) out[r.id] = true; });
   });
-  const brollShots = ((state as DocumentView).brollShots || []).filter(function (b) { return b && keyIds[b.id]; }).map(clone);
+  const brollShots = (state?.brollShots ?? []).filter(function (b) { return b && keyIds[b.id]; }).map(clone);
   const propIds = Object.create(null) as Record<string, boolean>;
   brollShots.forEach(function (b) { (b.props || []).forEach(function (p) { if (p && p.id) propIds[p.id] = true; }); });
-  const productionTags = ((state as DocumentView).productionTags || []).filter(function (t) {
+  const productionTags = (state?.productionTags ?? []).filter(function (t) {
     return t && (tagKeys[registryKey(t.cat, t.name)] || propIds[t.id as string]);
   }).map(clone) as DocumentTag[];
 
   const owners = Object.create(null) as Record<string, boolean>;
   (productionTags as (DocumentTag | DocumentShot)[]).concat(brollShots).forEach(function (x) { if (x.owner) owners[x.owner] = true; });
-  const people = ((state as DocumentView).people || []).filter(function (p) { return p && owners[p.id]; }).map(clone);
+  const people = (state?.people ?? []).filter(function (p) { return p && owners[p.id]; }).map(clone);
 
   const dataUrl = opts.dataUrl || (ports as BeatClipPorts).pictures.dataUrlFor;
   const cap = typeof opts.cap === "number" ? opts.cap : BEAT_BLOB_CAP;
@@ -140,7 +140,7 @@ export function buildBeatPayload(state: DocumentView | null, rowIds: readonly st
 
   const payload: BeatWirePayload = {
     format: FORMAT, version: VERSION,
-    source: { docId: (state as DocumentView).docId || null, title: (state as DocumentView).title || "" },
+    source: { docId: state?.docId || null, title: state?.title || "" },
     rows: rows, comments: comments, people: people,
     productionTags: productionTags, brollShots: brollShots,
     blobs: blobs, blobsLeftOut: leftOut

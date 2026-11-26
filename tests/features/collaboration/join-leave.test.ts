@@ -106,6 +106,52 @@ for (const [reason, message] of [
   });
 }
 
+for (const [reason, message] of [
+  ["password-changed", "The link password changed. Re-enter it to reconnect."],
+  ["device-limit", "Too many guest devices are connected to this script. Wait a moment and try again."],
+  ["password-rate-limited", "Too many password attempts. Wait a minute and try again."]
+] as const) {
+  test("Join and Re-enter password explain " + reason, async t => {
+    const request = { kind: "browser", invitation: { script: "script", token: "a".repeat(43) } } as const;
+    const join = mountJoinDialog({
+      editor: () => "Guest Editor",
+      identity: { myColor: () => "", setCommentAuthor() {}, setMyColor() {} },
+      check: async (_invite, _signal, password) => ({
+        kind: "failed", reason: password === undefined ? "password-changed" : reason
+      }),
+      settled() {}
+    }, request);
+    t.after(join.dispose);
+    await Promise.resolve();
+    const field = document.querySelector<HTMLInputElement>("#join-script-password");
+    const submit = document.querySelector<HTMLButtonElement>("#join-script-modal [type=submit]");
+    assert.ok(field && submit);
+    assert.equal(document.querySelector("#join-script-status")?.textContent, "");
+    field.value = "Previous password";
+    submit.click();
+    await Promise.resolve();
+    assert.equal(document.querySelector("#join-script-status")?.textContent, message);
+    assert.equal(document.activeElement, field);
+    assert.equal(submit.textContent, "Check password");
+    join.dispose();
+
+    const recovery = mountPasswordDialog({
+      title: "Re-enter password", submit: "Reconnect",
+      recovery: { check: async () => "password-required" }, save: async () => reason
+    });
+    t.after(recovery.dispose);
+    await Promise.resolve();
+    await Promise.resolve();
+    const retry = recovery.part("input") as HTMLInputElement;
+    retry.value = "Previous password";
+    (recovery.part("[type=submit]") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(recovery.part("[role=status]").textContent, message);
+    assert.equal(document.activeElement, retry);
+  });
+}
+
 test("Leave only disconnects after Save a copy first succeeds", async t => {
   const leave = t.mock.fn(async () => true);
   let saved = false;

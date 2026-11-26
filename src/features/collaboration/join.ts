@@ -76,7 +76,7 @@ export function mountJoinDialog(ports: JoinDialogPorts, request?: Extract<JoinRe
     passwordLabel.hidden = false;
     submit.hidden = false;
     submit.textContent = "Check password";
-    status.textContent = reason === "password-changed" ? "" : passwordFailure(reason);
+    status.textContent = reason === "password-required" ? "" : passwordFailure(reason);
     password.focus();
   }
 
@@ -94,8 +94,9 @@ export function mountJoinDialog(ports: JoinDialogPorts, request?: Extract<JoinRe
     setBusy(false);
     if (result.kind === "failed") {
       if (result.reason === "password-changed" || result.reason === "wrong-password" || result.reason === "password-rate-limited"
+        || result.reason === "device-limit"
         || (value !== undefined && result.reason === "relay-unreachable")) {
-        askForPassword(result.reason);
+        askForPassword(result.reason === "password-changed" && value === undefined ? "password-required" : result.reason);
         return;
       }
       passwordLabel.hidden = true;

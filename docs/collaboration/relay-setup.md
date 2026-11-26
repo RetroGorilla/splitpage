@@ -87,6 +87,22 @@ ID from `list`. `delete <script-id>` stops sharing and deletes that script from
 the relay. The output of `issue` and `reset` grants access. Share it privately
 with the intended recipient.
 
+Revoking a guest device stops that device credential from working. Anyone with the
+active guest link and password can join again. To withdraw guest access, use
+**Reset link** in Splitpage or `reset` in the CLI, then share the new link only
+with the intended recipients.
+
+When a returning copy needs a replacement credential, the app posts
+`{"password":null}` to the existing `/api/scripts/<script-id>/password-exchange`
+endpoint to check that the stored guest link is still active. The app offers a
+retry after temporary failures. For a protected link, **Re-enter password** uses
+the successful check to open the password prompt. The relay checks the link again
+when the guest submits the password.
+
+You can update the app before updating the relay. Until the relay is updated,
+guests who hit the device limit see the generic “Too many password attempts”
+message.
+
 ## Back up and rehearse a restore
 
 1. While the relay is running, run

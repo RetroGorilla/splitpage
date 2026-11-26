@@ -677,7 +677,7 @@ export function startPlainTags(given: PlainTagPorts): PlainTagMount {
         openCategoryAtCaret(cell, selection ? marksAt(model, selection.from) : {});
       }, () => { if (plainTagOpen()) closePlainTag(); given.undo.breakCoalescing(); }, () => {
         given.undo.breakCoalescing();
-        given.panels.close("production-panel");
+        given.panels.closeIfOverlayingScript("production-panel");
       });
       occurrence = editor;
       return () => {

@@ -45,6 +45,7 @@ export interface SharedBannersPorts {
   readonly exportCopy: () => void;
   readonly leave: () => void;
   readonly reenterPassword?: (() => void) | undefined;
+  readonly retryPasswordRecovery?: (() => void) | undefined;
 }
 
 export interface SharedBannersMount {

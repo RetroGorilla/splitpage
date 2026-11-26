@@ -1,5 +1,5 @@
-import { accessRemovedMessage } from "../../application/collaboration/state.ts";
-import type { CollaborationLocalWriteError, CollaborationPermanentRefusal } from "../../application/collaboration/state.ts";
+import { accessRemovedMessage, canReenterLinkPassword, PASSWORD_RECOVERY_UNREACHABLE } from "../../application/collaboration/state.ts";
+import type { CollaborationLocalWriteError, CollaborationSnapshot } from "../../application/collaboration/state.ts";
 import { sharedSaveStatus } from "../../application/save/status.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 import { restoreDialogFocus } from "../common/dialog-focus.ts";
@@ -22,6 +22,7 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
   const sizeBanner = byId("collab-size-banner");
   const writerStatus = byId("writer-collab-status");
   let passwordButton: HTMLButtonElement | undefined;
+  let retryButton: HTMLButtonElement | undefined;
   if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && ports.reenterPassword && accessBanner) {
     passwordButton = document.createElement("button");
     passwordButton.type = "button";
@@ -31,6 +32,16 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
     passwordButton.hidden = true;
     byId("collab-access-export")?.before(passwordButton);
     life.listen(passwordButton, "click", ports.reenterPassword);
+  }
+  if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && ports.retryPasswordRecovery && accessBanner) {
+    retryButton = document.createElement("button");
+    retryButton.type = "button";
+    retryButton.className = "btn";
+    retryButton.id = "collab-access-retry";
+    retryButton.textContent = "Try again";
+    retryButton.hidden = true;
+    byId("collab-access-export")?.before(retryButton);
+    life.listen(retryButton, "click", ports.retryPasswordRecovery);
   }
 
   const anchored: AnchoredBanner[] = [];
@@ -47,7 +58,8 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
   let lastActive = false;
   let lastWriterOpen = false;
   let lastError: CollaborationLocalWriteError | null = null;
-  let lastRefusal: CollaborationPermanentRefusal | null = null;
+  let lastRefusal: CollaborationSnapshot["refusal"] = null;
+  let lastPasswordCheck: CollaborationSnapshot["passwordRecoveryCheck"] = null;
   let lastMergeTooLarge: string | null = null;
 
   function setText(id: string, value: string): void {
@@ -100,11 +112,25 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
     if (reveal) saveErrorBanner.hidden = false;
   }
 
-  function showAccessRemoved(refusal: CollaborationPermanentRefusal, reveal: boolean): void {
+  function showAccess({ refusal, passwordRecoveryCheck }: CollaborationSnapshot, reveal: boolean): void {
     if (!accessBanner) return;
-    setText("collab-access-text", typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && refusal === "password-changed"
-      ? "The link password changed. Re-enter it to sync your work." : accessRemovedMessage(refusal));
-    if (passwordButton) passwordButton.hidden = refusal !== "password-changed";
+    if (passwordRecoveryCheck) {
+      setText("collab-access-title", "Offline · local work kept");
+      setText("collab-access-text", passwordRecoveryCheck === "checking" ? "Checking access…" : PASSWORD_RECOVERY_UNREACHABLE);
+    } else if (refusal) {
+      setText("collab-access-title", "Access removed · local work kept");
+      setText("collab-access-text", typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && refusal === "password-changed"
+        ? "The link password changed. Re-enter it to sync your work." : accessRemovedMessage(refusal));
+    }
+    if (passwordButton) passwordButton.hidden = !canReenterLinkPassword(refusal);
+    if (retryButton) {
+      const hadFocus = document.activeElement === retryButton;
+      retryButton.hidden = !passwordRecoveryCheck;
+      retryButton.disabled = passwordRecoveryCheck === "checking";
+      if (hadFocus && retryButton.hidden) {
+        (passwordButton && !passwordButton.hidden ? passwordButton : byId("collab-access-export"))?.focus({ preventScroll: true });
+      }
+    }
     if (reveal) accessBanner.hidden = false;
   }
 
@@ -129,6 +155,7 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
       restoreToRoot();
       lastError = null;
       lastRefusal = null;
+      lastPasswordCheck = null;
       lastMergeTooLarge = null;
       lastWriterOpen = false;
       lastActive = false;
@@ -139,9 +166,9 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
     const writerOpen = !!writer && !writer.hidden;
     const errorChanged = snapshot.localWriteError !== lastError;
     const sizeChanged = snapshot.mergeTooLarge !== lastMergeTooLarge;
-    const refusalChanged = snapshot.refusal !== lastRefusal;
+    const accessChanged = snapshot.refusal !== lastRefusal || snapshot.passwordRecoveryCheck !== lastPasswordCheck;
     const fileCopyAdded = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && anchor(byId("file-copy-banner"));
-    if (lastActive && !errorChanged && !sizeChanged && !refusalChanged && !fileCopyAdded && writerOpen === lastWriterOpen) return;
+    if (lastActive && !errorChanged && !sizeChanged && !accessChanged && !fileCopyAdded && writerOpen === lastWriterOpen) return;
 
     if (!lastActive || errorChanged) {
       if (snapshot.localWriteError) showSaveError(snapshot.localWriteError, errorChanged);
@@ -155,13 +182,14 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
       lastMergeTooLarge = snapshot.mergeTooLarge;
     }
 
-    if (!lastActive || refusalChanged) {
-      if (snapshot.refusal) showAccessRemoved(snapshot.refusal, refusalChanged);
+    if (!lastActive || accessChanged) {
+      if (snapshot.refusal || snapshot.passwordRecoveryCheck) showAccess(snapshot, accessChanged);
       else hideBanner(accessBanner);
       lastRefusal = snapshot.refusal;
+      lastPasswordCheck = snapshot.passwordRecoveryCheck;
     }
 
-    if (!lastActive || errorChanged || sizeChanged || refusalChanged || fileCopyAdded || writerOpen !== lastWriterOpen) {
+    if (!lastActive || errorChanged || sizeChanged || accessChanged || fileCopyAdded || writerOpen !== lastWriterOpen) {
       placeBanners(true);
       lastWriterOpen = writerOpen;
     }
@@ -181,10 +209,10 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
       showMergeTooLarge(snapshot.mergeTooLarge, true);
       placeBanners(true);
       byId("collab-size-export")?.focus({ preventScroll: true });
-    } else if (view.banner === "access-removed" && snapshot.refusal) {
-      showAccessRemoved(snapshot.refusal, true);
+    } else if (view.banner === "access-removed" || view.banner === "password-recovery") {
+      showAccess(snapshot, true);
       placeBanners(true);
-      byId("collab-access-export")?.focus({ preventScroll: true });
+      (view.banner === "password-recovery" ? retryButton : byId("collab-access-export"))?.focus({ preventScroll: true });
     }
   }
 
@@ -204,6 +232,7 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
 
   life.release(() => {
     passwordButton?.remove();
+    retryButton?.remove();
     hideBanner(accessBanner);
     hideBanner(sizeBanner);
     if (lastActive) hideBanner(saveErrorBanner);

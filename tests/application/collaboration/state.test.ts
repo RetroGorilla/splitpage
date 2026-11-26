@@ -46,6 +46,21 @@ test("throwing collaboration listeners do not stop subsequent subscribers", () =
   assert.deepEqual(calls, ["first", "second:true"]);
 });
 
+test("password recovery can be retried while the relay's picture sync is paused", () => {
+  const owner = createCollaborationState();
+  owner.enter({
+    relay: { connected: true, firstSyncDone: true, pendingChangeCount: 2 },
+    pictures: { checking: 1, uploading: 1, downloading: 1 }
+  });
+  owner.setPasswordRecoveryCheck("checking");
+  assert.deepEqual(owner.snapshot().relay, { connected: false, firstSyncDone: false, pendingChangeCount: 2 });
+  owner.setPasswordRecoveryCheck("retryable");
+  assert.equal(owner.snapshot().refusal, null);
+  assert.equal(sharedSaveStatus(owner.snapshot()).banner, "password-recovery");
+  owner.setRefusal("password-changed");
+  assert.equal(owner.snapshot().passwordRecoveryCheck, null);
+});
+
 test("sharedSaveStatus matches every row of the save status wording table and never claims saved to server", () => {
   const owner = createCollaborationState();
   owner.enter({ relay: { connected: true, firstSyncDone: true, pendingChangeCount: 0 } });

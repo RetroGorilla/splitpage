@@ -11,7 +11,7 @@ test("shared side panels close the current owner across restarts", () => {
   const calls: string[] = [];
   const owner = (name: string): SidePanels => ({
     registerPanel: () => () => {}, registerPage: () => () => {}, open: () => {}, close: () => {},
-    closeAll: () => { calls.push(name); }, sync: () => {}, applyWidth: () => {}
+    closeIfOverlayingScript: () => {}, closeAll: () => { calls.push(name); }, sync: () => {}, applyWidth: () => {}
   });
   assert.throws(() => panels.closeAll(), /The side panels are not started yet/);
   let stop = startSidePanels(owner("first"));
