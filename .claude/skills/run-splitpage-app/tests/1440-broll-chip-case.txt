@@ -1,0 +1,25 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:2,title:'B-roll chip case',paragraphsDecided:true,rows:[{id:'a',audioText:'Alpha',visualText:''}],comments:[]})],'broll-chip-case.splitpage'))
+wait F.state().title === 'B-roll chip case'
+click #btn-broll
+wait document.querySelector('#broll-list .broll-empty code') !== null
+expect document.querySelector('#broll-list .broll-empty code').textContent === 'B-Roll:'
+click #broll-close
+caret #rows .cell-editable[data-id="a"][data-field="visualText"]
+press b-roll: Harbour
+key Enter
+press B-roll: Boats
+key Enter
+press B-ROLL: Nets
+click #doc-title
+eval window.cases=['b-roll:','B-roll:','B-ROLL:']; window.chips=selector=>Array.from(document.querySelectorAll(selector+' .broll-key')); window.caseKept=selector=>JSON.stringify(chips(selector).map(chip=>chip.textContent))===JSON.stringify(cases); window.caseShown=selector=>chips(selector).length===cases.length&&chips(selector).every(chip=>getComputedStyle(chip,'::before').content.startsWith('"B-Roll:"')&&getComputedStyle(chip).fontSize==='0px')
+expect caseKept('#rows')
+expect caseShown('#rows')
+expect cases.every(marker=>F.state().rows[0].visualText.includes('>'+marker+'</span>'))
+click #btn-write
+wait W.on()
+eval W.openVisual('a')
+expect caseKept('.wr-flow-visual-text')
+expect caseShown('.wr-flow-visual-text')
+expect cases.every(marker=>F.state().rows[0].visualText.includes('>'+marker+'</span>'))

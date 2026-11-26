@@ -730,7 +730,7 @@ function keepingFocus(container: HTMLElement, draw: () => void) {
 function emptyListHtml(entries: readonly PanelShot[]) {
   if (!entries.length) {
     return '<div class="broll-empty">No b-roll yet.<br><br>Start a line in the Visual column with ' +
-      '<code>B-roll:</code> and whatever follows it becomes a shot to track — or add one below.</div>';
+      '<code>B-Roll:</code> and whatever follows it becomes a shot to track — or add one below.</div>';
   }
   const msg = ({
     unshot: "Nothing left to film — everything on the list is in the can.",
