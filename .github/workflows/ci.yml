@@ -246,9 +246,8 @@ jobs:
       - name: Every required matrix shard passed
         if: needs.changes.outputs.root_due == 'true'
         run: |
-          jobs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" --jq '.jobs[] | [.name, .run_attempt, .conclusion] | @tsv')
-          verify_shards() {
-            local label=$1 count=$2 shard name result
+          scan_shards() {
+            local label=$1 count=$2 shard name result waiting=""
             for ((shard = 1; shard <= count; shard++)); do
               name="$label ($shard/$count)"
               result=$(awk -F '\t' -v name="$name" '
@@ -257,15 +256,30 @@ jobs:
                   if (attempt > latest) { latest = attempt; count = 0 }
                   if (attempt == latest) { count++; conclusion = $3 }
                 }
-                END { if (count == 1) print conclusion; else if (count > 1) print "duplicate" }
+                END { if (count == 1) print (conclusion == "" ? "pending" : conclusion); else if (count > 1) print "duplicate" }
               ' <<< "$jobs")
-              if [ "$result" != success ]; then
-                echo "::error::$name must have exactly one successful job (found: ${result:-missing})"
-                return 1
-              fi
+              case "$result" in
+                success) ;;
+                "" | pending) [ -n "$waiting" ] || waiting="$name|${result:-missing}" ;;
+                *) echo "final|$name|$result"; return ;;
+              esac
             done
+            [ -z "$waiting" ] || echo "waiting|$waiting"
           }
-          if [ "$ROOT_TESTS" = true ]; then verify_shards "Tests" "$ROOT_SHARDS"; fi
+          [ "$ROOT_TESTS" = true ] || exit 0
+          for ((try = 1; ; try++)); do
+            jobs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" --jq '.jobs[] | [.name, .run_attempt, .conclusion] | @tsv')
+            problem=$(scan_shards "Tests" "$ROOT_SHARDS")
+            [ -n "$problem" ] || exit 0
+            # why: a shard that finished seconds before this job may still lack its row or its conclusion in the jobs API.
+            # needs: already waited for every shard, so only a scan with nothing but missing or pending reads again.
+            case "$problem" in final\|*) break ;; esac
+            [ "$try" -lt 12 ] || break
+            sleep 5
+          done
+          problem=${problem#*|}
+          echo "::error::${problem%|*} must have exactly one successful job (found: ${problem##*|})"
+          exit 1
         env:
           GH_TOKEN: ${{ github.token }}
           ROOT_TESTS: ${{ needs.changes.outputs.root_due }}

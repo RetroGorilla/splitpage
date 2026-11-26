@@ -191,7 +191,18 @@ for (const code of bash ? ["true", "false"] : []) {
 if (bash) {
   const shardJobs = (label, count) => Array.from({ length: count }, (_, index) => `${label} (${index + 1}/${count})\t1\tsuccess`);
   const rootJobs = shardJobs("Tests", shardCount);
-  for (const { jobs, apiStatus = "0", pass } of [
+  const unsettled = rootJobs.map((job, index) => index === 1 ? job.replace("\tsuccess", "\t") : job);
+  const pendingFirstFailedSecond = rootJobs.map((job, index) =>
+    index === 0 ? job.replace("\tsuccess", "\t") : index === 1 ? job.replace("success", "failure") : job);
+  for (const { jobs, later, apiStatus = "0", pass, reads, error } of [
+    { jobs: unsettled, later: rootJobs, pass: true, reads: 2 },
+    { jobs: [rootJobs[0], ...rootJobs.slice(2)], later: rootJobs, pass: true, reads: 2 },
+    { jobs: unsettled, pass: false, reads: 12, error: "Tests (2/8) must have exactly one successful job (found: pending)" },
+    { jobs: [...rootJobs.slice(1), rootJobs[0].replace("success", "failure")], later: rootJobs, pass: false, reads: 1 },
+    {
+      jobs: pendingFirstFailedSecond, later: rootJobs, pass: false, reads: 1,
+      error: "Tests (2/8) must have exactly one successful job (found: failure)"
+    },
     { jobs: rootJobs, pass: true },
     { jobs: [rootJobs[0].replace("\t1\tsuccess", "\t2\tsuccess"), ...rootJobs], pass: true },
     { jobs: [...rootJobs, rootJobs[0].replace("\t1\tsuccess", "\t2\tcancelled")], pass: false },
@@ -202,17 +213,21 @@ if (bash) {
     })),
     { jobs: rootJobs, apiStatus: "1", pass: false }
   ]) {
-    const mock = 'gh() { printf "%s\\n" "$MOCK_JOBS"; return "$MOCK_STATUS"; }\n';
+    const mock = 'gh() { echo MOCK_READ >&2; printf "%s\\n" "$MOCK_JOBS"; return "$MOCK_STATUS"; }\n' +
+      'sleep() { MOCK_JOBS=${MOCK_LATER-$MOCK_JOBS}; }\n';
     const result = spawnSync(bash, ["-e", "-c", mock + individual.run], {
       env: {
-        ...process.env, MOCK_JOBS: jobs.join("\n"), MOCK_STATUS: apiStatus,
+        ...process.env, MOCK_JOBS: jobs.join("\n"), MOCK_STATUS: apiStatus, ...(later && { MOCK_LATER: later.join("\n") }),
         ROOT_TESTS: "true", ROOT_SHARDS: String(shardCount)
       },
       encoding: "utf8",
       timeout: 5000
     });
     assert.equal(result.error, undefined);
-    assert.equal(result.status === 0, pass, JSON.stringify({ jobs, apiStatus, output: result.stdout, error: result.stderr }));
+    const detail = JSON.stringify({ jobs, later, apiStatus, output: result.stdout, error: result.stderr });
+    assert.equal(result.status === 0, pass, detail);
+    if (reads !== undefined) assert.equal(result.stderr.split("\n").filter((line) => line === "MOCK_READ").length, reads, detail);
+    if (error !== undefined) assert.equal(result.stdout.trim(), `::error::${error}`, detail);
     cases++;
   }
   const manifestsRunBy = (script) => {
