@@ -675,7 +675,10 @@ export function startPlainTags(given: PlainTagPorts): PlainTagMount {
         const selection = cellSelection(cell);
         const model = given.text.fromHtml(given.text.storedHtmlFromDom(cell.innerHTML));
         openCategoryAtCaret(cell, selection ? marksAt(model, selection.from) : {});
-      }, () => { if (plainTagOpen()) closePlainTag(); given.undo.breakCoalescing(); }, () => given.undo.breakCoalescing());
+      }, () => { if (plainTagOpen()) closePlainTag(); given.undo.breakCoalescing(); }, () => {
+        given.undo.breakCoalescing();
+        given.panels.closeIfOverlayingScript("production-panel");
+      });
       occurrence = editor;
       return () => {
         cancelCategory(false);

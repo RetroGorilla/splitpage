@@ -22,5 +22,6 @@ export const panelControl = {
   sync: () => sidePanels().sync(),
   open: (id: string) => sidePanels().open(id),
   close: (id: string) => sidePanels().close(id),
+  closeIfOverlayingScript: (id: string) => sidePanels().closeIfOverlayingScript(id),
   closeAll: () => sidePanels().closeAll()
 };

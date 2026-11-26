@@ -1,6 +1,7 @@
 
   @media (min-width: 1100px) {
     body.panel-open #root {
+      --side-panels-beside-script: 1;
       padding-right: calc(min(var(--open-panel-width, 488px), 100vw) + 20px);
     }
     body.panel-open .topbar-row {
