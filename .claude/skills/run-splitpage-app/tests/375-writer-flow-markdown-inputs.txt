@@ -16,16 +16,17 @@ key ctrl KeyU
 press *
 expect document.querySelector('.wr-beat[data-id="b"] em').textContent === 'word'
 key ctrl KeyZ
-expect document.querySelector('.wr-beat[data-id="b"]').textContent.replace(/\u200B/g,'') === '*word*'
+expect (function(){var beat=document.querySelector('.wr-beat[data-id="b"]'); var text=beat.textContent.replace(/\u200B/g,''); if(text === '*word*') return true; window.markdownUndoFailure={text:text,html:beat.innerHTML,stored:F.state().rows.find(function(r){return r.id === 'b'}).audioText,selection:W.selection(),undo:window.__undoTest.sizes()}; return false})()
+eval window.markdownUndoFailure
 eval W.place({anchor:hp(0),head:hp(5)}); window.data=new DataTransfer(); clip('cut',data)
-expect !F.state().sections.some(function(s){return s.id === 's'}) && !document.querySelector('.wr-heading[data-scene="s"]')
+wait (!F.state().sections || !F.state().sections.some(function(s){return s.id === 's'})) && !document.querySelector('.wr-heading[data-scene="s"]')
 expect data.getData('text/plain') === 'Title'
 eval at(bp('c',1))
 wait !F.state().sections || !F.state().sections.some(function(s){return s.id === 's'})
 key ctrl KeyZ
 expect F.state().sections.some(function(s){return s.id === 's' && s.name === 'Title'})
 eval W.place({anchor:hp(5),head:hp(0)}); window.data=new DataTransfer(); clip('cut',data)
-expect !F.state().sections.some(function(s){return s.id === 's'}) && !document.querySelector('.wr-heading[data-scene="s"]')
+wait (!F.state().sections || !F.state().sections.some(function(s){return s.id === 's'})) && !document.querySelector('.wr-heading[data-scene="s"]')
 eval at(bp('c',1))
 wait !F.state().sections || !F.state().sections.some(function(s){return s.id === 's'})
 key ctrl KeyZ
