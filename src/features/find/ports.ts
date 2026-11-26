@@ -24,8 +24,7 @@ export interface FindPorts {
   readonly native?: () => FindNativeAccess | null;
   readonly document: Pick<DocumentReader, "current" | "read" | "onChange">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
-  readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "inertBody" | "sanitizeHtml">;
-  readonly scriptCellOf: TextServices<HTMLElement>["cellOf"];
+  readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "scriptCellOf" | "inertBody" | "sanitizeHtml">;
   readonly shotHiding: () => Pick<ShotHiding, "reveal">;
   readonly undo: Pick<UndoControl, "breakCoalescing">;
   readonly notices: Pick<NoticePort, "show">;

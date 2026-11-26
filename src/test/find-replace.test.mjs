@@ -8,7 +8,7 @@ import { inertBody, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { findInRows, noMatchLabel, replaceInHtml } from "../features/find/find.ts";
 import { domProjection, domRangeFor } from "../features/common/find-dom.ts";
 import { startFind } from "../features/find/find.ts";
-startFind({ text: { cellOf, inertBody, sanitizeHtml }, scriptCellOf });
+startFind({ text: { cellOf, scriptCellOf, inertBody, sanitizeHtml } });
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 
 const find = (html, needle, matchCase) => findInCell(cellOf(html), needle, !!matchCase);

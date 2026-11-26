@@ -16,7 +16,7 @@ import { productionReaders } from "../bootstrap/document-ports.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
-import { htmlToMarkdown, sanitizeHtml, scriptCellOf } from "../bootstrap/richtext.ts";
+import { htmlToMarkdown, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { breakLine, insideDirection, joinCells, replaceText, sliceCell, splitCell, typingMarks } from "../core/text/edits.ts";
 import { cellLength, normalizeCell, projection } from "../core/text/runs.ts";
 import { directionRangeAt, directionShortcut, flattenDirections, importDirections, toggleDirection } from "../core/text/directions.ts";
@@ -28,7 +28,7 @@ import { clipboardOfCell } from "../features/clipboard/cell-clipboard.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 
 import { startFind as initFind, replaceInHtml } from "../features/find/find.ts";
-initFind({ document: portDocument, edits: portEdits, text: portText, scriptCellOf, undo: portUndo, notices: portNotices, flags: portFlags });
+initFind({ document: portDocument, edits: portEdits, text: portText, undo: portUndo, notices: portNotices, flags: portFlags });
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
 import { toMarkdownDoc } from "../adapters/formats/export-text.ts";
