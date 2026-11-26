@@ -51,7 +51,7 @@ export function createNativeEditorStructure({ native, session, input, publish, r
   // removal), so what a removal takes out is the head's own content
   function headOnly(row: DocumentRow): DocumentRow {
     const head = (native.readRow(row.id)?.members.length ?? 1) > 1 ? native.readBeat(row.id) : null;
-    return head ? { ...row, ...head.fields, id: row.id, audioText: toHtml(head.narration), visualText: toHtml(head.visual) } : row;
+    return head ? { ...head.fields, id: row.id, visualText: toHtml(head.visual), audioText: toHtml(head.narration) } : row;
   }
 
   return (intent: DocumentStructureIntent): CommandOutcome => {
@@ -75,7 +75,6 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       const current = moving ? null : typing.currentCaret();
       let after: NativeUndoSelectionInput | null = (movedSelection?.kind === "ready" ? movedSelection.range : current?.range) ?? null;
       let landing: string | undefined;
-      let removal: readonly DocumentRow[] | null = null;
       let step;
       switch (intent.kind) {
         case "insert-beat": {
@@ -117,7 +116,9 @@ export function createNativeEditorStructure({ native, session, input, publish, r
           const rows = before.rows.filter(row => wanted.has(row.id)), ids = rows.map(row => row.id);
           if (!wanted.size) return { kind: "noop" };
           if (ids.length !== wanted.size) return owner.refuse("missing");
-          removal = rows.map(headOnly);
+          if (intent.stage && !intent.stage({ ...before, rows: before.rows.map(row => wanted.has(row.id) ? headOnly(row) : row) }, ids)) {
+            return { kind: "noop" };
+          }
           step = native.commands.removeRows.withSelection(current?.range ?? anchor(ids[0] as string, 0), ids);
           if (current && ids.includes(current.row)) after = null;
           break;
@@ -171,7 +172,6 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       } else if (!inserting && movedSelection?.kind === "ready") {
         typing.show(movedSelection.selection);
       }
-      if (removal && intent.kind === "remove-beats") intent.removed?.(removal);
       return { kind: "applied", generation: owner.generation(), changes };
     } catch (error) {
       report(error);

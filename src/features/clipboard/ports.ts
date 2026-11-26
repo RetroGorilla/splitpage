@@ -45,7 +45,7 @@ export interface BeatClipPorts {
 }
 
 export interface BeatSelectPorts {
-  readonly document: Pick<DocumentReader, "current">;
+  readonly document: Pick<DocumentReader, "current" | "onChange">;
   readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly edits: Pick<DocumentEdits, "run">;
   readonly undo: Pick<UndoControl, "breakCoalescing" | "flush" | "last" | "undo">;

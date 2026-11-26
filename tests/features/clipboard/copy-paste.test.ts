@@ -333,6 +333,17 @@ test("scene selection: Delete removes the selected scenes through the edits port
   owner.dispose();
 });
 
+test("scene selection: a standalone replacement that keeps the document id and epoch ends the selection", () => {
+  const { owner, held } = beatSelect();
+  selectBeats("r1", "r2");
+  assert.deepEqual(selectedIds(), ["r1", "r2"]);
+  const epoch = held.lifetime.epoch();
+  held.replace(scriptDoc());
+  held.lifetime.epoch = () => epoch;
+  assert.deepEqual(selectedIds(), []);
+  owner.dispose();
+});
+
 test("scene selection: a Delete whose removal changes nothing keeps the selection and reports nothing", () => {
   const { owner, edits, notices, calls } = beatSelect();
   selectBeats("r1", "r2");

@@ -628,6 +628,113 @@ test("Split: cutting a selected joined row copies and removes only its head", as
   assert.deepEqual(app(), joined);
 });
 
+test("Split: cutting a selected joined row leaves its member's picture with the member", async t => {
+  const own = { sha256: "d".repeat(64), width: 1, height: 1, mime: "image/png" };
+  const picture = { sha256: "e".repeat(64), width: 1, height: 1, mime: "image/png" };
+  const f = await enter(t, { rows: [source[0], { ...source[1], imageRef: own }, { ...source[2], imageRef: picture }] });
+  written(f.peer.commands.joinRow("r3", "r2", " "));
+  send(f.peer, f.native);
+  await Promise.resolve();
+  assert.match(JSON.stringify(app().rows[1]), /e{64}/);
+  const clipboard = captureCopy(t);
+  document.activeElement?.blur();
+  selectBeats("r2");
+  assert.equal(key(document.body, "x", { ctrlKey: true }), true);
+  const clip = parseBeatPayload(clipboard.get(BEATS_MIME));
+  assert.deepEqual(clip.rows.map(row => [row.audioText, row.visualText, row.imageRef?.sha256]), [["Other", "Scene", own.sha256]]);
+  assert.doesNotMatch(clipboard.get(BEATS_MIME), /e{64}/);
+  agree(f, ["abcdef", "Third"]);
+  assert.deepEqual(app().rows[1].imageRef, picture);
+});
+
+test("Split: a selected beat cut copies in the live order a peer move gives at admission", async t => {
+  const f = await enter(t);
+  const clipboard = captureCopy(t);
+  document.activeElement?.blur();
+  selectBeats("r2", "r3");
+  const update = packets(f.peer, () => written(f.peer.commands.moveBlocks([{ kind: "beat", id: "r3" }], { kind: "beat", id: "r2" })));
+  let calls = 0;
+  const stop = f.beforeCommand(() => {
+    if (!calls++) delivery(f.native, "forward", ...update);
+    return true;
+  });
+  try {
+    assert.equal(key(document.body, "x", { ctrlKey: true }), true);
+  } finally { stop(); }
+  assert.deepEqual(clipCells(clipboard), [["Third", "Final"], ["Other", "Scene"]]);
+  agree(f, ["abcdef"]);
+  history(document.body);
+  agree(f, ["abcdef", "Third", "Other"]);
+});
+
+test("Split: a selected beat cut whose clipboard write fails keeps the beats and the selection", async t => {
+  const f = await enter(t);
+  const before = structuredClone(app()), native = f.native.encodeState(), peer = f.peer.encodeState();
+  const exec = Object.getOwnPropertyDescriptor(document, "execCommand");
+  Object.defineProperty(document, "execCommand", { configurable: true, value: () => {
+    const event = new window.Event("copy", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: { setData: type => {
+      if (type === "text/html") throw new Error("clipboard write failed");
+    } } });
+    document.body.dispatchEvent(event);
+    return event.defaultPrevented;
+  } });
+  t.after(() => { if (exec) Object.defineProperty(document, "execCommand", exec); else delete document.execCommand; });
+  document.activeElement?.blur();
+  selectBeats("r2", "r3");
+  const errors = [];
+  const observe = event => { errors.push(event.error?.message); event.preventDefault(); };
+  window.addEventListener("error", observe);
+  try {
+    assert.equal(key(document.body, "x", { ctrlKey: true }), true);
+  } finally { window.removeEventListener("error", observe); }
+  assert.deepEqual(errors, ["clipboard write failed"]);
+  assert.deepEqual(selectedIds(), ["r2", "r3"]);
+  assert.deepEqual(app(), before);
+  assert.deepEqual(f.native.encodeState(), native);
+  send(f.native, f.peer);
+  assert.deepEqual(f.peer.encodeState(), peer);
+  assert.deepEqual(f.native.commands.undo(), { kind: "unchanged" });
+});
+
+test("Split: beat shortcuts leave a read-only version preview alone", async t => {
+  const f = await enter(t);
+  const before = structuredClone(app()), native = f.native.encodeState();
+  const panel = document.getElementById("history-panel"), list = document.getElementById("history-list");
+  panel.hidden = false;
+  list.innerHTML = '<section class="shared-history-preview" contenteditable="false"><h3 tabindex="-1">Earlier</h3></section>';
+  t.after(() => { list.innerHTML = ""; panel.hidden = true; });
+  const heading = list.querySelector("h3");
+  heading.focus();
+  assert.equal(document.activeElement, heading);
+  assert.equal(key(heading, "a", { ctrlKey: true }), false);
+  assert.deepEqual(selectedIds(), []);
+  selectBeats("r2", "r3");
+  heading.focus();
+  assert.equal(key(heading, "Delete"), false);
+  assert.equal(key(heading, "x", { ctrlKey: true }), false);
+  await Promise.resolve();
+  assert.deepEqual(app(), before);
+  assert.deepEqual(f.native.encodeState(), native);
+  assert.deepEqual(f.notices(), []);
+});
+
+test("Split: a peer removal of the selection's anchor repaints at once and Shift-click extends from a surviving beat", async t => {
+  const f = await enter(t);
+  document.activeElement?.blur();
+  selectBeats("r2", "r3");
+  delivery(f.native, "forward", ...packets(f.peer, () => written(f.peer.commands.removeRows(["r2"]))));
+  await Promise.resolve();
+  assert.deepEqual(audio(app()), ["abcdef", "Third"]);
+  const painted = document.getElementById("scene-selection-style").textContent;
+  assert.doesNotMatch(painted, /data-id="r2"/);
+  assert.match(painted, /data-id="r3"/);
+  for (const type of ["mousedown", "mouseup", "click"]) {
+    f.cell("r1").dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true, button: 0, shiftKey: true }));
+  }
+  assert.deepEqual(selectedIds(), ["r1", "r3"]);
+});
+
 test("Split: a selected beat cut copies a peer edit that arrives at admission", async t => {
   const f = await enter(t);
   const clipboard = captureCopy(t);
