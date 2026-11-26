@@ -913,6 +913,37 @@ export class NativeScriptReader {
     return Object.freeze(members.map(member => Object.freeze({ ...member })));
   }
 
+  joinedNarrationNeighbor(beat: string): { readonly beat: string; readonly offset: number } | null {
+    this.sync();
+    let member = beat;
+    let row = this.groupHeads.get(member);
+    const visited = new Set<string>();
+    // why: a concurrent removal leaves the join record behind even though the member drops out of the outline
+    while (row === undefined && !visited.has(member)) {
+      visited.add(member);
+      const join = joinOf(this.roots.beats.get(member));
+      if (!join) return null;
+      member = join.into;
+      row = this.groupHeads.get(member);
+    }
+    if (row === undefined) return null;
+    const members = this.groups.get(row);
+    if (!members || (member === beat && members.length < 2)) return null;
+    const index = members.findIndex(({ id }) => id === member);
+    const width = (id: string) => nativeCellView(this.narrationItems(this.narration.get(id) ?? EMPTY_SPANS)).length;
+    if (member === beat && width(beat)) return null;
+
+    const before = member === beat ? index : index + 1;
+    for (const { id } of members.slice(0, before).reverse()) {
+      const offset = width(id);
+      if (offset) return { beat: id, offset };
+    }
+    for (const { id } of members.slice(index + 1)) {
+      if (width(id)) return { beat: id, offset: 0 };
+    }
+    return { beat: row, offset: 0 };
+  }
+
   showsHeading(heading: string): boolean {
     this.sync();
     return this.outlineEntries.some((entry, index) =>

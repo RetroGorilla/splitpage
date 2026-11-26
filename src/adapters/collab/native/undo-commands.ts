@@ -98,7 +98,7 @@ export function openNativeUndo(script: NativeScript) {
     const recorded = item && selectionOf(item);
     if (recorded) inverses[depth]?.meta.set(selectionKey, recorded);
     const replay = direction === "undo" ? recorded?.before : recorded?.after;
-    const selection = replay && resolveNativeUndoSelection(script, replay);
+    const selection = replay && resolveNativeUndoSelection(script, replay, true);
     return Object.freeze({ kind: "written", entry: item ? entryOf(item) : null, ...(selection ? { selection } : {}) });
   }
 

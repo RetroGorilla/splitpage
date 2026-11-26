@@ -494,6 +494,33 @@ test("a caret replayed at the right join edge can type directly into its member"
   assert.equal(a.document().rows[0]?.audioText, "abc--xdefg");
 });
 
+test("an empty leading member replays at the start of its next visible member", t => {
+  const [writer, peer] = copies(t);
+  statusWithSelection(writer, aText, 1);
+  written(peer.commands.joinRow("B", "A", " "));
+  written(peer.commands.deleteText(anchor(peer, aText, 0, 3)));
+  send(peer, writer);
+  assert.equal(writer.document().rows[0]?.audioText, "defg");
+  selection(writer.commands.undo(), bText, 0);
+  selection(writer.commands.redo(), bText, 0);
+});
+
+test("a concurrently removed joined member replays at its surviving predecessor", t => {
+  const [writer, joiner] = copies(t);
+  const remover = openNativeSession({ kind: "state", state: writer.encodeState() }, options);
+  remover.ydoc.clientID = 4;
+  t.after(remover.close);
+  statusWithSelection(writer, bText, 1);
+  written(joiner.commands.joinRow("B", "A", " "));
+  written(remover.commands.removeRows(["B"]));
+  send(joiner, writer);
+  assert.equal(writer.document().rows[0]?.audioText, "abc defg");
+  send(remover, writer);
+  assert.deepEqual(writer.document().rows.map(row => [row.id, row.audioText]), [["A", "abc"], ["C", "hij"]]);
+  selection(writer.commands.undo(), aText, 3);
+  selection(writer.commands.redo(), aText, 3);
+});
+
 test("generated joined rows round-trip all shown member endpoints through both presses and edit commands", async () => {
   let replayed = 0;
   for (const n of [2, 3, 4]) for (let mask = 0; mask < 2 ** n; mask++) for (const glue of ["", " ", "--"]) {

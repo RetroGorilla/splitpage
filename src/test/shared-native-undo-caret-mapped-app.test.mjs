@@ -225,7 +225,8 @@ function land(f, expectedRows, { waitOnLeave = false } = {}) {
   assert.deepEqual(rowsOf(app()), expectedRows);
   assert.equal(document.body.hasAttribute("data-native-caret-unplaced"), waitOnLeave);
   if (waitOnLeave) {
-    field("split", expectedRows[0][0]).dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true }));
+    const view = f.writer.writerFlowControl() ? "writer" : "split";
+    field(view, expectedRows[0][0]).dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true }));
     assert.equal(document.body.hasAttribute("data-native-caret-unplaced"), false);
   }
   f.writer.closeWriter();
@@ -403,7 +404,7 @@ for (const view of ["writer", "split"]) {
       land(f, [["R1", "abc<strong>d</strong>", ""]]);
     });
 
-    test(`${view}: delete inside a row the other person joins (${order}) replays Undo and omits empty-member Redo selection`, async t => {
+    test(`${view}: delete inside a row the other person joins (${order}) restores the range on Undo and the seam on Redo`, async t => {
       const f = await enter(t, [["R1", "aa"], ["R2", "a"]], view);
       if (order === "peer first") {
         written(f.peer.commands.joinRow("R2", "R1", ""));
@@ -424,14 +425,10 @@ for (const view of ["writer", "split"]) {
 
       historyKey(view, "R1", "y", view === "split");
       await agree(f, [["R1", "aa", ""]]);
-      if (view === "writer") {
-        assert.deepEqual(readCaret("writer"), { focused: true, range: null });
-      } else {
-        expectCaret("split", "R1", 2, 2);
-      }
+      expectCaret(view, "R1", 2, 2);
 
       assert.deepEqual(f.notices(), []);
-      land(f, [["R1", "aa", ""]], { waitOnLeave: view === "split" });
+      land(f, [["R1", "aa", ""]], { waitOnLeave: true });
     });
   }
 }

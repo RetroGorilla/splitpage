@@ -509,10 +509,20 @@ function replayUndoEndpoint(script: NativeScript, { target, position }: UndoEndp
   return Object.freeze({ target: Object.freeze(current), offset });
 }
 
-export function resolveNativeUndoSelection(script: NativeScript, recorded: NativeUndoAnchor): NativeUndoSelection | null {
+function joinedUndoPoint(script: NativeScript, { target }: UndoEndpoint): NativeUndoPoint | null {
+  if (target.cell !== "narration") return null;
+  const point = script.reader.joinedNarrationNeighbor(target.beat);
+  return point && Object.freeze({ target: Object.freeze({ beat: point.beat, cell: target.cell }), offset: point.offset });
+}
+
+export function resolveNativeUndoSelection(script: NativeScript, recorded: NativeUndoAnchor, replayHistory = false): NativeUndoSelection | null {
   const anchor = replayUndoEndpoint(script, recorded.anchor);
   const head = recorded.head === recorded.anchor ? anchor : replayUndoEndpoint(script, recorded.head);
-  if (!anchor || !head) return null;
+  if (!anchor || !head) {
+    if (!replayHistory || (head && !joinedUndoPoint(script, recorded.anchor))) return null;
+    const caret = head ?? joinedUndoPoint(script, recorded.head);
+    return caret && Object.freeze({ anchor: caret, head: caret });
+  }
   const samePoint = anchor.offset === head.offset && anchor.target.beat === head.target.beat && anchor.target.cell === head.target.cell;
   return Object.freeze({ anchor, head: samePoint ? anchor : head });
 }

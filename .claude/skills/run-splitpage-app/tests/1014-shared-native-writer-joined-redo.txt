@@ -1,0 +1,58 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.P=S.nativePeer;window.writer=()=>document.getElementById('writer-doc');window.openCase=order=>F.openFile(new File([JSON.stringify({schema:2,title:'Joined Redo '+order,paragraphsDecided:true,rows:['Lead','aa','a'].map((audioText,i)=>({id:'r'+(i+1),audioText})),comments:[]})],'joined-redo.splitpage'));openCase('forward')
+eval window.json=JSON.stringify;window.audio=doc=>doc?.rows.map(({id,audioText})=>[id,audioText]);window.both=value=>{const {app,peer}=S.read();return json(app)===json(peer)&&json(audio(app))===json([['r1','Lead'],['r2',value]])};window.caret=(id,from,to=from)=>{const beat=writer().querySelector('.wr-beat[data-id="'+id+'"]'),s=getSelection();if(document.activeElement!==writer()||!beat?.contains(s.anchorNode)||!beat.contains(s.focusNode)||s.isCollapsed!==(from===to))return false;const offset=(node,index)=>{const range=document.createRange();range.setStart(beat,0);range.setEnd(node,index);return range.toString().replace(/\u200b/g,'').length};return offset(s.anchorNode,s.anchorOffset)===from&&offset(s.focusNode,s.focusOffset)===to};true
+eval window.start=()=>{writer().focus();W.place({anchor:{kind:'beat',rowId:'r3',offset:0},head:{kind:'beat',rowId:'r3',offset:1}});P.hold('updates');window.trustedKey=false;writer().addEventListener('keydown',event=>{if(event.key==='x')trustedKey=event.isTrusted});return true};window.exchange=order=>{const queued=P.queuedUpdates();return queued.map(p=>p.to).join(',')==='peer,app'&&json(P.release(order))===json(order==='reverse'?queued.toReversed():queued)&&P.queuedUpdates().length===0};window.leave=()=>{const id=S.read().app.docId;return S.leave().ok&&S.read().peer===null&&F.state().docId!==id&&json(audio(F.state()))===json([['r1','Lead'],['r2','aa']])};true
+wait F.state().title==='Joined Redo forward'
+jsclick #btn-write
+wait W.on()
+eval S.enter()
+wait S.read().peer!==null&&audio(S.read().peer).length===3
+eval start()
+expect caret('r3',0,1)
+key Backspace
+wait audio(S.read().app)[2][1]===''&&audio(S.read().peer)[2][1]==='a'
+expect P.join('r3','r2').kind==='written'
+expect exchange('forward')
+wait both('aa')
+key ctrl KeyZ
+wait both('aa a')
+expect caret('r2',3,4)
+key ctrl KeyY
+wait both('aa')
+expect caret('r2',2)
+press x
+wait trustedKey&&S.read().app.rows.some(row=>row.audioText.includes('x'))
+eval window.afterKey=()=>({app:audio(S.read().app),peer:audio(S.read().peer)});afterKey()
+expect both('aax')
+expect caret('r2',3)
+key ctrl KeyZ
+wait both('aa')
+expect leave()
+eval openCase('reverse')
+wait F.state().title==='Joined Redo reverse'
+eval if(!W.on())document.getElementById('btn-write').click();true
+wait W.on()
+eval S.enter()
+wait S.read().peer!==null&&audio(S.read().peer).length===3
+eval start()
+expect caret('r3',0,1)
+key Backspace
+wait audio(S.read().app)[2][1]===''&&audio(S.read().peer)[2][1]==='a'
+expect P.join('r3','r2').kind==='written'
+expect exchange('reverse')
+wait both('aa')
+key ctrl KeyZ
+wait both('aa a')
+expect caret('r2',3,4)
+key ctrl KeyY
+wait both('aa')
+expect caret('r2',2)
+press x
+wait trustedKey&&S.read().app.rows.some(row=>row.audioText.includes('x'))
+eval afterKey()
+expect both('aax')
+expect caret('r2',3)
+key ctrl KeyZ
+wait both('aa')
+expect leave()
