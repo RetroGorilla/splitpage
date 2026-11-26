@@ -475,11 +475,16 @@ test("a reply carries its author, text and time, in the clock asked for", () => 
       { id: "r2", author: "Cy", body: "Second", createdAt: at(16) }
     ] })]
   };
-  const [e] = commentEntries(withReplies, { clockMode: "24" });
-  assert.deepEqual(e.replies.map((r) => [r.author, r.body]), [["Anonymous", "Soft reply"], ["Cy", "Second"]]);
-  const twelve = commentEntries(withReplies, { clockMode: "12" })[0];
-  assert.ok(e.replies.every((r) => !/\b[AP]M\b/i.test(r.when)), e.replies.map((r) => r.when).join(" | "));
-  assert.ok(twelve.replies.every((r) => /\b[AP]M\b/i.test(r.when)), twelve.replies.map((r) => r.when).join(" | "));
+  for (const [clockMode, hourCycle] of [["24", "h23"], ["12", "h12"]]) {
+    const formatter = new Intl.DateTimeFormat(undefined, {
+      year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hourCycle
+    });
+    const [entry] = commentEntries(withReplies, { clockMode });
+    assert.deepEqual(entry.replies.map(({ author, body, when }) => [author, body, when]), [
+      ["Anonymous", "Soft reply", formatter.format(new Date(at(15)))],
+      ["Cy", "Second", formatter.format(new Date(at(16)))]
+    ], clockMode);
+  }
 });
 
 test("pieces are only built when asked for", () => {
