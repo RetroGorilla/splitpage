@@ -97,8 +97,8 @@
     {
       "label": "opening completion leaves its token pending",
       "file": "src/bootstrap/wiring/transition-owners.ts",
-      "find": "finish: () => { mine.openings.delete(context); resolveOpening(); }",
-      "replace": "finish: () => { resolveOpening(); }",
+      "find": "      if (pending) void Promise.resolve(result).then(context.finish, context.finish);\n      else context.finish();\n      return result;\n    } catch (error) { context.finish(); throw error; }",
+      "replace": "      if (pending) void Promise.resolve(result).then(resolveOpening, resolveOpening);\n      else resolveOpening();\n      return result;\n    } catch (error) { resolveOpening(); throw error; }",
       "tests": [
         "tests/bootstrap/shared-ports-transitions.test.ts"
       ]
@@ -107,7 +107,7 @@
       "label": "synchronous opening leaves its token pending",
       "file": "src/bootstrap/wiring/transition-owners.ts",
       "find": "      else context.finish();",
-      "replace": "      else void result;",
+      "replace": "      else resolveOpening();",
       "tests": [
         "tests/bootstrap/shared-ports-transitions.test.ts"
       ]
@@ -116,7 +116,7 @@
       "label": "synchronous opening failure leaves its token pending",
       "file": "src/bootstrap/wiring/transition-owners.ts",
       "find": "    } catch (error) { context.finish(); throw error; }",
-      "replace": "    } catch (error) { throw error; }",
+      "replace": "    } catch (error) { resolveOpening(); throw error; }",
       "tests": [
         "tests/bootstrap/shared-ports-transitions.test.ts"
       ]
@@ -125,7 +125,7 @@
       "label": "opening tokens survive epoch invalidation",
       "file": "src/bootstrap/wiring/transition-owners.ts",
       "find": "for (const context of mine.openings) if (context.epoch !== epoch) context.finish();",
-      "replace": "void epoch;",
+      "replace": "for (const context of [...mine.openings]) if (context.epoch !== epoch) { context.finish(); mine.openings.add(context); }",
       "tests": [
         "tests/bootstrap/shared-ports-transitions.test.ts"
       ]
@@ -133,8 +133,8 @@
     {
       "label": "settled old opening clears the next opening",
       "file": "src/bootstrap/wiring/transition-owners.ts",
-      "find": "finish: () => { mine.openings.delete(context); resolveOpening(); }",
-      "replace": "finish: () => { if (started) started.openings.clear(); resolveOpening(); }",
+      "find": "      if (pending) void Promise.resolve(result).then(context.finish, context.finish);\n      else context.finish();\n      return result;\n    } catch (error) { context.finish(); throw error; }",
+      "replace": "      const clear = () => { if (started) started.openings.clear(); resolveOpening(); };\n      if (pending) void Promise.resolve(result).then(clear, clear);\n      else clear();\n      return result;\n    } catch (error) { clear(); throw error; }",
       "tests": [
         "tests/bootstrap/shared-ports-transitions.test.ts"
       ]
@@ -404,8 +404,8 @@
     {
       "label": "enter leaves settlement outside its entry scope",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  let release = signal ? undefined : holdSessionCommands(SHARED_SWITCHING, ports.ownsEntry ? \"all\" : \"entries\");\n  const releaseEntries = () => { release?.(); };\n  const holdEntries = () => { release ??= holdSessionCommands(SHARED_SWITCHING, \"entries\"); };\n  try { return await enterAvailableSession(ports, releaseEntries, open, signal, holdEntries); } finally { releaseEntries(); }",
-      "replace": "  const releaseEntries = () => {};\n  const holdEntries = () => {};\n  return enterAvailableSession(ports, releaseEntries, open, signal, holdEntries);",
+      "find": "  let release = signal ? undefined : holdSessionCommands(SHARED_SWITCHING, ports.ownsEntry ? \"all\" : \"entries\");",
+      "replace": "  let release = signal || !ports.ownsEntry ? undefined : holdSessionCommands(SHARED_SWITCHING, \"all\");",
       "tests": [
         "tests/bootstrap/shared-entry-switch-enter.test.ts",
         "tests/bootstrap/native-shared-entry.test.ts"
