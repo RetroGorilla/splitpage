@@ -7,7 +7,6 @@ import { timingMarks } from "../../../shared/timing-marks.ts";
 import { stopNativeCaretWait, waitForNativeCaret } from "./native-switch-caret.ts";
 import { documentReader } from "./ports/document.ts";
 import type { SharedUndoRoute } from "./undo.ts";
-import { writerControls } from "./writer.ts";
 
 export interface NativeUndoInput {
   readonly beforePress: () => string | null;
@@ -59,13 +58,12 @@ export function nativeUndoRoute({ native, admission, input, publish }: NativeUnd
     replay: (direction: UndoDirection) => {
       if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:start");
       try {
-        const writer = document.activeElement?.id === "writer-doc" ? writerControls()?.writerFlowControl() : null;
-        const before = writer?.selection();
-        const { outcome, selection, narrationPlacementLost } = press(direction);
+        const writerFocused = document.activeElement?.id === "writer-doc";
+        const { selection, narrationPlacementLost } = press(direction);
         if (selection) {
-          if (writer && selection.head.target.cell === "narration") stopNativeCaretWait("writer");
+          if (writerFocused && selection.head.target.cell === "narration") stopNativeCaretWait("writer");
           input()?.show(selection);
-        } else if (writer && (outcome.ok || "empty" in outcome) && (narrationPlacementLost || !before || !writer.selection())) {
+        } else if (writerFocused && narrationPlacementLost) {
           if (documentReader.current()?.rows.length) waitForNativeCaret("writer");
           else stopNativeCaretWait("writer");
         }
