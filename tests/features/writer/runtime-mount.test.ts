@@ -6,6 +6,7 @@ import { startWriter } from "../../../src/features/writer/writer.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeWriterPorts } from "../fakes.ts";
+import { deepFreeze } from "../../../src/core/document/freeze.ts";
 
 function harness() {
   Object.assign(globalThis, { MutationObserver: window.MutationObserver, CSS: { escape: (s: string) => s } });
@@ -134,13 +135,18 @@ test("a Writer repaint writes contenteditable only when editing permission chang
   } finally { writer.dispose(); }
 });
 
-test("a second Writer paint in the same task repaints only when the document, permission or Writer DOM changed", async () => {
+test("a second Writer paint in the same task repaints unless it shows the same frozen document over an untouched DOM", async () => {
   const h = harness(), create = h.ports.flow.create;
+  const current = h.ports.document.current();
+  assert.ok(current);
+  const frozen = (title: string) => deepFreeze(structuredClone({ ...current, title }));
+  let shown: typeof current = frozen("One");
   let repaints = 0;
-  const writer = startWriter({ ...h.ports, flow: { ...h.ports.flow, create: (...args) => {
-    const flow = create(...args);
-    return { ...flow, repaint: (restore?: boolean) => { repaints++; flow.repaint(restore); } };
-  } } });
+  const writer = startWriter({ ...h.ports, document: { ...h.ports.document, current: () => shown },
+    flow: { ...h.ports.flow, create: (...args) => {
+      const flow = create(...args);
+      return { ...flow, repaint: (restore?: boolean) => { repaints++; flow.repaint(restore); } };
+    } } });
   try {
     writer.openWriter();
     await Promise.resolve();
@@ -148,16 +154,24 @@ test("a second Writer paint in the same task repaints only when the document, pe
     repaints = 0;
     writer.renderWriter();
     writer.paintWriterDraw(writer.drawWriter());
-    assert.equal(repaints, 1, "the same document painted twice in one task repaints once");
+    assert.equal(repaints, 1, "the same frozen document painted twice in one task repaints once");
+    shown = frozen("One");
+    writer.renderWriter();
+    assert.equal(repaints, 2, "another document object repaints");
     root.append(document.createElement("span"));
     writer.renderWriter();
-    assert.equal(repaints, 2, "a Writer DOM change since the last paint repaints");
+    assert.equal(repaints, 3, "a Writer DOM change since the last paint repaints");
     h.state.allowed = false;
     writer.renderWriter();
-    assert.equal(repaints, 3, "a permission change repaints");
+    assert.equal(repaints, 4, "a permission change repaints");
     await Promise.resolve();
     writer.renderWriter();
-    assert.equal(repaints, 4, "a paint in a later task repaints");
+    assert.equal(repaints, 5, "a paint in a later task repaints");
+    const mutable = structuredClone({ ...current, title: "Two" });
+    shown = mutable;
+    writer.renderWriter();
+    writer.renderWriter();
+    assert.equal(repaints, 7, "a document that can still change repaints every time");
   } finally { writer.dispose(); }
 });
 

@@ -87,17 +87,21 @@ export function paintWriterDraw(draw: ReturnType<typeof drawWriter>) {
 let lastPaint: { readonly doc: WriterDocument; readonly draw: ReturnType<typeof drawWriter>; readonly writer: FlowWriter } | null = null;
 let writerMutations: MutationObserver | null = null;
 
-// why: one publish repaints the Writer from two subscribers; the second, with the same document and an untouched DOM,
-// redid every beat's diff and the caret placement for nothing
+// why: a shared publish repaints the Writer twice; a frozen document object can only mean the same text, so the second
+// paint with an untouched DOM is skipped
+function unchanging(painting: WriterDocument | null): painting is WriterDocument {
+  return !!painting && Object.isFrozen(painting) && Object.isFrozen(painting.rows);
+}
+
 function paintedThisTask(painting: WriterDocument | null, draw: ReturnType<typeof drawWriter>): boolean {
   const last = lastPaint;
-  if (!last || !writerMutations || !painting || last.writer !== flowWriter || last.doc !== painting) return false;
+  if (!last || !writerMutations || !unchanging(painting) || last.writer !== flowWriter || last.doc !== painting) return false;
   if (last.draw.title !== draw.title || last.draw.readOnly !== draw.readOnly) return false;
   return writerMutations.takeRecords().length === 0;
 }
 
 function markPainted(painting: WriterDocument | null, draw: ReturnType<typeof drawWriter>): void {
-  if (!writerMutations || !painting || !flowWriter) return;
+  if (!writerMutations || !unchanging(painting) || !flowWriter) return;
   writerMutations.takeRecords();
   const mark = { doc: painting, draw, writer: flowWriter };
   lastPaint = mark;
