@@ -402,7 +402,8 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
               if (event.kind === "session-replaced" && sessionCurrent()) collaborationState().dismissOfflineClashes();
               const previous = membership;
               const origin = pictureOrigin;
-              if (event.kind === "authentication-failed" && exchangePassword && origin && previous?.role === "guest"
+              if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI
+                && event.kind === "authentication-failed" && origin && previous?.role === "guest"
                 && (event.reason === "password-changed" || (event.reason === "permission-denied" && previous.guestLinkToken))) {
                 const linkToken = previous.guestLinkToken ?? previous.token;
                 const check = async () => {
