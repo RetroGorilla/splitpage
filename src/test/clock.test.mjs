@@ -1,6 +1,8 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import "./_preferences-started.mjs";
 import {
   clockCycle,
@@ -20,6 +22,12 @@ const MIDNIGHT = new Date(2026, 8, 24, 0, 15);
 function expectedClock(when, options = {}) {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", ...options }).format(when);
 }
+
+test("the clock uses the local language and time zone", () => {
+  execFileSync(process.execPath, [fileURLToPath(new URL("./_clock-local-defaults.mjs", import.meta.url))], {
+    env: { ...process.env, TZ: "America/Los_Angeles" }
+  });
+});
 
 test("12-hour: local times in the morning, afternoon and after midnight", () => {
   for (const when of [AFTERNOON, MORNING, MIDNIGHT]) {
