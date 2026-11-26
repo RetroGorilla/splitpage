@@ -68,8 +68,13 @@ function findNeedle() {
   return (document.getElementById("find-input") as HTMLInputElement).value || "";
 }
 
+const MEDIA_HTML = /<img[\s>]|video-embed-card/i;
+
 function cellReader(): (html: string) => readonly Run[] {
-  return (ports as FindRuntimePorts).native?.()?.cells ?? (ports as FindRuntimePorts).text.scriptCellOf;
+  const native = (ports as FindRuntimePorts).native?.()?.cells;
+  if (native) return native;
+  const text = (ports as FindRuntimePorts).text;
+  return html => MEDIA_HTML.test(html || "") ? text.scriptCellOf(html) : text.cellOf(html);
 }
 
 function domOffsets(model: readonly Run[], hits: readonly { from: number; to: number }[]) {
@@ -130,7 +135,7 @@ export function replaceInHtml(html: string, needle: string, replacement: unknown
   const matches = domOffsets(shown, hits);
   const text = replacement == null ? "" : String(replacement);
   const todo = matches.slice().reverse();
-  if (/<img[\s>]|video-embed-card/i.test(html || "")) {
+  if (MEDIA_HTML.test(html || "")) {
     const body = (ports as FindRuntimePorts).text.inertBody(html);
     let expect = projection(cell);
     for (let i = 0; i < todo.length; i++) {
@@ -631,13 +636,13 @@ function firstMatchFrom(range: Range | null) {
   const rows = ((ports as FindRuntimePorts).document.current() as FindDocumentView).rows;
   const html = (rows[rowIdx] as DocumentRow)[field] as string;
   const read = (ports as FindRuntimePorts).text.cellOf;
-  const model = ((ports as FindRuntimePorts).native?.()?.cells ?? (ports as FindRuntimePorts).text.scriptCellOf)(html);
+  const runs = cellReader()(html);
   const expect = projection(read(html));
-  const hits = findInCell(model, findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
+  const hits = findInCell(runs, findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
   let nth = 0;
   while (nth < hits.length) {
     const hit = hits[nth] as { from: number; to: number; };
-    const r = domRangeFor(cell as Element, domOffset(model, hit.from), domOffset(model, hit.to), expect);
+    const r = domRangeFor(cell as Element, domOffset(runs, hit.from), domOffset(runs, hit.to), expect);
     if (r && r.compareBoundaryPoints(Range.START_TO_START, range) >= 0) break;
     nth++;
   }

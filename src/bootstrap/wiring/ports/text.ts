@@ -3,8 +3,7 @@ import { retagTagAnchors } from "../../../adapters/richtext/tag-anchors.ts";
 import { cacheSeal } from "../../cache-freeze.ts";
 import { productionReaders } from "../../document-ports.ts";
 import { htmlToPlainText } from "../../../bootstrap/plain-text.ts";
-import { scriptCellOf } from "../../richtext.ts";
-import { cellOf, fromHtml, htmlToMarkdown, inertBody, cleanPastedCell, sanitizeHtml, storedHtmlFromDom } from "../../richtext.ts";
+import { cellOf, scriptCellOf, fromHtml, htmlToMarkdown, inertBody, cleanPastedCell, sanitizeHtml, storedHtmlFromDom } from "../../richtext.ts";
 import { buildVideoCardEl } from "../../richtext.ts";
 import { videoHostLabel } from "../../../adapters/formats/video-host.ts";
 

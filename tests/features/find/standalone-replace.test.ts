@@ -218,6 +218,24 @@ for (const all of [false, true]) test("standalone " + (all ? "Replace all" : "Re
   assert.ok(runs > 2 * words && reads < 20 * runs, reads + " reads of a cell of " + runs + " runs");
 });
 
+test("standalone Find reads only cells with media through the media-aware reader", () => {
+  const notices = fakeNotices(), h = harness(), read: string[] = [];
+  h.session.adopt(source("cup cup"));
+  const html = "cu" + PIC + "p cup";
+  h.session.run(rewriteCellsCommand("picture", () => [{ rowId: "R1", field: "audioText", html }], bufferStamps("Bob", () => ""), { needs: "edit", stamped: false }));
+  const route = finder(h.session, notices, false, source => { read.push(String(source ?? "")); return scriptCellOf(source); });
+  try {
+    shownCell(html);
+    route.search("cup", "mug");
+    assert.deepEqual([count(), lit()], ["1 of 2", ["p cup", 2, "p cup", 5]]);
+    route.replace();
+    route.replaceAll();
+  } finally { route.dispose(); }
+  assert.deepEqual(h.session.read(doc => doc?.rows.map(row => row.audioText)), ["cu" + PIC + "p mug", "a mug"]);
+  assert.ok(read.length > 0);
+  assert.deepEqual(read.filter(source => !source.includes("<img")), []);
+});
+
 const CARD = '<a class="video-embed-card" href="https://youtu.be/abc" contenteditable="false">Watch</a>';
 for (const [where, cell, put, after, all] of [
   ["across a video card", "cu" + CARD + "p cup", "mug", "cu" + CARD + "p mug", false],
