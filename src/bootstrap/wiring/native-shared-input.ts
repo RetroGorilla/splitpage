@@ -1359,10 +1359,18 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (input.isComposing || !(deletion || insertAllowed)) { refuseCommand(UNSUPPORTED); return; }
     const refusal = admissionRefusal();
     if (refusal) { refuseCommand(refusal); return; }
-    const selected = relativeTarget && cellSelection(cell);
-    const ranged = relativeTarget === undefined
-      ? isTitle ? titleInputRange(input, cell) : inputRange(input, cell)
-      : selected && { from: selected.from + relativeTarget.from, to: selected.to + relativeTarget.to };
+    let ranged: CellRange | "boundary" | null;
+    if (relativeTarget === undefined) {
+      ranged = isTitle ? titleInputRange(input, cell) : inputRange(input, cell);
+    } else {
+      const selected = relativeTarget && cellSelection(cell);
+      if (!selected) return;
+      const from = selected.from + relativeTarget.from, to = selected.to + relativeTarget.to;
+      const end = domToPos(cell, cell, cell.childNodes.length);
+      // why: heading conversion may have consumed the original target, including its soft break.
+      if (end === null || from < 0 || from > to || to > end || deletion && from === to) return;
+      ranged = { from, to };
+    }
     if (ranged === "boundary") return;
     const selection = ranged;
     if (!selection || deletion && selection.from === selection.to) { session.refuse(deletion ? UNSUPPORTED : STALE); return; }
