@@ -175,7 +175,39 @@ test("owner commands initialize, issue, list, revoke and delete a shared script"
   assert.equal((await run.owner("scripts", { method: "POST", headers: { "Idempotency-Key": id, "Splitpage-Content-SHA256": contentHash(Buffer.alloc(0)) }, body: null }, secret)).status, 400);
   assert.equal((await run.owner("scripts", { method: "POST", headers: { "Idempotency-Key": id, "Splitpage-Content-SHA256": contentHash(Uint8Array.of(255)) }, body: Uint8Array.of(255) }, secret)).status, 400);
   assert.equal((await run.owner("scripts", { ...create, body: Uint8Array.of(255) }, secret)).status, 422);
-  assert.equal((await run.owner("scripts", { method: "POST", headers: { "Idempotency-Key": id, "Splitpage-Content-SHA256": "0".repeat(64) }, body: Buffer.alloc(15_000_001) }, secret)).status, 413);
+  const ownerPort = await run.port();
+  const oversizedInitial = await new Promise<{ status: number | undefined; connection: string | undefined }>((resolve, reject) => {
+    let responseReceived = false;
+    const upload = request({
+      hostname: "127.0.0.1", port: ownerPort, path: "/api/scripts", method: "POST",
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        "Idempotency-Key": id,
+        "Splitpage-Content-SHA256": "0".repeat(64),
+        "Content-Length": "15000001"
+      },
+      signal: t.signal
+    }, response => {
+      responseReceived = true;
+      response.resume();
+      resolve({ status: response.statusCode, connection: response.headers.connection });
+      upload.destroy();
+    });
+    upload.on("error", error => {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (responseReceived && (code === "EPIPE" || code === "ECONNRESET")) return;
+      reject(error);
+    });
+    upload.flushHeaders();
+  });
+  assert.deepEqual(oversizedInitial, { status: 413, connection: "close" });
+  {
+    using db = openWriter(kit.directory);
+    assert.deepEqual(
+      db.prepare("SELECT name FROM scripts ORDER BY name").all().map(row => row.name),
+      ["pending-script", "test-script"]
+    );
+  }
   const [firstCreate, retryCreate] = await Promise.all([
     run.createScriptWithCredentials(id, state, secret),
     run.createScriptWithCredentials(id, state, secret)
@@ -184,7 +216,6 @@ test("owner commands initialize, issue, list, revoke and delete a shared script"
   assert.ok(firstCreate.owner && firstCreate.guest && retryCreate.owner && retryCreate.guest);
   const script = firstCreate.scriptId;
   assert.deepEqual(storedState(kit.directory, script), state);
-  const ownerPort = await run.port();
   const oversized = await new Promise<{ status: number | undefined; connection: string | undefined }>((resolve, reject) => {
     const upload = request({
       hostname: "127.0.0.1", port: ownerPort, path: "/api/scripts", method: "POST",
