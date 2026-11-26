@@ -5,6 +5,7 @@ eval window.F=window.__splitpageFormats; window.W=window.__writerFlowTest; F.ope
 wait F.state().title === 'Shared writer bar'
 click #btn-write
 wait W.on()
+eval document.fonts.ready.then(function(){ return true; })
 eval window.visible=function(id){var e=document.getElementById(id),r=e.getBoundingClientRect();return r.width>0&&r.height>0&&document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('#'+id)===e}; window.modeBox=document.getElementById('wr-close').getBoundingClientRect()
 expect visible('btn-file') && visible('wr-close') && visible('btn-save') && visible('length-status')
 expect document.getElementById('wr-save') === null && !visible('btn-write') && visible('wr-size')

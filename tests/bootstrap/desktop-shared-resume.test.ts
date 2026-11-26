@@ -3,11 +3,18 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { test } from "node:test";
 import type { DesktopPort } from "../../src/adapters/desktop/desktop-port.ts";
-import { enterSavedReference, resumeDesktopReference } from "../../src/bootstrap/wiring/desktop-shared-resume.ts";
+import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
+import { bootApp, closeApp } from "../../src/test/_app-boot.mjs";
 import { relayHttpOrigin, relayOriginAllowed, relaySocketUrl, relayUrlAllowed } from "../../src/bootstrap/wiring/relay-address.ts";
 import { enterRetainedSharedScript, RETAINED_SHARED_COPY_UNAVAILABLE } from "../../src/bootstrap/wiring/retained-shared-script.ts";
 import type { SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { SHARED_ENTER_FAILED } from "../../src/bootstrap/wiring/shared-session.ts";
+
+const buildFlag = globalThis as { SPLITPAGE_COLLAB_UI?: boolean; SPLITPAGE_TEST_HOOKS?: boolean };
+buildFlag.SPLITPAGE_COLLAB_UI = true;
+const { enterSavedReference, resumeDesktopReference, startDesktopSharedResume } = await import("../../src/bootstrap/wiring/desktop-shared-resume.ts");
+delete buildFlag.SPLITPAGE_COLLAB_UI;
+const { stopApp } = await import("../../src/bootstrap/app.ts");
 
 const saved = { deployment: "relay", script: "old", address: "https://relay.example" };
 
@@ -25,7 +32,7 @@ for (const [result, cleared] of [
     const calls: unknown[][] = [];
     const reference: NonNullable<DesktopPort["sharedReference"]> = async request => {
       calls.push(request);
-      return request.length ? true : saved;
+      return request.length ? true : { ...saved, reserved: false };
     };
     const outcome = await resumeDesktopReference(reference, async entry => {
       assert.deepEqual(entry, saved);
@@ -37,18 +44,40 @@ for (const [result, cleared] of [
   });
 }
 
-test("a failed catalogue-based restore releases its tab reference even when the copy is temporarily unavailable", async () => {
-  const calls: unknown[][] = [];
-  const reference: NonNullable<DesktopPort["sharedReference"]> = async request => {
-    calls.push(request);
-    return request.length ? true : saved;
-  };
-  const outcome = await resumeDesktopReference(reference, async () => ({ ok: false, reason: "io" }), new AbortController().signal, true);
-  assert.deepEqual(outcome, { ok: false, reason: "io" });
-  assert.deepEqual(calls, [[], [null, saved, "unavailable"]]);
+test("desktop startup releases failed shared re-entry reservations", async t => {
+  t.after(() => { stopApp(); closeApp(); });
+  await bootApp();
+  for (const [launch, result, cleanup] of [
+    ["open-file", "io", "release"],
+    ["open-file", "enter-failed", "release"],
+    ["blank", "locked", "release"],
+    ["open-shared", "io", "release"],
+    ["open-shared", "locked", "release"],
+    ["open-shared", RETAINED_SHARED_COPY_UNAVAILABLE, "unavailable"],
+    ["open-shared", "opened", null]
+  ] as const) {
+    await t.test(`re-entering a reserved tab launched as ${launch} (${result})`, { timeout: 3000 }, async t => {
+      const reply = { ...saved, reserved: true };
+      const calls: unknown[][] = [];
+      useDesktopForTest({ launchIntent: { type: launch }, sharedReference: async request => {
+        calls.push(request);
+        return request.length ? true : reply;
+      } });
+      const attempted = new Promise<void>(resolve => {
+        const stop = startDesktopSharedResume(async () => {
+          resolve();
+          return result === "opened" ? { ok: true } : { ok: false, reason: result };
+        });
+        t.after(stop);
+      });
+      t.after(restoreDesktop);
+      await attempted;
+      await new Promise<void>(resolve => setImmediate(resolve));
+      const release = cleanup === "unavailable" ? [null, saved, "unavailable"] : [null, saved];
+      assert.deepEqual(calls, cleanup ? [[], release] : [[]]);
+    });
+  }
 });
-
-const buildFlag = globalThis as { SPLITPAGE_TEST_HOOKS?: boolean };
 
 async function countingRelay(t: { after: (fn: () => Promise<void>) => void }) {
   const requests: string[] = [];
@@ -76,16 +105,16 @@ test("a release build refuses a saved loopback relay reference and sends it no r
   const calls: unknown[][] = [];
   const reference: NonNullable<DesktopPort["sharedReference"]> = async request => {
     calls.push(request);
-    return request.length ? true : loopback;
+    return request.length ? true : { ...loopback, reserved: false };
   };
   const restore = recordingPorts();
   const lifetime = new AbortController();
   const outcome = await resumeDesktopReference(reference,
     entry => enterSavedReference(entry, retained => enterRetainedSharedScript(restore.ports, retained), async () => lifetime.signal),
     lifetime.signal);
-  assert.deepEqual(outcome, { ok: false, reason: RETAINED_SHARED_COPY_UNAVAILABLE });
+  assert.deepEqual(outcome, { ok: false, reason: "invalid-saved-relay" });
   assert.deepEqual(restore.touched, []);
-  assert.deepEqual(calls, [[], [null, loopback, "unavailable"]]);
+  assert.deepEqual(calls, [[], [null, loopback]]);
   const socket = "ws" + relay.address.slice("http".length) + "/";
   const entry = recordingPorts();
   const retained = await enterRetainedSharedScript(entry.ports, {

@@ -1,7 +1,7 @@
 import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cellOf, inertBody, sanitizeHtml } from "../../../src/bootstrap/richtext.ts";
+import { cellOf, inertBody, sanitizeHtml, scriptCellOf } from "../../../src/bootstrap/richtext.ts";
 import { rewriteCellsCommand } from "../../../src/application/commands/document-edit.ts";
 import { findQueryChanged, mountFindEvents, startFind } from "../../../src/features/find/find.ts";
 import type { CommonDocumentSession } from "../../../src/application/session/document-session.ts";
@@ -24,14 +24,14 @@ function source(cell: string, visual = false): Record<string, unknown> {
     brollShots: [{ id: "S1", name: "Cup", status: "unshot", origin: "list" }] };
 }
 
-function finder(session: Reading, notices: Notices, matchCase = false) {
+function finder(session: Reading, notices: Notices, matchCase = false, read: typeof scriptCellOf = scriptCellOf) {
   (globalThis as unknown as Record<string, unknown>).CSS = window.CSS;
   document.body.innerHTML = BAR;
   const mounted = startFind({
     sharedCommands: { refuseUnsupported: () => false },
     document: { current: () => session.read(doc => doc), read: session.read, onChange: session.subscribe },
     edits: { edit: command => session.run(command).kind === "applied", stamps: bufferStamps("Alice", () => FIND_AT) },
-    text: { cellOf, inertBody, sanitizeHtml },
+    text: { cellOf, scriptCellOf: read, inertBody, sanitizeHtml },
     shotHiding: () => ({ reveal: () => {} }), undo: { breakCoalescing: () => {} }, notices: notices.notices,
     flags: { setFindOpen: () => {} }, options: { matchesCase: () => matchCase }, bulkTag: () => ({ hits: 0, inTags: 0, skipped: 0 }),
     present: { isOpen: () => false, setSearching: () => {}, jump: () => {}, onViewChange: () => () => {} }
@@ -108,6 +108,13 @@ const FIXTURES: readonly Fixture[] = [
   { name: "a picture and a tag before the match", cell: TAG + "cup", find: "cup", put: "mug", picture: { at: 0 }, after: PIC + TAG + "mug" },
   { name: "the second match after a picture", cell: "cup cup", find: "cup", put: "mug", nth: 1, picture: { at: 4 }, after: "cup " + PIC + "mug" },
   { name: "every match around a picture", cell: "cup cup", find: "cup", put: "mug", all: true, picture: { at: 3 }, after: "mug" + PIC + " mug" },
+  { name: "a picture inside the first word", cell: "cup cup", find: "cup", put: "mug", picture: { at: 2 }, after: "cu" + PIC + "p mug" },
+  { name: "every match beside a word split by a picture", cell: "cup cup cup", find: "cup", put: "mug", all: true, picture: { at: 6 },
+    after: "mug cu" + PIC + "p mug" },
+  { name: "a picture inside a bold word", cell: "<strong>cup</strong> cup", find: "cup", put: "mug", picture: { at: 1, bold: true },
+    after: "<strong>c" + PIC + "up</strong> mug" },
+  { name: "a picture inside a word in a visual cell", cell: "cup cup", find: "cup", put: "mug", all: true, visual: true, picture: { at: 2 },
+    after: "cu" + PIC + "p mug" },
   { name: "a picture before the match in a visual cell", cell: "cup shot", find: "cup", put: "mug", visual: true, picture: { at: 0 }, after: PIC + "mug shot" },
   { name: "every match beside a picture and a tag in a visual cell", cell: TAG + " cup", find: "cup", put: "mug", all: true, visual: true, picture: { at: 0 },
     after: PIC + TAG + " mug" },
@@ -159,7 +166,7 @@ function lit() {
 }
 const count = () => document.getElementById("find-count")?.textContent;
 
-test("standalone: a picture inside a word is skipped when searching, so highlight and Replace both take that word and the picture is deleted with it", () => {
+test("standalone: a word split by a picture is not a match, so highlight and Replace take the next word and keep the picture", () => {
   const notices = fakeNotices(), h = harness();
   h.session.adopt(source("cup cup"));
   const html = "cu" + PIC + "p cup";
@@ -168,10 +175,81 @@ test("standalone: a picture inside a word is skipped when searching, so highligh
   try {
     shownCell(html);
     route.search("cup", "mug");
-    assert.deepEqual([count(), lit()], ["1 of 3", ["cu", 0, "p cup", 1]]);
+    assert.deepEqual([count(), lit()], ["1 of 2", ["p cup", 2, "p cup", 5]]);
     route.replace();
   } finally { route.dispose(); }
-  assert.equal(h.session.read(doc => doc?.rows[0]?.audioText), "mug cup");
+  assert.equal(h.session.read(doc => doc?.rows[0]?.audioText), "cu" + PIC + "p mug");
+});
+
+test("standalone: Replace all leaves a word split by a picture and counts only whole words", () => {
+  const notices = fakeNotices(), h = harness();
+  h.session.adopt(source("cup cup cup"));
+  const html = "cup cu" + PIC + "p cup";
+  h.session.run(rewriteCellsCommand("picture", () => [{ rowId: "R1", field: "audioText", html }], bufferStamps("Bob", () => ""), { needs: "edit", stamped: false }));
+  const route = finder(h.session, notices);
+  try { route.search("cup", "mug"); route.replaceAll(); } finally { route.dispose(); }
+  assert.deepEqual([h.session.read(doc => doc?.rows.map(row => row.audioText))], [["mug cu" + PIC + "p mug", "a mug"]]);
+  assert.deepEqual(notices.shown.map(item => [item.message, item.kind]), [["Replaced 3 matches", "ok"]]);
+});
+
+for (const all of [false, true]) test("standalone " + (all ? "Replace all" : "Replace") + " reads a long cell with a picture a bounded number of times", () => {
+  const notices = fakeNotices(), h = harness(), words = 400;
+  h.session.adopt(source("x"));
+  const html = PIC + "<strong>cup</strong> cup ".repeat(words);
+  h.session.run(rewriteCellsCommand("picture", () => [{ rowId: "R1", field: "audioText", html }], bufferStamps("Bob", () => ""), { needs: "edit", stamped: false }));
+  const before = h.session.read(doc => doc?.rows[0]?.audioText) ?? "";
+  const runs = scriptCellOf(before).length;
+  let reads = 0;
+  const counted: typeof scriptCellOf = source => new Proxy(scriptCellOf(source), {
+    get(target, key, receiver) {
+      if (typeof key === "string" && /^\d+$/.test(key)) reads++;
+      return Reflect.get(target, key, receiver) as unknown;
+    }
+  });
+  const route = finder(h.session, notices, false, counted);
+  try {
+    route.search("cup", "mug");
+    reads = 0;
+    if (all) route.replaceAll(); else route.replace();
+  } finally { route.dispose(); }
+  const after = h.session.read(doc => doc?.rows[0]?.audioText);
+  assert.ok(before.startsWith(PIC));
+  assert.equal(after, all ? before.replaceAll("cup", "mug") : before.replace("cup", "mug"));
+  assert.ok(runs > 2 * words && reads < 20 * runs, reads + " reads of a cell of " + runs + " runs");
+});
+
+test("standalone Find reads only cells with media through the media-aware reader", () => {
+  const notices = fakeNotices(), h = harness(), read: string[] = [];
+  h.session.adopt(source("cup cup"));
+  const html = "cu" + PIC + "p cup";
+  h.session.run(rewriteCellsCommand("picture", () => [{ rowId: "R1", field: "audioText", html }], bufferStamps("Bob", () => ""), { needs: "edit", stamped: false }));
+  const route = finder(h.session, notices, false, source => { read.push(String(source ?? "")); return scriptCellOf(source); });
+  try {
+    shownCell(html);
+    route.search("cup", "mug");
+    assert.deepEqual([count(), lit()], ["1 of 2", ["p cup", 2, "p cup", 5]]);
+    route.replace();
+    route.replaceAll();
+  } finally { route.dispose(); }
+  assert.deepEqual(h.session.read(doc => doc?.rows.map(row => row.audioText)), ["cu" + PIC + "p mug", "a mug"]);
+  assert.ok(read.length > 0);
+  assert.deepEqual(read.filter(source => !source.includes("<img")), []);
+});
+
+const CARD = '<a class="video-embed-card" href="https://youtu.be/abc" contenteditable="false">Watch</a>';
+for (const [where, cell, put, after, all] of [
+  ["across a video card", "cu" + CARD + "p cup", "mug", "cu" + CARD + "p mug", false],
+  ["across a video card, every match", "cup cu" + CARD + "p cup", "mug", "mug cu" + CARD + "p mug", true],
+  ["next to a video card", CARD + "cup cup", "mug", CARD + "mug cup", false],
+  ["next to a video card, every match", "cup" + CARD + " cup", "mug", "mug" + CARD + " mug", true]
+] as const) test("standalone " + (all ? "Replace all" : "Replace") + " " + where + " keeps the card", () => {
+  const notices = fakeNotices(), h = harness();
+  h.session.adopt(source("x"));
+  const stored = sanitizeHtml(cell);
+  h.session.run(rewriteCellsCommand("video", () => [{ rowId: "R1", field: "audioText", html: stored }], bufferStamps("Bob", () => ""), { needs: "edit", stamped: false }));
+  const route = finder(h.session, notices);
+  try { route.search("cup", put); if (all) route.replaceAll(); else route.replace(); } finally { route.dispose(); }
+  assert.equal(h.session.read(doc => doc?.rows[0]?.audioText), sanitizeHtml(after));
 });
 
 test("standalone Find replaces one match, then the remaining matches", () => {
