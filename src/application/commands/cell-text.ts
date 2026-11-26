@@ -1,7 +1,7 @@
 import { newBrollShot } from "../../core/document/broll.ts";
 import type { DocumentShot, DocumentTag } from "../../core/document/validated.ts";
 import { newRegistryTag } from "../../core/production/tags.ts";
-import { toHtml } from "../../core/text/html.ts";
+import { matchesLegacyAttributeAngles, toHtml } from "../../core/text/html.ts";
 import { commentIds, isMediaRun, normalizeCell } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
 import type { CellDecoder } from "../../core/text/ports.ts";
@@ -123,7 +123,7 @@ export function cellTextCommand(rowId: string, field: string, text: CellText, po
       if (!row) return null;
       const before = row[field];
       const after = storedForm(text);
-      if (before === after) return null;
+      if (before === after || matchesLegacyAttributeAngles(before, after)) return null;
       const tags = newTags(doc, records.tags || []);
       const shots = newShots(doc, records.shots || []);
       const can = capability.edit();

@@ -2,7 +2,7 @@ import type { Seal } from "../../core/document/freeze.ts";
 import type { IdSource, ImageSource } from "../../core/document/ports.ts";
 import { withoutLoneSurrogates } from "../../core/document/text-policy.ts";
 import type { StoredImageRef } from "../../core/document/text-policy.ts";
-import { toHtml } from "../../core/text/html.ts";
+import { escapeHtmlAttributeAngles, matchesLegacyAttributeAngles, toHtml } from "../../core/text/html.ts";
 import type { DecodeOptions } from "../../core/text/ports.ts";
 import { withoutWho } from "../../core/text/who.ts";
 import type { Run } from "../../core/text/runs.ts";
@@ -35,10 +35,6 @@ export interface RichText {
 
 const STORED_IMG_ATTRS: ReadonlySet<string> = new Set(["class", "data-blob", "data-w", "data-h", "data-mime"]);
 
-function mapAttributeValues(html: string, map: (value: string) => string): string {
-  return html.replace(/<[a-z][a-z0-9-]*(?: [a-z0-9-]+="[^"]*")+>/g, tag => tag.replace(/"[^"]*"/g, map));
-}
-
 export function createRichText(ports: RichTextPorts): RichText {
   const Parser = ports.DOMParser;
   const images = ports.images;
@@ -51,7 +47,7 @@ export function createRichText(ports: RichTextPorts): RichText {
       probe.setAttribute("title", "<>");
       escapesAttributeAngles = probe.outerHTML.includes("&lt;&gt;");
     }
-    return escapesAttributeAngles ? html : mapAttributeValues(html, value => value.replaceAll("<", "&lt;").replaceAll(">", "&gt;"));
+    return escapesAttributeAngles ? html : escapeHtmlAttributeAngles(html);
   }
 
   function parsedBody(text: string): HTMLElement {
@@ -74,10 +70,7 @@ export function createRichText(ports: RichTextPorts): RichText {
 
   function sanitizeStored(html: unknown): string {
     const clean = sanitize(html);
-    if (typeof html !== "string" || html === clean || !/&[lg]t;/.test(clean)) return clean;
-    // why: A saved script can keep its old attribute bytes only if every other byte is already sanitised.
-    const legacy = mapAttributeValues(clean, value => value.replaceAll("&lt;", "<").replaceAll("&gt;", ">"));
-    return html === legacy ? html : clean;
+    return typeof html === "string" && matchesLegacyAttributeAngles(html, clean) ? html : clean;
   }
 
   function decode(html: unknown, opts?: DecodeOptions | null): Run[] {
