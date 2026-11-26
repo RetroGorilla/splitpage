@@ -2,39 +2,27 @@ type PasswordExchange =
   | { readonly kind: "credential"; readonly token: string }
   | { readonly kind: "failed"; readonly reason: string };
 
-function requestPasswordExchange(origin: string, script: string, linkToken: string, signal: AbortSignal,
-  body?: { password: string | null }): Promise<Response> {
-  return fetch(new URL("/api/scripts/" + encodeURIComponent(script) + "/password-exchange", origin), {
-    method: body ? "POST" : "HEAD",
-    headers: {
-      Authorization: "Bearer " + linkToken,
-      ...(body && { "Content-Type": "application/json" })
-    },
-    ...(body && { body: JSON.stringify(body) }),
-    cache: "no-store", credentials: "omit", redirect: "error",
-    signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)])
-  });
-}
-
 export async function checkLinkPasswordRecovery(origin: string, script: string, linkToken: string,
   signal: AbortSignal): Promise<"eligible" | "denied" | "retryable"> {
-  try {
-    const { status } = await requestPasswordExchange(origin, script, linkToken, signal);
-    if (status === 204) return "eligible";
-    if (status === 403 || status === 404) return "denied";
-  } catch {
-    return "retryable";
-  }
-  return "retryable";
+  const result = await exchangeLinkPassword(origin, script, linkToken, null, signal);
+  if (result.kind === "credential") return result.token === linkToken ? "eligible" : "retryable";
+  if (result.reason === "password-required") return "eligible";
+  return result.reason === "access-removed" ? "denied" : "retryable";
 }
 
 export async function exchangeLinkPassword(origin: string, script: string, linkToken: string, password: string | null,
   signal: AbortSignal): Promise<PasswordExchange> {
   try {
-    const response = await requestPasswordExchange(origin, script, linkToken, signal, { password });
+    const response = await fetch(new URL("/api/scripts/" + encodeURIComponent(script) + "/password-exchange", origin), {
+      method: "POST",
+      headers: { Authorization: "Bearer " + linkToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+      cache: "no-store", credentials: "omit", redirect: "error",
+      signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+    });
     if (response.status === 428) return { kind: "failed", reason: "password-required" };
     if (response.status === 401) return { kind: "failed", reason: "wrong-password" };
-    if (response.status === 403) return { kind: "failed", reason: "access-removed" };
+    if (response.status === 403 || response.status === 404) return { kind: "failed", reason: "access-removed" };
     if (response.status === 409) return { kind: "failed", reason: "password-changed" };
     if (response.status === 429) {
       const data = await response.json().catch(() => null) as { reason?: unknown } | null;

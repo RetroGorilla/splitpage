@@ -106,23 +106,20 @@ async function creationBody(request: IncomingMessage, limit: number): Promise<{ 
 export function ownerRequests(secret: string | undefined, limit: number, commands: Commands, deployment?: string,
   origins: ReadonlySet<string> = new Set()) {
   const authorize = managementAuthorizer(secret);
-  const attempts = new Map<string, { count: number; until: number }>();
-  const recoveryChecks: typeof attempts = new Map();
+  const attempts = new Map<string, { failures: number; checks: number; until: number }>();
   let exchangesInFlight = 0;
   let nextSweep = 0;
   const attemptPeriod = 60_000;
-  function attemptWindow(key: string, windows: typeof attempts) {
+  function attemptWindow(name: string) {
     const now = Date.now();
     if (now >= nextSweep) {
-      for (const entries of [attempts, recoveryChecks]) {
-        for (const [key, record] of entries) if (record.until <= now) entries.delete(key);
-      }
+      for (const [script, record] of attempts) if (record.until <= now) attempts.delete(script);
       nextSweep = now + attemptPeriod;
     }
-    let record = windows.get(key);
+    let record = attempts.get(name);
     if (!record || record.until <= now) {
-      record = { count: 0, until: now + attemptPeriod };
-      windows.set(key, record);
+      record = { failures: 0, checks: 0, until: now + attemptPeriod };
+      attempts.set(name, record);
     }
     return record;
   }
@@ -146,37 +143,31 @@ export function ownerRequests(secret: string | undefined, limit: number, command
         if (origin !== undefined && !origins.has(origin)) throw new RequestError(403);
         if (origin) response.setHeader("Access-Control-Allow-Origin", origin);
         if (method === "OPTIONS") {
-          const requestedMethod = request.headers["access-control-request-method"];
-          if (!origin || (requestedMethod !== "POST" && requestedMethod !== "HEAD")) throw new RequestError(403);
-          response.setHeader("Access-Control-Allow-Methods", "HEAD, POST");
+          if (!origin || request.headers["access-control-request-method"] !== "POST") throw new RequestError(403);
+          response.setHeader("Access-Control-Allow-Methods", "POST");
           response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
           reply(204);
           return true;
         }
-        if (method !== "POST" && method !== "HEAD") throw new RequestError(405);
-        if (method === "HEAD") {
-          const check = attemptWindow(request.socket.remoteAddress ?? "", recoveryChecks);
-          if (check.count >= 60) {
-            response.setHeader("Retry-After", "60");
-            reply(429);
-            return true;
-          }
-          check.count += 1;
-        }
+        if (method !== "POST") throw new RequestError(405);
         const token = bearerToken(request);
         if (!token || !commands.activeLink(name, token)) throw new RequestError(403);
-        if (method === "HEAD") {
-          reply(204);
-          return true;
-        }
         const value = await readPasswordBody(request);
         if (!request.complete || response.destroyed) return true;
         if (!commands.activeLink(name, token)) throw new RequestError(403);
         const stored = commands.readPassword(name);
-        const attempt = stored && value !== null ? attemptWindow(name, attempts) : undefined;
+        const attempt = stored || value === null ? attemptWindow(name) : undefined;
+        if (value === null && attempt) {
+          if (attempt.checks >= 60) {
+            response.setHeader("Retry-After", "60");
+            reply(429);
+            return true;
+          }
+          attempt.checks += 1;
+        }
         if (!stored) reply(200, { token });
         else if (value === null) reply(428);
-        else if (exchangesInFlight >= 8 || (attempt && attempt.count >= 5)) {
+        else if (exchangesInFlight >= 8 || (attempt && attempt.failures >= 5)) {
           response.setHeader("Retry-After", "60");
           reply(429);
         } else {
@@ -185,7 +176,7 @@ export function ownerRequests(secret: string | undefined, limit: number, command
             const result = await commands.exchange(name, token, value, stored);
             if (result.kind === "exchanged") reply(200, { token: result.token });
             else if (result.kind === "wrong-password") {
-              if (attempt) attempt.count += 1;
+              if (attempt) attempt.failures += 1;
               reply(401);
             } else if (result.kind === "device-limit") {
               response.setHeader("Retry-After", "5");

@@ -92,13 +92,13 @@ active guest link and password can join again. To withdraw guest access, use
 **Reset link** in Splitpage or `reset` in the CLI, then share the new link only
 with the intended recipients.
 
-When a returning copy needs a replacement credential, the app sends a HEAD
-request to `/api/scripts/<script-id>/password-exchange` to check that the stored
-guest link is still active. The relay checks the link again at password exchange.
-The HEAD budget is 60 requests per minute per connecting IP address. A reverse
-proxy or tunnel shares that budget across clients connecting through its address.
-Over-budget checks return HTTP 429 with `Retry-After: 60`, and the app offers a
-retry after temporary failures.
+When a returning copy needs a replacement credential, the app posts
+`{"password":null}` to the existing `/api/scripts/<script-id>/password-exchange`
+endpoint to check that the stored guest link is still active. The relay checks
+the link again when the guest submits the password. The relay allows 60 checks
+per minute per script, with a separate budget for password attempts. An exhausted
+check budget returns HTTP 429 with `Retry-After: 60`. The app offers a retry after
+temporary failures. You can update the app before updating the relay.
 
 ## Back up and rehearse a restore
 

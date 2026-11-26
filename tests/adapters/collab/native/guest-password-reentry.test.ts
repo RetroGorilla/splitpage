@@ -26,6 +26,7 @@ after(() => {
 
 for (const [scenario, title] of [
   ["eligible", "a returning guest can re-enter the password after their device credential is pruned"],
+  ["changed", "a returning guest can re-enter a changed password using the existing relay exchange"],
   ["reset", "a pruned device cannot re-enter after the guest link is reset"],
   ["retry", "an unavailable relay keeps password recovery retryable until the link check succeeds"]
 ] as const) {
@@ -34,6 +35,7 @@ for (const [scenario, title] of [
     const run = relay.launch();
     const state = relay.seed();
     const password = "Guest link password";
+    const recoveryPassword = scenario === "changed" ? "Changed guest link password" : password;
     const { scriptId, guest, owner } = await run.createScriptWithCredentials(randomUUID(), state, undefined, password);
     assert.ok(guest && owner);
     const guestLinkToken = guest.token;
@@ -58,7 +60,14 @@ for (const [scenario, title] of [
       copy.session.close();
       await copy.closed;
     }
-    for (let count = 0; count < MAX_DEVICE_CREDENTIALS_PER_SCRIPT; count++) await exchange();
+    if (scenario === "changed") {
+      const response = await run.owner(`scripts/${scriptId}/password`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: recoveryPassword })
+      }, owner.token);
+      assert.equal(response.status, 204);
+    } else {
+      for (let count = 0; count < MAX_DEVICE_CREDENTIALS_PER_SCRIPT; count++) await exchange();
+    }
 
     if (scenario === "reset") {
       const response = await run.owner(`scripts/${scriptId}/reset`, { method: "POST" }, owner.token);
@@ -68,7 +77,7 @@ for (const [scenario, title] of [
     if (scenario === "retry") {
       const fetchFromRelay = globalThis.fetch;
       t.mock.method(globalThis, "fetch", (input: URL, init?: RequestInit) => {
-        if (init?.method === "HEAD" && input.pathname.endsWith("/password-exchange")) {
+        if (init?.method === "POST" && init.body === JSON.stringify({ password: null }) && input.pathname.endsWith("/password-exchange")) {
           checks++;
           if (checks === 1) return Promise.resolve(new Response(null, { status: 503 }));
           if (checks === 2) return Promise.reject(new TypeError("Relay unavailable"));
@@ -110,20 +119,24 @@ for (const [scenario, title] of [
           retry.click();
         }
       }
-      while (!collaborationSnapshot().refusal) await delay(10, undefined, { signal: t.signal });
+      while (!collaborationSnapshot().refusal && collaborationSnapshot().passwordRecoveryCheck !== "retryable") {
+        await delay(10, undefined, { signal: t.signal });
+      }
+      assert.equal(collaborationSnapshot().passwordRecoveryCheck, null);
       if (scenario === "reset") {
         assert.equal(reenter?.hidden, true);
         assert.match(document.getElementById("collab-access-text")?.textContent ?? "", /^Your access to this shared script was removed\./);
         return;
       }
       assert.equal(reenter?.hidden, false);
-      assert.match(document.getElementById("collab-access-text")?.textContent ?? "", /Re-enter the link password/);
+      assert.match(document.getElementById("collab-access-text")?.textContent ?? "",
+        scenario === "changed" ? /The link password changed/ : /Re-enter the link password/);
       reenter?.click();
       const field = document.querySelector<HTMLInputElement>("#link-password-modal input");
       const reconnect = document.querySelector<HTMLButtonElement>("#link-password-modal [type=submit]");
       assert.ok(field && reconnect);
       while (reconnect.disabled) await delay(10, undefined, { signal: t.signal });
-      field.value = password;
+      field.value = recoveryPassword;
       reconnect.click();
       while (!collaborationSnapshot().relay.connected || !collaborationSnapshot().relay.firstSyncDone) {
         await delay(10, undefined, { signal: t.signal });

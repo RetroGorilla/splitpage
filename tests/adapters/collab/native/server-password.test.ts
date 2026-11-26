@@ -53,13 +53,7 @@ test("a protected creation rejects raw credentials from the first request, and l
   assert.equal(options.headers.get("Access-Control-Allow-Origin"), ORIGIN);
   assert.equal(options.headers.get("Vary"), "Origin");
   assert.equal(options.headers.get("Cache-Control"), "no-store");
-  const recoveryOptions = await run.owner(path, { method: "OPTIONS", headers: {
-    Origin: ORIGIN, "Access-Control-Request-Method": "HEAD", "Access-Control-Request-Headers": "authorization"
-  } }, null);
-  assert.equal(recoveryOptions.status, 204);
-  assert.equal(recoveryOptions.headers.get("Access-Control-Allow-Origin"), ORIGIN);
-  assert.match(recoveryOptions.headers.get("Access-Control-Allow-Methods") ?? "", /\bHEAD\b/);
-  assert.match(recoveryOptions.headers.get("Access-Control-Allow-Headers") ?? "", /\bAuthorization\b/i);
+  assert.equal(options.headers.get("Access-Control-Allow-Methods"), "POST");
   const denied = await run.owner(path, passwordRequest(password, "POST", "https://unlisted.example"), guest.token);
   assert.equal(denied.status, 403);
   assert.equal(denied.headers.get("Access-Control-Allow-Origin"), null);
@@ -101,7 +95,7 @@ test("exchanged credentials share their link's connection quota and churn cannot
   const unused = await exchange(run, scriptId, guest.token, password);
   const revoked = await exchange(run, scriptId, guest.token, password);
   const recoveryPath = `scripts/${scriptId}/password-exchange`;
-  const checkLink = { method: "HEAD", headers: { Origin: ORIGIN } };
+  const checkLink = passwordRequest(null);
   using db = new DatabaseSync(join(kit.directory, DB_NAME), { readOnly: true });
   assert.equal(verifyDatabase(db), 8);
   const deviceId = db.prepare("SELECT id FROM invitations WHERE token_hash = ?");
@@ -110,7 +104,7 @@ test("exchanged credentials share their link's connection quota and churn cannot
   assert.equal((await run.owner(`invitations/${revokedId}`, { method: "DELETE" })).status, 204);
   await refused(kit, kit.copy(port, undefined, scriptId, revoked), "access-removed");
   const eligible = await run.owner(recoveryPath, checkLink, guest.token);
-  assert.equal(eligible.status, 204);
+  assert.equal(eligible.status, 428);
   assert.equal(eligible.headers.get("Access-Control-Allow-Origin"), ORIGIN);
   const second = await exchange(run, scriptId, guest.token, password);
   const extra = await exchange(run, scriptId, guest.token, password);
@@ -146,7 +140,7 @@ test("exchanged credentials share their link's connection quota and churn cannot
   assert.equal(retained.length, MAX_DEVICE_CREDENTIALS_PER_SCRIPT);
   assert.deepEqual(retained.filter(row => !row.revoked).map(row => row.parent_link), [next.id]);
   assert.equal((await run.owner(`scripts/${scriptId}`, { method: "DELETE" }, owner.token)).status, 204);
-  assert.equal((await run.owner(recoveryPath, { method: "HEAD" }, next.token)).status, 403);
+  assert.equal((await run.owner(recoveryPath, checkLink, next.token)).status, 403);
   assert.equal((await run.owner(recoveryPath, passwordRequest(password), next.token)).status, 403);
 });
 
