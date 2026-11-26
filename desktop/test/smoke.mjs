@@ -3433,6 +3433,10 @@ async function caseSharedTabRestore(target, fixturesDir) {
     const file = (await window.splitpageDesktop.listRecents()).find(entry => !entry.shared && entry.name === 'share-original.splitpage');
     return window.splitpageDesktop.routeOpen({ kind: 'file', fileId: file.fileId });
   })()`;
+  const openSharedRecent = `(async () => {
+    const recent = (await window.splitpageDesktop.listRecents()).find(entry => entry.shared);
+    return window.splitpageDesktop.routeOpen({ kind: 'shared', fileId: recent.fileId });
+  })()`;
   try {
     const [port] = await once(relay, "message", { signal: AbortSignal.timeout(10_000) });
     if (typeof port !== "number") throw new Error("The test relay did not report its port.");
@@ -3473,7 +3477,11 @@ async function caseSharedTabRestore(target, fixturesDir) {
     const link = new URL(await evalPage(cdp, "document.querySelector('#share-script-link input').value"));
     const name = "desktop-smoke/" + link.searchParams.get("join");
     const replica = path.join(ownerProfile, "native-replicas", crypto.createHash("sha256").update(name).digest("hex"));
+    const membership = path.join(replica, "membership");
+    const heldMembership = membership + ".test-held";
     await evalPage(cdp, "document.querySelector('[data-share=close]').click()");
+    record(tag + ": a shared file tab reports its current reservation separately from its launch intent", await evalPage(cdp, `(async () =>
+      window.splitpageDesktop.launchIntent.type === 'open-file' && (await window.splitpageDesktop.sharedReference([]))?.reserved === true)()`));
 
     let sharedTabId = await tabIdOfTarget(cdp);
     const standaloneId = await shell(cdp, "createTab", {});
@@ -3496,6 +3504,32 @@ async function caseSharedTabRestore(target, fixturesDir) {
     record(tag + ": New Tab Recent uses the Shared badge and focuses the existing tab", true);
     record(tag + ": opening the source file focuses the shared tab",
       (await evalPage(standalone, openSource)).where === "other-tab");
+    const failedTabId = sharedTabId;
+    fs.renameSync(membership, heldMembership);
+    try {
+      fs.mkdirSync(membership);
+      await crashRenderer(cdp);
+      await sleep(1000);
+      cdp.close();
+      cdp = app.cdp = await connectTab(app, failedTabId);
+      await poll(cdp, "document.getElementById('toast-host')?.textContent.includes('Could not reopen the local shared script.')");
+    } finally {
+      if (fs.existsSync(membership)) fs.rmdirSync(membership);
+      fs.renameSync(heldMembership, membership);
+    }
+    record(tag + ": a transient membership read failure keeps the file copy association",
+      JSON.parse(fs.readFileSync(path.join(ownerProfile, "desktop-state.json"), "utf8")).sharedFileCopies?.some(copy => copy.absPath === fixture));
+    const retried = await evalPage(standalone, openSharedRecent);
+    const afterCrash = await shell(standalone, "listTargets", {});
+    sharedTabId = afterCrash.windows.find(win => win.tabs.some(tab => tab.tabId === failedTabId)).activeTabId;
+    if (retried.where !== "new-tab" || sharedTabId === failedTabId) throw new Error("Recent did not open a fresh tab after the renderer crash.");
+    cdp.close();
+    cdp = app.cdp = await connectTab(app, sharedTabId);
+    await poll(cdp, "window.__sharedTest?.read().app?.title === 'Sharing fixture'");
+    record(tag + ": Recent reopens the shared script in a fresh tab after renderer recovery fails", true);
+    record(tag + ": opening the original file still focuses the reopened shared tab",
+      (await evalPage(standalone, openSource)).where === "other-tab");
+
     const closedText = "Kept when closing the shared tab";
     await evalPage(cdp, "document.querySelector('#rows .row .audio-cell .cell-editable').focus()");
     await cdp.send("Input.insertText", { text: closedText });
@@ -3561,8 +3595,6 @@ async function caseSharedTabRestore(target, fixturesDir) {
     await fireEval(app.cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
     if (!await waitForExit(app.proc, 8000)) throw new Error("Quit before testing a failed restore did not finish.");
     await teardown(app, tag + " before failed restore", { expectExitCode: 0 });
-    const membership = path.join(replica, "membership");
-    const heldMembership = membership + ".test-held";
     const checkedCopy = fs.readFileSync(fixture);
     const external = splitpageFixtureText("Edited while closed", [["Outside visual", "Outside narration"]]);
     fs.writeFileSync(fixture, external, "utf8");
@@ -3591,10 +3623,7 @@ async function caseSharedTabRestore(target, fixturesDir) {
     } finally { fs.renameSync(heldMembership, membership); }
     record(tag + ": a missing retained copy releases the source path",
       !JSON.parse(fs.readFileSync(path.join(ownerProfile, "desktop-state.json"), "utf8")).sharedFileCopies?.length);
-    const reopened = await evalPage(app.cdp, `(async () => {
-      const recent = (await window.splitpageDesktop.listRecents()).find(entry => entry.shared);
-      return window.splitpageDesktop.routeOpen({ kind: 'shared', fileId: recent.fileId });
-    })()`);
+    const reopened = await evalPage(app.cdp, openSharedRecent);
     if (reopened.where !== "new-tab") throw new Error("Recent did not open a fresh tab after the failed restore.");
     const listing = await shell(app.cdp, "listTargets", {});
     const newId = listing.windows.find(win => win.tabs.some(tab => tab.tabId === sharedTabId)).activeTabId;

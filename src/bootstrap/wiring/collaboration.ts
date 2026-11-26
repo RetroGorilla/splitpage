@@ -80,16 +80,18 @@ let recoveryDialog: ReturnType<typeof mountPasswordDialog> | undefined;
 function openPasswordRecovery(): void {
   if (recoveryDialog && !recoveryDialog.signal.aborted) return;
   const controls = retainedSharingControls();
-  if (!controls) return;
+  if (!controls || controls.recoveryPasswordRequired === null) return;
   recoveryDialog = mountPasswordDialog({
     title: "Re-enter password", submit: "Reconnect",
-    check: signal => controls.reenter(null, signal),
+    recovery: controls.recoveryPasswordRequired ? {} : { check: signal => controls.reenter(null, signal) },
     save: controls.reenter
   });
 }
 
 export const requestPasswordRecovery = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI
   ? openPasswordRecovery : undefined;
+export const retryPasswordRecovery = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI
+  ? () => retainedSharingControls()?.retryPasswordCheck() : undefined;
 
 function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "register">): () => void {
   const unmountAnnouncements = mountCollaborationAnnouncements(document, { collaboration });

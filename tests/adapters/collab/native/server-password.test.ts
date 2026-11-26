@@ -53,6 +53,7 @@ test("a protected creation rejects raw credentials from the first request, and l
   assert.equal(options.headers.get("Access-Control-Allow-Origin"), ORIGIN);
   assert.equal(options.headers.get("Vary"), "Origin");
   assert.equal(options.headers.get("Cache-Control"), "no-store");
+  assert.equal(options.headers.get("Access-Control-Allow-Methods"), "POST");
   const denied = await run.owner(path, passwordRequest(password, "POST", "https://unlisted.example"), guest.token);
   assert.equal(denied.status, 403);
   assert.equal(denied.headers.get("Access-Control-Allow-Origin"), null);
@@ -74,6 +75,7 @@ test("a protected creation rejects raw credentials from the first request, and l
   const capped = await run.owner(path, passwordRequest(password), guest.token);
   assert.equal(capped.status, 429);
   assert.equal(capped.headers.get("Retry-After"), "60");
+  assert.equal(await capped.text(), "");
   const other = await run.createScriptWithCredentials(randomUUID(), state, undefined, password);
   assert.ok(other.guest);
   await exchange(run, other.scriptId, other.guest.token, password);
@@ -91,6 +93,19 @@ test("exchanged credentials share their link's connection quota and churn cannot
   const port = await run.port();
   const first = await exchange(run, scriptId, guest.token, password);
   const unused = await exchange(run, scriptId, guest.token, password);
+  const revoked = await exchange(run, scriptId, guest.token, password);
+  const recoveryPath = `scripts/${scriptId}/password-exchange`;
+  const checkLink = passwordRequest(null);
+  using db = new DatabaseSync(join(kit.directory, DB_NAME), { readOnly: true });
+  assert.equal(verifyDatabase(db), 8);
+  const deviceId = db.prepare("SELECT id FROM invitations WHERE token_hash = ?");
+  const revokedId = deviceId.get(createHash("sha256").update(revoked).digest())?.id;
+  assert.equal(typeof revokedId, "string");
+  assert.equal((await run.owner(`invitations/${revokedId}`, { method: "DELETE" })).status, 204);
+  await refused(kit, kit.copy(port, undefined, scriptId, revoked), "access-removed");
+  const eligible = await run.owner(recoveryPath, checkLink, guest.token);
+  assert.equal(eligible.status, 428);
+  assert.equal(eligible.headers.get("Access-Control-Allow-Origin"), ORIGIN);
   const second = await exchange(run, scriptId, guest.token, password);
   const extra = await exchange(run, scriptId, guest.token, password);
   const active = kit.copy(port, undefined, scriptId, first);
@@ -102,25 +117,31 @@ test("exchanged credentials share their link's connection quota and churn cannot
   assert.equal(waiting.relay.status().firstSyncDone, false);
   other.close();
   await kit.until(() => waiting.relay.status().firstSyncDone || undefined);
-  using db = new DatabaseSync(join(kit.directory, DB_NAME), { readOnly: true });
   const rows = db.prepare("SELECT id, parent_link, revoked FROM invitations WHERE script = ? AND kind = 'device' ORDER BY rowid");
   assert.ok(rows.all(scriptId).every(row => row.parent_link === guest.id));
-  for (let count = 4; count <= MAX_DEVICE_CREDENTIALS_PER_SCRIPT + 2; count++) {
+  for (let count = 5; count <= MAX_DEVICE_CREDENTIALS_PER_SCRIPT + 2; count++) {
     await exchange(run, scriptId, guest.token, password);
   }
   assert.equal(rows.all(scriptId).length, MAX_DEVICE_CREDENTIALS_PER_SCRIPT);
+  assert.equal(deviceId.get(createHash("sha256").update(revoked).digest()), undefined);
+  await refused(kit, kit.copy(port, undefined, scriptId, revoked), "permission-denied");
+  await exchange(run, scriptId, guest.token, password);
   await refused(kit, kit.copy(port, undefined, scriptId, unused), "permission-denied");
   assert.equal((await run.owner(`scripts/${scriptId}/versions`, {}, first)).status, 200);
   assert.equal((await run.owner(`scripts/${scriptId}/versions`, {}, extra)).status, 200);
   assert.ok(active.relay.status().connected && waiting.relay.status().connected && managing.relay.status().connected);
   const reset = await run.owner(`scripts/${scriptId}/reset`, { method: "POST" }, owner.token);
   assert.equal(reset.status, 200);
+  assert.equal((await run.owner(recoveryPath, checkLink, guest.token)).status, 403);
   const next = await reset.json() as { id: string; token: string };
   await refused(kit, active, "access-removed");
   await exchange(run, scriptId, next.token, password);
   const retained = rows.all(scriptId);
   assert.equal(retained.length, MAX_DEVICE_CREDENTIALS_PER_SCRIPT);
   assert.deepEqual(retained.filter(row => !row.revoked).map(row => row.parent_link), [next.id]);
+  assert.equal((await run.owner(`scripts/${scriptId}`, { method: "DELETE" }, owner.token)).status, 204);
+  assert.equal((await run.owner(recoveryPath, checkLink, next.token)).status, 403);
+  assert.equal((await run.owner(recoveryPath, passwordRequest(password), next.token)).status, 403);
 });
 
 test("requiring, changing, removing and resetting a link updates guests without disconnecting either owner", async t => {

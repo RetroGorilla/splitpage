@@ -1,4 +1,4 @@
-import { accessRemovedMessage } from "../collaboration/state.ts";
+import { accessRemovedMessage, PASSWORD_RECOVERY_UNREACHABLE } from "../collaboration/state.ts";
 import type { CollaborationSnapshot } from "../collaboration/state.ts";
 
 export type AutoSaveTarget = "file" | null;
@@ -75,7 +75,7 @@ export function flowSaveStatus(input: SaveStatusInput): { readonly text: string;
   return { text: input.dirty ? "Unsaved changes" : "Saved", actionable: false, problem: false };
 }
 
-export type SharedSaveBannerKind = "save-error" | "merge-too-large" | "access-removed" | null;
+export type SharedSaveBannerKind = "save-error" | "merge-too-large" | "access-removed" | "password-recovery" | null;
 
 export interface SharedSaveStatusView {
   readonly label: string;
@@ -126,6 +126,16 @@ export function sharedSaveStatus(snapshot: CollaborationSnapshot): SharedSaveSta
       title: "Writing your changes on this device.",
       banner: null,
       bannerMessage: ""
+    });
+  }
+  if (snapshot.passwordRecoveryCheck === "retryable") {
+    return Object.freeze({
+      label: "Offline · saved on this device",
+      state: "warn",
+      actionable: true,
+      title: PASSWORD_RECOVERY_UNREACHABLE,
+      banner: "password-recovery",
+      bannerMessage: PASSWORD_RECOVERY_UNREACHABLE
     });
   }
   if (!snapshot.relay.connected) {

@@ -34,6 +34,15 @@ export const undoControl: UndoControl = {
   last: () => undoOwner().last()
 };
 
+// why: while shared, Ctrl+Z reaches the shared owner's author-local history and the standalone owner refuses its
+// held document, so a notice offers no standalone entry to undo
+export const notifiedUndo: Pick<UndoControl, "breakCoalescing" | "flush" | "last" | "undo"> = {
+  breakCoalescing: breakUndoGroup,
+  flush: () => { if (!sharedUndoRoute()) undoOwner().flush(); },
+  last: () => sharedUndoRoute() ? null : undoOwner().last(),
+  undo: () => undoOwner().undo()
+};
+
 export const cells: Pick<CellEditing<Element>, "edit" | "open"> = {
   edit: (cell, change) => cellEditing().edit(cell, change),
   open: (cell, separate) => cellEditing().open(cell, separate)

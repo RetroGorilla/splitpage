@@ -10,7 +10,8 @@ const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktop = path.join(here, "..");
 const MAIN = stripTypeScriptTypes(fs.readFileSync(path.join(desktop, "main.ts"), "utf8"));
-const EXPOSED = ["createTabWindow", "createTab", "tabs", "windowsById", "pendingDraftFlushes", "initDraftStore", "persistShellState", "requestCloseTab", "registerActivate"];
+const EXPOSED = ["createTabWindow", "createTab", "tabs", "windowsById", "pendingDraftFlushes", "initDraftStore", "persistShellState", "requestCloseTab", "registerActivate", "desktopState", "fileCopies", "relaySetup", "routeOpenPath"];
+const { fileFingerprint } = require(path.join(desktop, "file-service.ts"));
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -175,6 +176,9 @@ function loadMain(world) {
   };
   const fakeRequire = (id) => {
     if (id in stubs) return stubs[id];
+    if (id === "node:fs") return { ...fs, readFileSync(file, ...args) {
+      return file === path.join(desktop, ".build", "collaboration.json") ? JSON.stringify({ collabUi: world.collabUi }) : fs.readFileSync(file, ...args);
+    } };
     return require(id.startsWith(".") ? path.join(desktop, id) : id);
   };
 
@@ -191,10 +195,11 @@ function loadMain(world) {
   world.main.initDraftStore();
 }
 
-function makeWorld() {
+function makeWorld(collabUi = false) {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), "lifecycle-order-"));
   const world = {
     userData,
+    collabUi,
     entries: [],
     answers: [],
     dialogs: [],
@@ -238,6 +243,58 @@ function makeWorld() {
   return world;
 }
 
+const cases = [];
+const test = (name, fn, collabUi = false) => cases.push({ name, fn, collabUi });
+
+async function sharedFileTab(world) {
+  const window = world.window();
+  const source = { kind: "shared", deployment: "relay", script: "script" };
+  const tab = world.main.createTab(window.id, { source, launchIntent: { type: "open-shared" } });
+  const sender = tab.view.webContents;
+  sender.mainFrame = {};
+  const event = { sender, senderFrame: sender.mainFrame };
+  const record = { deployment: source.deployment, script: source.script, absPath: world.existing,
+    docId: "d" + "a".repeat(32), fingerprint: fileFingerprint(fs.readFileSync(world.existing)), missing: 0 };
+  assert.equal(await world.main.desktopState.write(state => {
+    state.sharedScripts = [{ deployment: source.deployment, script: source.script, title: "Shared", relayUrl: "wss://relay.example/", at: 1 }];
+    state.sharedFileCopies = [record];
+  }), true);
+  const saved = await world.main.relaySetup.sharedReference(event, []);
+  assert.equal(saved?.reserved, true);
+  return { window, tab, event, saved, record };
+}
+
+for (const attached of [false, true]) {
+  test(`stale recovery cleanup keeps the file copy and a newer ${attached ? "attached" : "starting"} recovery`, async world => {
+    const { tab, event, saved, record } = await sharedFileTab(world);
+    const pick = Promise.withResolvers();
+    const write = world.main.fileCopies.write("relay/script", Buffer.from("Copy"), 0, "export", "d" + "b".repeat(32), () => pick.promise);
+    const cleanup = world.main.relaySetup.sharedReference(event, [null, saved, "unavailable"]);
+    try {
+      event.sender.emit("did-navigate");
+      await world.main.relaySetup.sharedReference(event, []);
+      tab.sharedAttached = attached;
+      pick.resolve(null);
+      await write;
+      assert.equal(await cleanup, false);
+      assert.equal(tab.source.kind, "shared");
+      assert.equal(tab.sharedAttached, attached);
+      assert.deepEqual(world.main.fileCopies.forPath(world.existing), record);
+    } finally { pick.resolve(null); await write; await cleanup; }
+  }, true);
+}
+
+test("opening an associated file takes a fresh slot when recovery releases the previous tab during the file check", async world => {
+  const { window, tab, event, saved, record } = await sharedFileTab(world);
+  const opening = world.main.routeOpenPath(world.existing, { fromWindowId: window.id });
+  assert.equal(await world.main.relaySetup.sharedReference(event, [null, saved]), true);
+  const opened = await opening;
+  assert.equal(opened?.where, "new-tab");
+  assert.notEqual(opened.tabId, tab.id);
+  assert.equal(tab.source.kind, "blank");
+  assert.deepEqual(world.main.fileCopies.forPath(world.existing), record);
+}, true);
+
 const ASK_ONE_LEAVE = "ask You have unsaved changes [Leave without saving|Stay] If you leave now, your changes will be lost.";
 const ASK_ONE_TAB = "ask You have unsaved changes [Leave without saving|Stay] If you close this tab now, your changes will be lost.";
 const askMany = (count, leave, titles) =>
@@ -245,9 +302,6 @@ const askMany = (count, leave, titles) =>
 const QUITS_AFTER_LAST_WINDOW = process.platform !== "darwin"
   ? ["app.quit", "probe quitting", "draft markCleanExit", "quit done"]
   : [];
-
-const cases = [];
-const test = (name, fn) => cases.push({ name, fn });
 
 test("window close without files: question, settle, freeze, close", async (w) => {
   const rec = w.window();
@@ -779,7 +833,7 @@ const saved = { test: process.env.SPLITPAGE_TEST, noUpdate: process.env.SPLITPAG
 const restoreEnv = (name, value) => { if (value === undefined) delete process.env[name]; else process.env[name] = value; };
 const failures = [];
 for (const c of cases) {
-  const world = makeWorld();
+  const world = makeWorld(c.collabUi);
   try {
     await c.fn(world);
     console.log(`ok   - ${c.name}`);

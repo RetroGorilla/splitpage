@@ -68,8 +68,28 @@ function findNeedle() {
   return (document.getElementById("find-input") as HTMLInputElement).value || "";
 }
 
+const MEDIA_HTML = /<img[\s>]|video-embed-card/i;
+
 function cellReader(): (html: string) => readonly Run[] {
-  return (ports as FindRuntimePorts).native?.()?.cells ?? (ports as FindRuntimePorts).text.cellOf;
+  const native = (ports as FindRuntimePorts).native?.()?.cells;
+  if (native) return native;
+  const text = (ports as FindRuntimePorts).text;
+  return html => MEDIA_HTML.test(html || "") ? text.scriptCellOf(html) : text.cellOf(html);
+}
+
+function domOffsets(model: readonly Run[], hits: readonly { from: number; to: number }[]) {
+  const out: { from: number; to: number }[] = [];
+  let index = 0, pos = 0, media = 0;
+  const at = (offset: number) => {
+    while (index < model.length && pos < offset) {
+      const run = model[index++] as Run;
+      if (isMediaRun(run)) media++;
+      pos += run.atom ? 1 : run.text.length;
+    }
+    return offset - media;
+  };
+  for (const hit of hits) out.push({ from: at(hit.from), to: at(hit.to) });
+  return out;
 }
 
 function domOffset(model: readonly Run[], at: number) {
@@ -108,12 +128,14 @@ export function noMatchLabel(inTags: number) {
 
 export function replaceInHtml(html: string, needle: string, replacement: unknown, nth: number, matchCase: boolean, hooks?: Parameters<typeof toHtml>[1]) {
   let cell = (ports as FindRuntimePorts).text.cellOf(html);
-  let matches = findInCell(cell, needle, matchCase);
-  if (nth !== -1) matches = matches[nth] ? [matches[nth]] : [];
-  if (!matches.length) return { html: html, changed: 0 };
+  const shown = cellReader()(html);
+  let hits = findInCell(shown, needle, matchCase);
+  if (nth !== -1) hits = hits[nth] ? [hits[nth]] : [];
+  if (!hits.length) return { html: html, changed: 0 };
+  const matches = domOffsets(shown, hits);
   const text = replacement == null ? "" : String(replacement);
   const todo = matches.slice().reverse();
-  if (/<img[\s>]|video-embed-card/i.test(html || "")) {
+  if (MEDIA_HTML.test(html || "")) {
     const body = (ports as FindRuntimePorts).text.inertBody(html);
     let expect = projection(cell);
     for (let i = 0; i < todo.length; i++) {
@@ -305,7 +327,7 @@ export function replaceAll() {
     return out;
   }
   const total = (ports as FindRuntimePorts).document.read(replacedAll).total;
-  const read = (ports as FindRuntimePorts).text.cellOf;
+  const read = cellReader();
   const inTags = ((ports as FindRuntimePorts).document.current() as FindDocumentView).rows.reduce(function (n, row) {
     return n + countInTags(read(row.visualText as string), needle, (ports as FindRuntimePorts).options.matchesCase()) +
                countInTags(read(row.audioText as string), needle, (ports as FindRuntimePorts).options.matchesCase());
@@ -614,13 +636,13 @@ function firstMatchFrom(range: Range | null) {
   const rows = ((ports as FindRuntimePorts).document.current() as FindDocumentView).rows;
   const html = (rows[rowIdx] as DocumentRow)[field] as string;
   const read = (ports as FindRuntimePorts).text.cellOf;
-  const model = ((ports as FindRuntimePorts).native?.()?.cells ?? read)(html);
+  const runs = cellReader()(html);
   const expect = projection(read(html));
-  const hits = findInCell(model, findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
+  const hits = findInCell(runs, findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
   let nth = 0;
   while (nth < hits.length) {
     const hit = hits[nth] as { from: number; to: number; };
-    const r = domRangeFor(cell as Element, domOffset(model, hit.from), domOffset(model, hit.to), expect);
+    const r = domRangeFor(cell as Element, domOffset(runs, hit.from), domOffset(runs, hit.to), expect);
     if (r && r.compareBoundaryPoints(Range.START_TO_START, range) >= 0) break;
     nth++;
   }

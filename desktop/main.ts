@@ -466,6 +466,7 @@ const fileCopies = COLLAB_UI ? (() => {
   return createSharedFileCopies(desktopState, fileIds, key => pathToTabId.has(key));
 })() : undefined;
 const shareSources = new WeakMap<Electron.WebContents, { id: string; record: SharedFileRecord; complete: boolean }>();
+const sharedRecoveryAttempts = new WeakMap<DesktopMainTab, object>();
 
 const { hadPriorSession, isRestoringSession, restoreSessionAtLaunch, registerActivate } = createSessionRestore({
   app, BrowserWindow, desktopState, draftStore: () => draftStore, draftsList, tabs, windowsById, pathToTabId,
@@ -1344,6 +1345,7 @@ function wireTabView(tab: DesktopMainTab) {
   contents.on("render-process-gone", (_event, details) => {
     if (details && details.reason === "clean-exit") return;
     if (!tabs.has(tabId)) return;
+    sharedRecoveryAttempts.delete(tab);
     if (draftStore && draftsHasDraft(tabId)) {
       try { draftStore.hold(tabId); } catch { }
     }
@@ -1368,6 +1370,7 @@ function wireTabView(tab: DesktopMainTab) {
 
   contents.on("did-navigate", () => {
     if (!tabs.has(tabId)) return;
+    sharedRecoveryAttempts.delete(tab);
     tab.ready = false;
     tab.sharedAttached = false;
     if (draftStore) { try { draftStore.resetSeq(tabId); } catch { } }
@@ -1512,7 +1515,6 @@ async function routeFileCopy(record: SharedFileRecord, options?: OpenPathOptions
     await fileCopies.releaseOrphan(sharedScriptKey(record));
     return routeOpenPath(record.absPath, options);
   }
-  const existing = sharedTab(sharedScriptKey(record));
   const unchanged = await fileCopies.matches(record);
   if (fileCopies.forPath(record.absPath)?.docId !== record.docId) return routeOpenPath(record.absPath, options);
   if (!unchanged) {
@@ -1524,8 +1526,8 @@ async function routeFileCopy(record: SharedFileRecord, options?: OpenPathOptions
     if (answer !== "confirm") return { where: "cancelled", tabId: options?.fromTabId ?? w.activeTabId ?? "" };
   }
   if (fileCopies.forPath(record.absPath)?.docId !== record.docId) return { where: "cancelled", tabId: options?.fromTabId ?? w.activeTabId ?? "" };
-  const opened = sharedTab(sharedScriptKey(record)) ?? existing;
-  if (opened && tabs.has(opened.id)) {
+  const opened = sharedTab(sharedScriptKey(record));
+  if (opened) {
     activateTab(opened.id);
     focusWindow(opened.windowId);
     return { where: opened.id === options?.fromTabId ? "already-open" : "other-tab", tabId: opened.id };
@@ -1958,16 +1960,31 @@ const relaySetup = COLLAB_UI ? (() => {
     async sharedReference(event: DesktopIpcEvent, args: DesktopIpcArgs<"splitpage:relay-owner-resume">[0]) {
       const tab = tabWindow(event) && tabOf(event);
       if (!tab) return false;
-      if (!args.length) return sharedReferenceFor(tab);
+      if (!args.length) {
+        const saved = sharedReferenceFor(tab);
+        if (saved) sharedRecoveryAttempts.set(tab, {});
+        return saved && { ...saved, reserved: tab.source.kind === "shared" };
+      }
       const reference = normalizeSharedReference(args[0]);
       const previous = tab.shared;
       if ((args.length === 2 || (args.length === 3 && args[2] === "unavailable")) && args[0] === null) {
         const expected = normalizeSharedReference(args[1]);
-        const current = sharedReferenceFor(tab);
-        if (!expected || !current || sharedScriptKey(expected) !== sharedScriptKey(current) ||
-          expected.address !== current.address || tab.sharedAttached) return false;
-        if (tab.source.kind === "shared") {
-          if (args[2] === "unavailable") await fileCopies?.releaseOrphan(sharedScriptKey(tab.source));
+        if (!expected) return false;
+        const name = sharedScriptKey(expected);
+        const source = tab.source;
+        const attempt = sharedRecoveryAttempts.get(tab);
+        const ownsRecovery = () => {
+          if (!attempt || event.sender.isDestroyed() || !tabWindow(event) || tabOf(event) !== tab ||
+            tab.source !== source || tab.sharedAttached || sharedRecoveryAttempts.get(tab) !== attempt) return false;
+          const current = sharedReferenceFor(tab);
+          return !!current && sharedScriptKey(current) === name && expected.address === current.address;
+        };
+        if (!ownsRecovery()) return false;
+        if (source.kind === "shared") {
+          if (args[2] === "unavailable" && fileCopies) {
+            await fileCopies.releaseOrphan(name, ownsRecovery);
+            if (!ownsRecovery()) return false;
+          }
           detachSharedTab(tab);
           return true;
         }
@@ -2053,10 +2070,7 @@ async function askFileCopyChoice(tab: DesktopMainTab, problem: "changed" | "unav
 }
 
 function launchIntentFor(tab: DesktopMainTab) {
-  if (tab.source.kind === "shared") {
-    const shared = retainedSharedScript(tab.source);
-    if (shared) return { type: "open-shared", shared };
-  }
+  if (tab.source.kind === "shared" && retainedSharedScript(tab.source)) return { type: "open-shared" };
   if (draftsHasDraft(tab.id)) return { type: "restore-draft" };
   if (COLLAB_UI && tab.shared) return { type: "blank" as const };
   if (tab.source.kind === "file" && tab.pendingPayload) return { type: "open-file" };

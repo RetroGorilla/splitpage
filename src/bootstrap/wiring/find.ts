@@ -17,7 +17,6 @@ import { writerControls } from "./writer.ts";
 import { sharedCommandGuard } from "./ports/shared-command-notices.ts";
 import { sharedSession } from "./session-owner.ts";
 import { nativeEditorFind } from "./shared-session.ts";
-
 const find = owned<FindControls>();
 const events = owned<ReturnType<typeof mountFindEvents>>();
 

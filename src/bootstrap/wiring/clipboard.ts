@@ -1,10 +1,12 @@
 import { randomHexBytes, randomIds } from "../../adapters/identity/ids.ts";
 import { documentReader as portDocument, documentLifetime as portLifetime } from "./ports/document.ts";
-import { edits as portEdits, undoControl as portUndo } from "./ports/editing.ts";
+import { edits as portEdits, notifiedUndo, undoControl as portUndo } from "./ports/editing.ts";
 import { pictures as portPictures } from "./ports/pictures.ts";
 import { text as portText } from "./ports/text.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { screen as portScreen } from "./ports/screen.ts";
+import { sharedCommandGuard } from "./ports/shared-command-notices.ts";
+import { sharedSession } from "./session-owner.ts";
 import { brollSeedOf, recordPastedBroll } from "../../application/production/broll-records.ts";
 import { startCellClipboard as mountCellClipboard } from "../../features/clipboard/cell-clipboard.ts";
 import type { CellClipboardPorts, CopyPasteMount, BeatClipPorts, BeatSelectPorts } from "../../features/clipboard/ports.ts";
@@ -56,7 +58,7 @@ export function mountCopyPasteFeature(): CopyPasteMount {
       document: portDocument,
       lifetime: portLifetime,
       edits: portEdits,
-      undo: portUndo,
+      undo: notifiedUndo,
       pictures: portPictures,
       notices: portNotices,
       cells: { sync: (cell) => { cellEditing().sync(cell); } },
@@ -68,7 +70,9 @@ export function mountCopyPasteFeature(): CopyPasteMount {
       writerOpen: () => viewFlags().writerOpen(),
       startNewScript,
       nonce,
-      screen: portScreen
+      screen: portScreen,
+      sharing: sharedSession,
+      sharedCommands: sharedCommandGuard(sharedSession, portNotices)
     };
     const cells = mountCellClipboard(cellPorts);
     const beats = mountBeatClip(clipPorts);

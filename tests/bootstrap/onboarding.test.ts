@@ -41,7 +41,7 @@ test("wired onboarding replaces its mount, closes on file choices and disables s
   let closed = 0;
   const stopPanels = startSidePanels({
     registerPanel: () => () => {}, registerPage: () => () => {}, open: () => {}, close: () => {},
-    closeAll: () => { closed++; }, sync: () => {}, applyWidth: () => {}
+    closeIfOverlayingScript: () => {}, closeAll: () => { closed++; }, sync: () => {}, applyWidth: () => {}
   });
   mountLocalFilesFeature();
   const registry = createActionRegistry();

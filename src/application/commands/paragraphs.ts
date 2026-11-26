@@ -8,7 +8,10 @@ export interface ParagraphFlagChange {
   readonly start: boolean;
 }
 
-export function paragraphMembership(doc: DocumentView): Map<string, string> {
+export function paragraphMembership(doc: {
+  readonly rows: readonly { readonly id: string; readonly paragraphStart?: unknown }[];
+  readonly sections?: unknown;
+}): Map<string, string> {
   const anchors = new Set(scenesInOrder(doc)?.map(sceneFirstBeatId));
   const membership = new Map<string, string>();
   let first = "";

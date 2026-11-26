@@ -2,13 +2,13 @@ import { countInTags, findInCell } from "../core/text/search.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cellOf } from "../bootstrap/richtext.ts";
+import { cellOf, scriptCellOf } from "../bootstrap/richtext.ts";
 import { projection } from "../core/text/runs.ts";
 import { inertBody, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { findInRows, noMatchLabel, replaceInHtml } from "../features/find/find.ts";
 import { domProjection, domRangeFor } from "../features/common/find-dom.ts";
 import { startFind } from "../features/find/find.ts";
-startFind({ text: { cellOf, inertBody, sanitizeHtml } });
+startFind({ text: { cellOf, scriptCellOf, inertBody, sanitizeHtml } });
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 
 const find = (html, needle, matchCase) => findInCell(cellOf(html), needle, !!matchCase);

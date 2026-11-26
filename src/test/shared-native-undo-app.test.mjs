@@ -593,6 +593,55 @@ test("Split Find skips an interrupted word and replaces the highlighted match wi
   assert.deepEqual(hook.read().app, hook.read().peer);
 });
 
+const findMedia = [
+  ["a picture", '<img class="comment-img" data-blob="' + "a".repeat(64) + '" data-w="10" data-h="10" data-mime="image/png">',
+    { atom: "image", ref: { sha256: "a".repeat(64), width: 10, height: 10, mime: "image/png" }, text: "", marks: {} }],
+  ["a video card", sanitizeHtml('<a class="video-embed-card" href="https://youtu.be/abc" contenteditable="false">Watch</a>'),
+    { atom: "video", href: "https://youtu.be/abc", host: "youtu.be", text: "", marks: {} }]
+];
+const pictureLayouts = [
+  ["inside the first word", 2, ["cu", "p mug"], ["cu", "p mug"]],
+  ["before the first word", 0, ["", "mug cup"], ["", "mug mug"]],
+  ["after the first word", 3, ["mug", " cup"], ["mug", " mug"]]
+];
+for (const [media, PICTURE, run] of findMedia) for (const [where, offset, replaced, all] of pictureLayouts) for (const every of [false, true]) {
+  test(`Split Find ${every ? "Replace all" : "Replace"} with ${media} ${where} keeps it, standalone and shared alike, and Undo restores it`, async t => {
+    const results = [];
+    for (const native of [false, true]) {
+      if (native) {
+        await enter(t, [{ id: "r1", audioText: "cup cup" }], session => {
+          const at = session.commands.anchorText({ beat: "r1", cell: "narration" }, offset);
+          assert.equal(at.kind, "anchored");
+          assert.equal(session.commands.replaceText(at.range, [run]).kind, "written");
+        });
+      } else {
+        adoptReplacement(migrateRows({ title: "Media", rows: [{ id: "r1", audioText: "cup cup" }] }));
+        cell().focus();
+        cell().innerHTML = "cup cup".slice(0, offset) + PICTURE + "cup cup".slice(offset);
+        cell().dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "" }));
+        breakUndoGroup();
+      }
+      const before = app();
+      assert.equal(before, "cup cup".slice(0, offset) + PICTURE + "cup cup".slice(offset));
+      const field = search(t, "cup", "mug");
+      document.getElementById(every ? "find-replace-all" : "find-replace").click();
+      await Promise.resolve();
+      const [head, tail] = every ? all : replaced;
+      assert.equal(app(), head + PICTURE + tail);
+      results.push(app());
+      if (native) assert.deepEqual(hook.read().app, hook.read().peer);
+      field.blur();
+      assert.equal(press(document.body, "z"), true);
+      await Promise.resolve();
+      assert.equal(app(), before);
+      if (native) assert.deepEqual(hook.read().app, hook.read().peer);
+      document.getElementById("find-close").click();
+      if (native) assert.deepEqual(hook.leave(), { ok: true });
+    }
+    assert.equal(results[0], results[1]);
+  });
+}
+
 for (const [name, kind] of Object.entries(views)) {
   test(name + ": control-only paste and typing leave the selection intact", async t => {
     adoptReplacement(migrateRows({ title: "Inline", rows: [{ id: "r1", audioText: "Hello" }] }));

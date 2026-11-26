@@ -1,5 +1,5 @@
 import { appJs } from "../build.mjs";
-import { HISTORY_TEST_NAMES, STILL_IN_RELEASE, historyTestNames, hookNames, leakedHooks, timingMarkNames } from "./release-hooks.mjs";
+import { HISTORY_TEST_NAMES, STILL_IN_RELEASE, helpMarkdown, historyTestNames, hookNames, leakedHooks, timingMarkNames } from "./release-hooks.mjs";
 
 const APPROVED = Object.freeze([]);
 
@@ -92,6 +92,20 @@ function check(name, ok, detail) {
 function eq(name, actual, expected) {
   check(name, JSON.stringify(actual) === JSON.stringify(expected), `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
 }
+
+console.log("\nthe Help markdown:\n");
+
+const help = "# Help\n\n## Editing\n\nEdit a script.\n\n## Collaboration\n\nShare a script.\n\n### Invitations\n\nInvite people.\n\n## Exporting\n\nExport a script.\n";
+const helpWithoutCollaboration = "# Help\n\n## Editing\n\nEdit a script.\n\n## Exporting\n\nExport a script.\n";
+eq("it keeps the entire Help when collaboration is enabled", helpMarkdown(help, true), help);
+eq("it removes the Collaboration section and its subsections when disabled", helpMarkdown(help, false), helpWithoutCollaboration);
+
+const helpWithCrlf = "# Help\r\n\r\n## Collaboration\r\n\r\nShare a script.\r\n\r\n## Editing\r\n\r\nEdit a script.\r\n";
+eq("it removes the Collaboration section while preserving CRLF", helpMarkdown(helpWithCrlf, false),
+  "# Help\r\n\r\n## Editing\r\n\r\nEdit a script.\r\n");
+
+const helpWithoutSection = "# Help\n\n## Editing\n\n### Collaboration\n\n## Collaboration tips\n\nEdit a script.";
+eq("it preserves Help with no Collaboration section", helpMarkdown(helpWithoutSection, false), helpWithoutSection);
 
 console.log("\nthe hook scan:\n");
 
