@@ -17,6 +17,7 @@ import { writerControls } from "./writer.ts";
 import { sharedCommandGuard } from "./ports/shared-command-notices.ts";
 import { sharedSession } from "./session-owner.ts";
 import { nativeEditorFind } from "./shared-session.ts";
+import { scriptCellOf } from "../richtext.ts";
 
 const find = owned<FindControls>();
 const events = owned<ReturnType<typeof mountFindEvents>>();
@@ -30,6 +31,7 @@ export function mountFindFeature(): FindControls {
       document: portDocument,
       edits: portEdits,
       text: portText,
+      scriptCellOf,
       shotHiding: () => shotHiding,
       undo: portUndo,
       notices: portNotices,

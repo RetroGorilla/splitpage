@@ -69,7 +69,7 @@ function findNeedle() {
 }
 
 function cellReader(): (html: string) => readonly Run[] {
-  return (ports as FindRuntimePorts).native?.()?.cells ?? (ports as FindRuntimePorts).text.cellOf;
+  return (ports as FindRuntimePorts).native?.()?.cells ?? (ports as FindRuntimePorts).scriptCellOf;
 }
 
 function domOffset(model: readonly Run[], at: number) {
@@ -108,7 +108,8 @@ export function noMatchLabel(inTags: number) {
 
 export function replaceInHtml(html: string, needle: string, replacement: unknown, nth: number, matchCase: boolean, hooks?: Parameters<typeof toHtml>[1]) {
   let cell = (ports as FindRuntimePorts).text.cellOf(html);
-  let matches = findInCell(cell, needle, matchCase);
+  const shown = cellReader()(html);
+  let matches = findInCell(shown, needle, matchCase).map(hit => ({ from: domOffset(shown, hit.from), to: domOffset(shown, hit.to) }));
   if (nth !== -1) matches = matches[nth] ? [matches[nth]] : [];
   if (!matches.length) return { html: html, changed: 0 };
   const text = replacement == null ? "" : String(replacement);
@@ -305,7 +306,7 @@ export function replaceAll() {
     return out;
   }
   const total = (ports as FindRuntimePorts).document.read(replacedAll).total;
-  const read = (ports as FindRuntimePorts).text.cellOf;
+  const read = cellReader();
   const inTags = ((ports as FindRuntimePorts).document.current() as FindDocumentView).rows.reduce(function (n, row) {
     return n + countInTags(read(row.visualText as string), needle, (ports as FindRuntimePorts).options.matchesCase()) +
                countInTags(read(row.audioText as string), needle, (ports as FindRuntimePorts).options.matchesCase());
@@ -614,7 +615,7 @@ function firstMatchFrom(range: Range | null) {
   const rows = ((ports as FindRuntimePorts).document.current() as FindDocumentView).rows;
   const html = (rows[rowIdx] as DocumentRow)[field] as string;
   const read = (ports as FindRuntimePorts).text.cellOf;
-  const model = ((ports as FindRuntimePorts).native?.()?.cells ?? read)(html);
+  const model = ((ports as FindRuntimePorts).native?.()?.cells ?? (ports as FindRuntimePorts).scriptCellOf)(html);
   const expect = projection(read(html));
   const hits = findInCell(model, findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
   let nth = 0;
