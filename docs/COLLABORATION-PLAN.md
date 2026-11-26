@@ -43,14 +43,14 @@ The Stage 4 and 5 plan of 2026-11-23 (sharing, joining, version history and pres
 | Individually named invitations, one per person (sections 1, 2 and 9) | One guest link per script and a separate owner credential. **Reset link** replaces per-person revocation |
 | "A shared instance must not remain attached to an automatic file writer" (section 3) | The desktop that shared a saved file keeps it current with a [one-way copy](collaboration/native-adapter-design.md#the-desktop-file-copy-stage-4-part-8). The file is never read back |
 | History snapshots stay as checkpoints only (section 3) | The relay keeps [version history](collaboration/native-adapter-design.md#relay-version-history-stage-4-part-11a) |
-| Presence is names and connection state; carets optional (section 1) | Names, positions on the Rundown strip, a jump to a person's beat and a Writer sign are in. Remote carets stay optional and are not built |
+| Presence is names and connection state; carets optional (section 1) | Names, positions on the Rundown strip, a jump to a person's beat, a Writer sign, and remote carets and selections in Split and Writer are in |
 | Automatic reclamation is outside the first version (section 6) | Old versions are thinned on a schedule. Script content and pictures are still never removed automatically |
 
 ## 1 Purpose and decisions
 
 > Superseded in this table on 2026-11-19: *Server storage* (decision 19) and *Narration schema* (decision 1). See the update above.
 > Superseded in this table by Stage 4 decision 2: *Access* — one guest link per script and a separate owner credential replace individually named invitations.
-> Superseded in this table by Stage 4 decision 8: *Presence* — positions, a jump to a person's beat and a Writer sign are in; remote carets stay optional. See the update above.
+> Superseded in this table by Stage 4 decision 8 and Part 15: *Presence* — positions, a jump to a person's beat, a Writer sign, and remote carets and selections are in. See the update above.
 
 Build collaboration for a trusted group of two to six people. A participant can open a shared script when nobody else is online, edit with others, keep working through a connection outage, and export an independent file. Existing standalone editing and the `.splitpage` format remain supported.
 

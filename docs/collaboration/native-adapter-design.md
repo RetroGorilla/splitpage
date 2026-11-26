@@ -111,8 +111,7 @@ management-secret rotation coverage ([#1763](https://github.com/RetroGorilla/spl
 
 ### Stage 4 and 5: sharing, joining, version history and presence
 
-The Stage 4 and 5 plan of 2026-11-23 is on `main` through `f6b609cb9`. Part 16 turns the collaboration build
-setting on for release builds. Part 15, remote carets and selections, is optional and not built.
+The Stage 4 and 5 plan of 2026-11-23 is on `main` through `452ce26d8`. Part 16 turns the collaboration build setting on for release builds, and Part 15 adds remote carets and selections.
 
 - **Part 1 (`5b490a29e`):** relay storage v4. Invitations have an `owner` or `guest` role and record the creation
   that issued them. A creation carries a content hash and stays untouched until its first authentication. A retry
@@ -152,7 +151,14 @@ setting on for release builds. Part 15, remote carets and selections, is optiona
   each device credential to its guest link.
 - **Part 14 (`f6b609cb9`):** phone layouts, keyboard use and announcements, the Collaboration section of the help,
   and the [relay setup guide](relay-setup.md).
-- **Part 16:** release builds (`node build.mjs`, desktop staging, the portable package and the relay image) include
+- **Part 15 (`452ce26d8`):** remote carets and selections. Peers send their caret or selection as two Yjs relative
+  positions in presence, checked strictly on receive. An overlay outside the editable cells draws marks in Split and
+  Writer, mapped through painted-but-unshared text, only after the shared session connects and syncs and only for a
+  resolvable position in a visible beat field. A Writer visual caret needs the matching visual box open in the receiving
+  view; otherwise only the "Visual in use" indicator can appear. Present mode suppresses marks on either side, and
+  scene headings have no remote mark. Writer selections that cross beats clamp to the focus beat. Redraws are queued
+  on presence, view, focus, scroll, resize and changes to the shown text surface.
+- **Part 16 (`4c402da29`):** release builds (`node build.mjs`, desktop staging, the portable package and the relay image) include
   the collaboration UI, its help section and `wss:` in the connection policy. Test hooks, `__sharedTest`, the test
   build's `ws://127.0.0.1:*` policy and the loopback HTTP relay stay in test builds only. The desktop build setting
   records `testRelay` separately, and only that flag lets the relay owner accept `http://127.0.0.1:<port>`. In the
