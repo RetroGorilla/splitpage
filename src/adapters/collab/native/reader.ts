@@ -300,7 +300,8 @@ export class NativeScriptReader {
   private readonly rowCache = new Map<string, NativeReadRow>();
   private pictureRefsByRow?: WeakMap<NativeReadRow, readonly string[]>;
   private readonly seamsByRow = new Map<string, NativeNarrationSeams>();
-  private registryCache: { readonly records: Registries; readonly inputs: NativeRegistryRowInputs } | null = null;
+  private registryCache: { readonly records: Registries; readonly inputs: NativeRegistryRowInputs;
+    readonly groups: ReadonlyMap<string, readonly string[]> } | null = null;
   private readonly anchorsByRow = new Map<string, Set<string>>();
   private readonly rowsByAnchor = new Map<string, Map<string, CommentCell>>();
   private narration = new Map<string, readonly NativeSpanPlace[]>();
@@ -1127,10 +1128,15 @@ export class NativeScriptReader {
     const document = { ...this.collect(null), rows, ...sections.length ? { sections } : {} };
     if (this.registryCache) return deepFrozen({ ...document, ...this.registryCache.records });
     const snapshot = { ...document, ...this.storedRegistries(null) };
-    const inputs = projectNativeRegistries(snapshot, this.roots, () => this.rows());
+    const { inputs, groups } = projectNativeRegistries(snapshot, this.roots, () => this.rows());
     const { people, productionTags, brollShots } = snapshot;
-    this.registryCache = { inputs, records: deepFrozen({ people, productionTags, brollShots }) };
+    this.registryCache = { inputs, groups, records: deepFrozen({ people, productionTags, brollShots }) };
     return deepFrozen(snapshot);
+  }
+
+  tagGroup(id: string): readonly string[] | undefined {
+    if (!this.registryCache) this.document();
+    return this.registryCache?.groups.get(id);
   }
 
   pictureReferences() {

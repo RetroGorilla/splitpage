@@ -26,6 +26,8 @@ export type DocumentComment = {
   [key: string]: unknown;
 };
 
+export type UnmergedTagEdit = { field: "notes" | "owner" | "status"; value: string };
+
 export type DocumentTag = {
   id?: string | undefined;
   cat: string;
@@ -33,6 +35,7 @@ export type DocumentTag = {
   owner?: string | undefined;
   notes?: string | undefined;
   status?: string | undefined;
+  unmergedEdits?: readonly UnmergedTagEdit[] | undefined;
 };
 
 type DocumentShotProp = { id?: string | undefined; name?: string | undefined };

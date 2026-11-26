@@ -351,6 +351,14 @@ export function tagAllMentions(key: string | null) {
   (ports as TagPanelPorts).notices.show("Tagged " + done.hits + " mention" + (done.hits === 1 ? "" : "s") + " of " + item.name, "ok");
 }
 
+function unmergedTagEditsHtml(item: PresentedProductionEntry): string {
+  return (item.unmergedEdits ?? []).map(({ field, value }) => {
+    const label = field === "notes" ? "Notes" : field === "owner" ? "Assigned to" : "Status";
+    const text = field === "owner" ? personById(value)?.name ?? value : field === "status" ? tagStatus(value)?.label ?? value : value;
+    return '<dt>Unmerged edit · ' + label + '</dt><dd>' + escapeHtml(text).replace(/\n/g, '<br>') + '</dd>';
+  }).join("");
+}
+
 function tagEntityDetailHtml(item: PresentedProductionEntry, renaming: boolean, gear: boolean, detailId: string, prep = false, idKey = item.key) {
   if (sharedRegistryLife() && typed().draft("tag-rename-input", item.id ?? "") !== null) renaming = true;
   const k = escapeHtml(item.key);
@@ -445,7 +453,7 @@ function tagEntityDetailHtml(item: PresentedProductionEntry, renaming: boolean, 
       '<dd class="tag-notes-dd">' +
         '<textarea class="tag-notes-input ev-field" data-registry-id="' + escapeHtml(item.id || '') + '" id="' + notesId + '" data-key="' + k + '" rows="2" ' +
           'placeholder="Reference link, file path, spec, where it’s coming from…">\n' + escapeHtml(item.notes) + '</textarea>' +
-      '</dd>' +
+      '</dd>' + unmergedTagEditsHtml(item) +
     '</dl>';
   if (prep) return '<div class="prep-notes" id="' + detailId + '">' +
     (renaming ? '<div class="tag-rename-row"><input type="text" class="tag-rename-input ev-field" value="' + name +
@@ -456,7 +464,7 @@ function tagEntityDetailHtml(item: PresentedProductionEntry, renaming: boolean, 
     '<label for="' + notesId + '">Notes &amp; links</label>' +
     '<textarea class="tag-notes-input ev-field" data-registry-id="' + escapeHtml(item.id || '') + '" id="' + notesId + '" data-key="' + k + '" rows="2" placeholder="Reference link, spec, where it is coming from">\n' + escapeHtml(item.notes) + '</textarea>' +
     '<div class="prep-notes-tools">' + addPerson + more + '</div>' + personRow +
-    '<dl class="prep-untagged">' + untaggedMentionsHtml(item) + '</dl></div>';
+    '<dl class="prep-untagged">' + untaggedMentionsHtml(item) + unmergedTagEditsHtml(item) + '</dl></div>';
   if (!gear) return dl;
   return dl +
     '<div class="tag-detail-foot">' +
@@ -692,10 +700,15 @@ function typed(): TypedDrafts {
   return drafts as TypedDrafts;
 }
 
+function tagByRecord(record: string): PresentedProductionEntry | undefined {
+  const id = (ports as TagPanelPorts).shared.native?.()?.canonicalTagId(record) ?? record;
+  return productionEntries().find(item => item.id === id);
+}
+
 function tagUnsavedLabel(draft: TypedDraft): string {
   const what = TAG_UNSAVED_WHAT[draft.box] ?? "text";
   if (!draft.record) return "Unsaved " + what;
-  const item = productionEntries().find(item => item.id === draft.record);
+  const item = tagByRecord(draft.record);
   if (item) return item.name + ": unsaved " + what;
   return draft.record ? "The item was removed, so its " + what + " was not saved" : "The selected items were removed, so the " + what + " was not saved";
 }
@@ -713,7 +726,7 @@ function draftBoxes(roots: readonly string[], draft: TypedDraft, includeHidden =
 function showTagOrphans(rootIds: readonly string[]): void {
   const roots = rootIds.map(id => "#" + id);
   const hidden = typed().hidden(draft => draftBoxes(roots, draft).length > 0,
-    draft => !draft.record || productionEntries().some(item => item.id === draft.record));
+    draft => !draft.record || !!tagByRecord(draft.record));
   const html = typedOrphansHtml(hidden, tagUnsavedLabel);
   for (const id of rootIds) document.getElementById(id)?.querySelector(".typed-unsaved")?.remove();
   if (!html) return;
@@ -1350,7 +1363,7 @@ export function setTagOwner(key: string | null, personId: string) {
 function notesSave(key: string, record: string): TypedSave {
   return (text, quiet) => {
     const item = sharedRegistryLife() && (record || !(ports as TagPanelPorts).shared.native?.())
-      ? productionEntries().find(item => item.id === record) : findTagByKey(key);
+      ? tagByRecord(record) : findTagByKey(key);
     if (!item) return plainText(text).trim() ? "gone" : "saved";
     return heldWrite(updateTags([item], { notes: cappedLongText(plainText(text), 2000) }, quiet));
   };

@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import { BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_PROP_NAME_MAX, BROLL_TEXT_MAX, brollStatusId, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
 import type { BrollProp } from "../../../core/document/broll.ts";
-import { isTagId, nextTagStatus, normalizeTagName, registryKey, TAG_STATUS_IDS, tagCategoryId, tagStatusId } from "../../../core/document/tags.ts";
+import { isTagId, nextTagStatus, normalizeTagName, registryKey, TAG_STATUS_IDS, tagCategoryId, tagStatusId, unmergedTagEdits } from "../../../core/document/tags.ts";
 import { cappedLongText, cappedText, plainText } from "../../../core/document/text-policy.ts";
 import type { DocumentShape, DocumentTag } from "../../../core/document/validated.ts";
 import { PERSON_NAME_MAX } from "../../../core/production/records.ts";
@@ -138,6 +138,10 @@ function namedTag(document: DocumentShape, cat: unknown, name: unknown): Documen
   return document.productionTags.find(tag => tag?.cat === cat && normalizeTagName(tag?.name) === normalizeTagName(name)) ?? undefined;
 }
 
+function tagTargets(script: NativeScript, ids: readonly string[]): readonly string[] {
+  return [...new Set(ids.flatMap(id => script.reader.tagGroup(id) ?? [id]))];
+}
+
 function projectedTagIds(script: NativeScript, document: DocumentShape): ReadonlySet<string> {
   const ids = new Set<string>();
   for (const tag of document.productionTags) if (tag?.id) {
@@ -213,7 +217,33 @@ function checkRename(script: NativeScript, collection: Collection, map: RecordMa
     ? refuseRecord("value") : null;
   const cat = stored(map, "cat"), next = namedTag(document, cat, fields.name);
   if (!tagCategoryId(cat)) return refuseRecord("stored");
-  if (next && next.id !== id || nativeTagNamesInRows(script.reader.rows()).has(registryKey(String(cat), name))) return refuseRecord("value");
+  const canonical = script.reader.tagGroup(id)?.[0] ?? id;
+  if (next && next.id !== canonical || nativeTagNamesInRows(script.reader.rows()).has(registryKey(String(cat), name))) return refuseRecord("value");
+  return null;
+}
+
+function planTagFields(script: NativeScript, id: string, fields: Fields, cycle: boolean, document: DocumentShape, writes: Write[]): Refused | null {
+  const group = script.reader.tagGroup(id);
+  const shown = cycle && group ? document.productionTags.find(tag => tag?.id === group[0])?.status : undefined;
+  for (const member of group ?? [id]) {
+    const map = target(script.roots.tags, member);
+    if (!(map instanceof Y.Map)) return map;
+    const rename = checkRename(script, "tags", map, member, fields, document);
+    if (rename) return rename;
+    const before = cycle ? stored(map, "status", TAG_STATUS_IDS[0]) : undefined;
+    if (cycle && !tagStatusId(before)) return refuseRecord("stored");
+    const requested = cycle ? { ...fields, status: nextTagStatus(shown ?? before) } : fields;
+    if (!planFields(writes, map, requested)) return refuseRecord("stored");
+    const key = nativeFieldKey("unmergedEdits");
+    if (map.has(key)) {
+      const edits = unmergedTagEdits(stored(map, "unmergedEdits"));
+      const remaining = edits.filter(edit => !Object.hasOwn(requested, edit.field));
+      if (remaining.length < edits.length) writes.push(() => {
+        if (remaining.length) map.set(key, encodeNativeValue(remaining));
+        else map.delete(key);
+      });
+    }
+  }
   return null;
 }
 
@@ -229,17 +259,23 @@ function set(script: NativeScript, collection: Collection, ids: readonly string[
   }
   const owned = ownerName === undefined ? request : ownerFields(script, writes, request, ownerName, document);
   if ("kind" in owned) return owned as Refused;
+  if (collection === "tags") {
+    const targets = new Set(ids.map(id => script.reader.tagGroup(id)?.[0] ?? id));
+    for (const id of targets) {
+      const refusal = planTagFields(script, id, owned, cycle, document, writes);
+      if (refusal) return refusal;
+    }
+    return finish(writes);
+  }
   for (const id of ids) {
     const map = target(script.roots[collection], id);
     if (!(map instanceof Y.Map)) return map;
     const rename = checkRename(script, collection, map, id, owned, document);
     if (rename) return rename;
-    const before = cycle ? stored(map, "status", TAG_STATUS_IDS[0]) : undefined;
-    if (cycle && !tagStatusId(before)) return refuseRecord("stored");
     const { props, ...ordinary } = owned;
-    if (!planFields(writes, map, cycle ? { status: nextTagStatus(before) } : ordinary)) return refuseRecord("stored");
+    if (!planFields(writes, map, ordinary)) return refuseRecord("stored");
     if (props !== undefined) {
-      const list = prepareNativeShotProps(map, document.productionTags);
+      const list = prepareNativeShotProps(map, document.productionTags, id => script.reader.tagGroup(id));
       const requested = props as BrollProp[];
       if (list) list.replace(writes, requested);
       else writes.push(() => { map.set(NATIVE_SHOT_PROPS, newNativeShotProps(requested)); });
@@ -269,11 +305,8 @@ function updateTags(script: NativeScript, tags: unknown, fields: unknown, ownerN
     const id = tag?.id;
     const existing = id ? root.get(id) : undefined;
     if (id && root.has(id) && (!(existing instanceof Y.Map) || existing.get("removed") !== true)) {
-      const map = target(root, id);
-      if (!(map instanceof Y.Map)) return map;
-      const before = cycle ? stored(map, "status", TAG_STATUS_IDS[0]) : undefined;
-      if (cycle && !tagStatusId(before)) return refuseRecord("stored");
-      if (!planFields(writes, map, cycle ? { ...owned, status: nextTagStatus(before) } : owned)) return refuseRecord("stored");
+      const refusal = planTagFields(script, id, owned, cycle === true, document, writes);
+      if (refusal) return refusal;
       continue;
     }
     if (!add) {
@@ -292,7 +325,7 @@ function removeOrRestore(script: NativeScript, collection: Collection, ids: read
   const root = script.roots[collection];
   const names = restore && collection === "people" ? new Set([...root.values()].flatMap(map =>
     map instanceof Y.Map && map.get("removed") !== true ? [normalizeTagName(stored(map, "name"))] : [])) : null;
-  for (const id of ids) {
+  for (const id of collection === "tags" && !restore ? tagTargets(script, ids) : ids) {
     const map = target(script.roots[collection], id, restore);
     if (!(map instanceof Y.Map)) return map;
     if (names) {
@@ -309,9 +342,14 @@ function removeOrRestore(script: NativeScript, collection: Collection, ids: read
   return finish(writes);
 }
 
-function move(root: Root, id: string, before: string | null): Result {
-  const order = slots(root, false);
+function move(root: Root, id: string, before: string | null, canonical?: (id: string) => string): Result {
+  const stored = slots(root, false);
+  const order = canonical ? stored?.filter(entry => entry.id === canonical(entry.id)) : stored;
   if (!order) return refuseRecord("stored");
+  if (canonical) {
+    id = canonical(id);
+    before = before === null ? null : canonical(before);
+  }
   const at = order.findIndex(entry => entry.id === id);
   if (at < 0) return refuseRecord("missing");
   const moving = order[at] as Slot;
@@ -343,7 +381,7 @@ function changeProp(script: NativeScript, id: string, prop: string, kind: "addPr
   const shot = target(script.roots.shots, id);
   if (!(shot instanceof Y.Map)) return shot;
   const document = script.reader.document(), writes: Write[] = [];
-  const props = prepareNativeShotProps(shot, document.productionTags);
+  const props = prepareNativeShotProps(shot, document.productionTags, ref => script.reader.tagGroup(ref));
   if (!props) return refuseRecord("stored");
   if (kind === "addProp") {
     const name = normalizeTagName(prop);
@@ -375,9 +413,11 @@ function gear(script: NativeScript, names: readonly string[]): Result {
   for (const tag of document.productionTags) {
     if (tag?.cat !== "gear" || refs.has(normalizeTagName(tag.name)) || used.has(registryKey("gear", tag.name))) continue;
     if (!tag.id) return refuseRecord("stored");
-    const map = target(root, tag.id);
-    if (!(map instanceof Y.Map)) return map;
-    writes.push(() => { map.set("removed", true); });
+    for (const id of script.reader.tagGroup(tag.id) ?? [tag.id]) {
+      const map = target(root, id);
+      if (!(map instanceof Y.Map)) return map;
+      writes.push(() => { map.set("removed", true); });
+    }
   }
   const add = tagAppender(script, writes, order.at(-1)?.rank ?? null);
   for (const name of names) {
@@ -416,7 +456,7 @@ function applyChange(script: NativeScript, change: Fields): Result {
   if (kind === "create") return collection && recordBag(fields) ? create(script, collection, fields, ownerName) : refuseRecord("value");
   if (kind === "move") {
     if (!collection || !nativeRecordId(id) || before !== null && !nativeRecordId(before)) return refuseRecord("value");
-    return move(script.roots[collection], id, before);
+    return move(script.roots[collection], id, before, collection === "tags" ? id => script.reader.tagGroup(id)?.[0] ?? id : undefined);
   }
   const ids = listOf(change.ids, nativeRecordId);
   if (!ids) return refuseRecord("value");

@@ -8,6 +8,7 @@ import { newNativeShotProps } from "../../../../src/adapters/collab/native/shot-
 import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
 import { decodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
 import type { DocumentShape } from "../../../../src/core/document/validated.ts";
+import { arrangePackets, convertedScript, joinedScript } from "./helpers.ts";
 import { registryCopies, registrySource, registryUndoCopies } from "./registry-harness.ts";
 
 type Registry = Extract<NativeRegistryChange, { kind: "create" }>["collection"];
@@ -255,8 +256,8 @@ test("ownership set concurrently with person removal reads empty and returns wit
   });
 });
 
-test("same-name creations keep distinct minted IDs through reload", () => {
-  for (const [collection, fields] of [["people", { name: "Same" }], ["tags", { name: "Same", cat: "prop" }], ["shots", { name: "Same" }]] as const) {
+test("same-name people and shot creations keep distinct minted IDs through reload", () => {
+  for (const [collection, fields] of [["people", { name: "Same" }], ["shots", { name: "Same" }]] as const) {
     registryCopies((left, right, settle) => {
       const ids = [left, right].map(script => {
         const result = changeNativeRegistry(script, { kind: "create", collection, fields });
@@ -267,6 +268,114 @@ test("same-name creations keep distinct minted IDs through reload", () => {
       settle();
       assert.deepEqual(read(left, collection).filter(entry => entry?.name === "Same").map(entry => entry?.id).sort(), ids.toSorted());
     });
+  }
+});
+
+test("same-name tags read as one record and keep fields from either creation", () => {
+  registryCopies((left, right, settle) => {
+    const first = changeNativeRegistry(left, { kind: "create", collection: "tags", fields: { cat: "prop", name: "Kettle", status: "have" } });
+    const second = changeNativeRegistry(right, { kind: "create", collection: "tags", fields: { cat: "prop", name: "KETTLE", notes: "Handheld" } });
+    assert.ok("created" in first && "created" in second);
+    assert.notEqual(first.created, second.created);
+    settle();
+    const id = [first.created, second.created].sort()[0];
+    const name = id === first.created ? "Kettle" : "KETTLE";
+    assert.deepEqual(read(left, "tags").filter(tag => typeof tag?.name === "string" && tag.name.toLowerCase() === "kettle"),
+      [{ id, cat: "prop", name, notes: "Handheld", status: "have", owner: "" }]);
+    assert.ok(left.roots.tags.has(first.created) && left.roots.tags.has(second.created));
+  });
+});
+
+test("same-name tag conflicts stay reachable until a field is edited and return on undo", () => {
+  registryUndoCopies((left, right, settle) => {
+    const first = changeNativeRegistry(left, { kind: "create", collection: "tags", fields: { cat: "prop", name: "Kettle", notes: "Handheld", owner: "p1", status: "have" } });
+    const second = changeNativeRegistry(right, { kind: "create", collection: "tags", fields: { cat: "prop", name: "Kettle", notes: "From the kitchen", owner: "p2", status: "returned" } });
+    assert.ok("created" in first && "created" in second && first.created < second.created);
+    settle();
+    const undo = openNativeUndo(left);
+    try {
+      const tag = () => record(left, "tags", first.created);
+      const unmerged = [{ field: "notes", value: "From the kitchen" }, { field: "owner", value: "p2" }, { field: "status", value: "returned" }];
+      assert.deepEqual(tag(), { id: first.created, cat: "prop", name: "Kettle", notes: "Handheld", owner: "p1", status: "have", unmergedEdits: unmerged });
+      write(left, set("tags", second.created, { notes: "For the wide shot" }));
+      settle();
+      assert.equal(tag()?.notes, "For the wide shot");
+      assert.deepEqual(tag()?.unmergedEdits, unmerged.slice(1));
+      assert.equal(undo.undo().kind, "written");
+      settle();
+      assert.equal(tag()?.notes, "Handheld");
+      assert.deepEqual(tag()?.unmergedEdits, unmerged);
+    } finally { undo.destroy(); }
+  });
+});
+
+test("removing a folded tag removes both observed records and undo restores both fields", () => {
+  registryUndoCopies((left, right, settle) => {
+    const first = changeNativeRegistry(left, { kind: "create", collection: "tags", fields: { cat: "prop", name: "Kettle", notes: "Handheld" } });
+    const second = changeNativeRegistry(right, { kind: "create", collection: "tags", fields: { cat: "prop", name: "Kettle", status: "have" } });
+    assert.ok("created" in first && "created" in second);
+    settle();
+    const tag = () => read(left, "tags").filter(entry => entry?.name === "Kettle");
+    const folded = tag();
+    const undo = openNativeUndo(left);
+    try {
+      write(left, { kind: "remove", collection: "tags", ids: [first.created] });
+      settle();
+      assert.deepEqual(tag(), []);
+      assert.equal(undo.undo().kind, "written");
+      settle();
+      assert.deepEqual(tag(), folded);
+      assert.equal(undo.redo().kind, "written");
+      settle();
+      assert.deepEqual(tag(), []);
+    } finally { undo.destroy(); }
+  });
+});
+
+test("a same-name tag unseen by the remover survives delivery", () => {
+  registryCopies((left, right, settle) => {
+    const first = changeNativeRegistry(left, { kind: "create", collection: "tags", fields: { cat: "prop", name: "Kettle" } });
+    const second = changeNativeRegistry(right, { kind: "create", collection: "tags", fields: { cat: "prop", name: "Kettle", notes: "Still needed" } });
+    assert.ok("created" in first && "created" in second);
+    write(left, { kind: "remove", collection: "tags", ids: [first.created] });
+    settle();
+    assert.deepEqual(read(left, "tags").filter(entry => entry?.name === "Kettle"),
+      [{ id: second.created, cat: "prop", name: "Kettle", owner: "", notes: "Still needed", status: "needed" }]);
+  });
+});
+
+test("three independent same-name creations converge through a reload without rewriting the records", () => {
+  const seed = convertedScript(registrySource());
+  const copies = [4, 9, 12].map(id => joinedScript(seed, id));
+  try {
+    const initial = Y.encodeStateVector(seed.doc);
+    const ids = copies.map((script, index) => {
+      const result = changeNativeRegistry(script, { kind: "create", collection: "tags", fields: { cat: "prop", name: "Kettle", notes: ["A", "B", "C"][index] } });
+      assert.ok("created" in result);
+      return result.created;
+    });
+    const updates = copies.map(script => Y.encodeStateAsUpdate(script.doc, initial));
+    for (const [index, copy] of copies.entries()) {
+      for (const update of arrangePackets(updates, "shuffled", index + 1)) Y.applyUpdate(copy.doc, update, "peer");
+      const before = Y.encodeStateAsUpdate(copy.doc);
+      assert.deepEqual(read(copy, "tags").filter(tag => tag?.name === "Kettle"), [
+        { id: ids[0], cat: "prop", name: "Kettle", owner: "", notes: "A", status: "needed", unmergedEdits: [{ field: "notes", value: "B" }, { field: "notes", value: "C" }] }
+      ]);
+      assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), before);
+    }
+    const first = copies[0];
+    assert.ok(first);
+    const reopened = joinedScript(first, 15);
+    try {
+      assert.deepEqual(reopened.reader.document(), first.reader.document());
+      const before = Y.encodeStateAsUpdate(reopened.doc);
+      assert.deepEqual(changeNativeRegistry(reopened, { kind: "create", collection: "tags", fields: { cat: "prop", name: "Rope" } }), { kind: "unchanged" });
+      assert.deepEqual(record(reopened, "tags", "t_rope"), { id: "t_rope", cat: "prop", name: "Rope", owner: "", notes: "", status: "needed" });
+      assert.deepEqual(Y.encodeStateAsUpdate(reopened.doc), before);
+    } finally { reopened.doc.destroy(); }
+  } finally {
+    for (const copy of copies) copy.doc.destroy();
+    seed.doc.destroy();
   }
 });
 
@@ -375,13 +484,19 @@ test("readding a displayed prop is a no-op across projected tags and same-name t
     const change = { kind: "addProp", id: "bs1", prop: "Umbrella" } as const;
     for (const copy of [left, right]) write(copy, change);
     settle();
-    assert.equal(read(left, "tags").filter(tag => tag?.name === "Umbrella").length, 2);
+    const umbrellas = read(left, "tags").filter(tag => tag?.name === "Umbrella");
+    assert.equal(umbrellas.length, 1);
     for (const copy of [left, right]) {
       const before = Y.encodeStateAsUpdate(copy.doc);
       assert.deepEqual(changeNativeRegistry(copy, change), { kind: "unchanged" });
       assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), before);
-      assert.equal(copy.reader.document().brollShots[0]?.props?.filter(prop => prop?.name === "Umbrella").length, 2);
+      assert.deepEqual(copy.reader.document().brollShots[0]?.props?.filter(prop => prop?.name === "Umbrella"),
+        [{ id: umbrellas[0]?.id, name: "Umbrella" }]);
     }
+    assert.ok(typeof umbrellas[0]?.id === "string");
+    write(left, { kind: "removeProp", id: "bs1", prop: umbrellas[0].id });
+    settle();
+    assert.deepEqual(left.reader.document().brollShots[0]?.props, [{ id: "t_lamp", name: "Lamp" }]);
   });
 });
 

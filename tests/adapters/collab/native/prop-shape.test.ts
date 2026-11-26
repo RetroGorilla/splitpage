@@ -268,7 +268,7 @@ test("damaged prop entries are reported individually and can be replaced or remo
   }
 });
 
-test("same-name additions keep and show both IDs through undo, redo and whole-list clear", () => {
+test("same-name prop additions keep both IDs and show one through undo, redo and whole-list clear", () => {
   const initial = initialProps(3);
   registryCopies((left, right, settle) => {
     const one = { id: mintNativeTagId(left.doc), name: "Umbrella" }, two = { id: mintNativeTagId(right.doc), name: "umbrella" };
@@ -282,15 +282,16 @@ test("same-name additions keep and show both IDs through undo, redo and whole-li
       }
       settle();
       assert.ok(propsOf(left).has(one.id) && propsOf(left).has(two.id));
-      assert.deepEqual(read(left), [...initial, winner, other]);
+      assert.deepEqual(read(left), [...initial, winner]);
       assert.equal(undo.undo().kind, "written");
       assert.deepEqual(read(actor), [...initial, other]);
       settle();
       assert.deepEqual(read(left), [...initial, other]);
       assert.equal(undo.redo().kind, "written");
-      assert.deepEqual(read(actor), [...initial, winner, other]);
+      assert.deepEqual(read(actor), [...initial, winner]);
       settle();
-      assert.deepEqual(read(left), [...initial, winner, other]);
+      assert.deepEqual(read(left), [...initial, winner]);
+      assert.ok(propsOf(left).has(one.id) && propsOf(left).has(two.id));
       write(left, { kind: "set", collection: "shots", ids: ["shot"], fields: { props: [] } });
       settle();
       assert.deepEqual(read(right), []);

@@ -186,6 +186,17 @@ test("production tags: of two entries for one name, the first keeps its own owne
   assert.deepEqual(out, [{ cat: "prop", name: "Ladder", owner: "p1", notes: "first", status: "have", id: "t_a" }]);
 });
 
+test("production tags: merging saved copies preserves alternate values from sharing", () => {
+  const note = { field: "notes", value: "Bring the spare" } as const;
+  const other = { field: "notes", value: "Check the case" } as const;
+  const status = { field: "status", value: "have" } as const;
+  const mine = [tag("t_lens", "Lens", { unmergedEdits: [note, other] }), tag("t_other", "lens", { unmergedEdits: [status] })];
+  const theirs = [tag("t_lens", "Lens", { unmergedEdits: [note] })];
+  assert.deepEqual(mergeProductionTags([], mine, theirs), [{
+    id: "t_lens", cat: "prop", name: "Lens", owner: "", notes: "", status: "needed", unmergedEdits: [note, other, status]
+  }]);
+});
+
 test("b-roll props: additions on both sides, removals, an ancestor with no list, and the cap", () => {
   const K = prop("t_kettle", "Kettle"), L = prop("t_ladder", "Ladder"), T = prop("t_tripod", "Tripod");
   assert.deepEqual(mergeBrollProps([K], [K, L], [K, T]), [K, T, L]);

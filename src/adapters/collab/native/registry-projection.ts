@@ -1,9 +1,9 @@
 import * as Y from "yjs";
 import { BROLL_NAME_MAX, BROLL_PROP_NAME_MAX, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
 import { noFreeze } from "../../../core/document/freeze.ts";
-import { ensureTagIds, isTagId, normalizeTagName, registryKey, TAG_STATUS_IDS } from "../../../core/document/tags.ts";
+import { ensureTagIds, isTagId, normalizeTagName, registryKey, TAG_STATUS_IDS, unmergedTagEdits } from "../../../core/document/tags.ts";
 import { hasLoneSurrogate, plainText, settledNames } from "../../../core/document/text-policy.ts";
-import type { DocumentShape, DocumentTag } from "../../../core/document/validated.ts";
+import type { DocumentShape, DocumentTag, UnmergedTagEdit } from "../../../core/document/validated.ts";
 import { applyBrollRecords, brollInCell, planBrollRecordsInState } from "../../../core/production/broll.ts";
 import type { FieldHtml } from "../../../core/production/ports.ts";
 import { createProductionReaders } from "../../../core/production/readers.ts";
@@ -27,6 +27,50 @@ export interface NativeRegistryRowInputs {
   readonly tags: boolean;
   readonly shots: boolean;
   readonly seededShots: ReadonlySet<string>;
+}
+
+type KeyedTag = DocumentTag & { id: string };
+
+function foldTags(tags: DocumentShape["productionTags"]) {
+  const byName = new Map<string, KeyedTag | KeyedTag[]>(), groups = new Map<string, readonly string[]>();
+  for (const tag of tags) {
+    if (!tag?.name || !isTagId(tag.id)) continue;
+    const key = registryKey(tag.cat, tag.name), members = byName.get(key);
+    const member = tag as KeyedTag;
+    if (Array.isArray(members)) members.push(member);
+    else byName.set(key, members ? [members, member] : member);
+  }
+  const folded = new Map<string, DocumentTag>();
+  for (const members of byName.values()) {
+    if (!Array.isArray(members)) continue;
+    members.sort((a, b) => a.id < b.id ? -1 : 1);
+    const first = members[0];
+    if (!first) continue;
+    const ids = Object.freeze(members.map(tag => tag.id));
+    for (const id of ids) groups.set(id, ids);
+    const tag = { ...first }, edits: UnmergedTagEdit[] = [];
+    for (const [field, fallback] of [["notes", ""], ["owner", ""], ["status", TAG_STATUS_IDS[0]]] as const) {
+      const values = new Set<string>(), previous = new Set<string>();
+      for (const member of members) {
+        const value = member[field];
+        if (value && value !== fallback) values.add(value);
+        for (const edit of member.unmergedEdits ?? []) if (edit.field === field) previous.add(edit.value);
+      }
+      const [value, ...remaining] = values;
+      if (value) tag[field] = value;
+      for (const alternative of new Set([...remaining, ...previous])) {
+        if (alternative !== tag[field]) edits.push({ field, value: alternative });
+      }
+    }
+    if (edits.length) tag.unmergedEdits = edits;
+    else delete tag.unmergedEdits;
+    folded.set(first.id, tag);
+  }
+  return { tags: groups.size ? tags.flatMap(tag => {
+    if (!tag?.id || !groups.has(tag.id)) return [tag];
+    const merged = folded.get(tag.id);
+    return merged ? [merged] : [];
+  }) : tags, groups };
 }
 
 function production(rows: readonly RegistryCellRow[]) {
@@ -108,7 +152,7 @@ function propNormalizer(tags: DocumentShape["productionTags"]) {
   };
 }
 
-export function projectNativeRegistries(document: DocumentShape, roots: NativeRoots, rows: () => readonly RegistryCellRow[]): NativeRegistryRowInputs {
+export function projectNativeRegistries(document: DocumentShape, roots: NativeRoots, rows: () => readonly RegistryCellRow[]) {
   const tagsRemoved = hasRemoved(roots.tags) || document.productionTags.some(tag => tag && !tag.name);
   const shotsRemoved = hasRemoved(roots.shots) || document.brollShots.some(shot => !shot.name);
   const seededShots = new Set<string>();
@@ -138,12 +182,25 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
   for (const record of [...document.productionTags, ...document.brollShots]) {
     if (record?.owner && !people.has(record.owner)) record.owner = "";
   }
+  for (const tag of document.productionTags) {
+    if (!tag || !Object.hasOwn(tag, "unmergedEdits")) continue;
+    const edits = unmergedTagEdits(tag.unmergedEdits);
+    if (edits.length) tag.unmergedEdits = edits;
+    else delete tag.unmergedEdits;
+  }
+  const { tags, groups } = foldTags(document.productionTags);
+  document.productionTags = tags;
   if (document.brollShots.some(shot => shot.props?.length)) {
     const relevantTags = propNormalizer(document.productionTags);
     for (const shot of document.brollShots) {
-      if (shot.props?.length) shot.props = normalizeBrollProps(shot.props, relevantTags(shot.props));
+      if (!shot.props?.length) continue;
+      const props = groups.size ? shot.props.map(prop => {
+        const id = prop?.id ? groups.get(prop.id)?.[0] : undefined;
+        return id && prop?.id !== id ? { ...prop, id } : prop;
+      }) : shot.props;
+      shot.props = normalizeBrollProps(props, relevantTags(props));
     }
   }
-  document.productionTags = document.productionTags.flatMap(tag => tag?.name ? [{ owner: "", notes: "", status: TAG_STATUS_IDS[0], ...tag }] : []);
-  return { tags: tagsRemoved, shots: shotsRemoved, seededShots };
+  document.productionTags = tags.flatMap(tag => tag?.name ? [{ owner: "", notes: "", status: TAG_STATUS_IDS[0], ...tag }] : []);
+  return { inputs: { tags: tagsRemoved, shots: shotsRemoved, seededShots }, groups };
 }

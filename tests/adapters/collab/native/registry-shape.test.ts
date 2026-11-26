@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
-import { normalizeBrollProps } from "../../../../src/core/document/broll.ts";
 import { addBrollProp, removeBrollProp } from "../../../../src/core/production/records.ts";
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
 import { changeNativeRegistry } from "../../../../src/adapters/collab/native/registry-commands.ts";
@@ -34,20 +33,18 @@ test("snapshot indexes the tag registry once for 2,000 one-prop shots", () => {
   } finally { script.doc.destroy(); }
 });
 
-test("the snapshot prop lookup preserves the first named tag and exact ID lookups", () => {
+test("the snapshot prop lookup resolves aliases and idless references to the lowest tag ID", () => {
   const script = convertedScript(source());
   try {
     const productionTags = [
-      { id: "t_first", cat: "prop", name: "Lamp" }, { id: "t_second", cat: "prop", name: "lamp" },
+      { id: "t_second", cat: "prop", name: "lamp" }, { id: "t_first", cat: "prop", name: "Lamp" },
       { id: "t_other", cat: "gear", name: "Strap" }
     ];
     const props = [{ id: "t_second", name: "Stale" }, { id: "", name: "Lamp" }, { id: "t_other", name: "Old" }];
     const brollShots = [{ id: "bs1", name: "Wide", props }];
     const document = { ...source(), productionTags, brollShots };
-    const expected = normalizeBrollProps(props, productionTags);
     projectNativeRegistries(document, script.roots, () => { throw new Error("No removed records"); });
-    assert.deepEqual(document.brollShots[0]?.props, expected);
-    assert.deepEqual(expected.map(prop => prop.id), ["t_second", "t_first", "t_other"]);
+    assert.deepEqual(document.brollShots[0]?.props, [{ id: "t_first", name: "Lamp" }, { id: "t_other", name: "Strap" }]);
   } finally { script.doc.destroy(); }
 });
 

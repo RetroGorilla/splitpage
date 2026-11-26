@@ -308,7 +308,7 @@ waits for a new caret. App stop and entry rollback release any active wait.
 | Unkeyed B-roll removal | Removing the shot behind an unkeyed line leaves it absent from the live projection. Core reload derives a shot with a new ID. | [#1670](https://github.com/RetroGorilla/splitpage/pull/1670) |
 | Registry recovery | The native editor does not expose the old Recovery panel's deleted registry entries. Local undo can restore a removal. | [#1681](https://github.com/RetroGorilla/splitpage/pull/1681) |
 | Recovery after a peer removes a beat | The Recovery action and its Restore and Discard buttons are absent. The peer who removed an unedited beat can undo the removal to restore it and its words on both copies. | [Native hook app tests](../../src/test/shared-native-hook-mapped-app.test.mjs), [Native caller tests](../../src/test/shared-native-callers-mapped-app.test.mjs) |
-| Concurrent same-name tag creation | Both records and distinct IDs survive. Production shows one card for the category and normalized name. | [#1681](https://github.com/RetroGorilla/splitpage/pull/1681) |
+| Concurrent same-name tag creation | Both records survive. The shared reader shows one tag per category and normalized name and keeps conflicting fields in the tag's details. Removal covers every member the remover has seen. | [#1790](https://github.com/RetroGorilla/splitpage/issues/1790) |
 | Concurrent registry writes | Undo of the winning write can leave a field absent. Unnamed stored entries are hidden, and a missing status can read at its default. An entry without a rank reads before ranked entries in ID order. See [appendix H](#h-outcomes-that-lose-nothing). | [#1670](https://github.com/RetroGorilla/splitpage/pull/1670) |
 | Concurrent shot prop additions | Distinct prop keys survive, with at most 40 shown. Removing a visible entry can reveal an overflow entry. | [#1678](https://github.com/RetroGorilla/splitpage/pull/1678) |
 | Concurrent shot prop moves | Two moves of one prop compete for its rank. Undo of the winning move can clear the rank and put the prop before ranked entries. Redo restores the winning order. See [section 5](#5-accepted-losses). | [#1678](https://github.com/RetroGorilla/splitpage/pull/1678) |
@@ -1012,6 +1012,17 @@ A beat loses its rank through a same-moment move race (section 10): 3 of 600 gen
 
 **Tags on the same letters.** A writer who untags, then retags a tag on exactly another tag's letters: which of the two reads as the outer tag follows the writers' client ids. With writer client 5 the retagged tag reads outer; with writer client 20 the other tag does. Every copy agrees and both tags stay ([format-commands.test.ts](../../tests/adapters/collab/native/format-commands.test.ts), "carried item 1, as built: across writers"). Accepted as built (Owner).
 
+**Same-name registry tags.** The shared registry reader groups live records by category and normalized name. The
+lowest ID identifies the projected tag and its shot props. The registry cache holds the grouping until its inputs
+change. Each field uses the first non-default value in ID order. The card's read-only **Unmerged edit** entries show
+other distinct values. Saved copies and file merges retain those entries with the tag. Explicit field edits update all observed
+members in one transaction, so Undo can bring back the earlier values. The reader never rewrites stored records.
+
+Removal marks every observed member of the folded tag in one undoable transaction. An unseen concurrent addition
+survives and the tag can appear again with that record's fields. Labelled tag removal and surviving-label healing
+keep their existing rules. [Registry races](../../tests/adapters/collab/native/registry-races.test.ts) cover both
+delivery orders, three writers and reload.
+
 ## 4. Undo
 
 One `Y.UndoManager` per person over every root a command writes, headings and names included, not `births` or
@@ -1514,7 +1525,7 @@ E11, 600 generated histories, names in cells, unless marked:
 | Someone restores a registry entry before receiving another person's removal | The entry disappears again when the unseen removal arrives. Restoring it again brings back its fields |
 | Two people change one registry value at the same moment and the winner undoes | The stored value can become absent. An entry without a name is hidden. A missing tag status reads as `needed`. Rankless entries appear first in ID order and a move gives them a rank. [#1670](https://github.com/RetroGorilla/splitpage/pull/1670) |
 | Two people add different props or move different props on one shot | Both entries survive. Equal ranks sort by key and undo on one copy leaves the other copy's edit |
-| Two people add the same normalized prop name under different tag IDs | Both show in rank and key order when within the cap, as on core reload. Undo removes the acting copy's addition and redo brings it back |
+| Two people add the same normalized prop name under different tag IDs | Both keys survive. If the tags fold together, the shot shows one prop with the canonical ID. Undo removes the acting copy's addition and redo brings it back |
 | One person removes a prop while another edits it | The removed prop stays hidden. Undo of the removal restores it with the concurrent edit |
 | One person removes a prop while another keeps it in a whole-list set | The removal still applies, even when the prop's displayed tag ID differs from its stored name key |
 | Two people move the same prop and the losing writer undoes after both updates arrive | Undo and redo leave the winning order in place |
