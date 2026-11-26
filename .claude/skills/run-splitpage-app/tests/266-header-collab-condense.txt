@@ -23,7 +23,11 @@ eval window.__still(true)
 
 eval (function(){ var ws=[]; for(var w=761; w<=1920; w+=10) ws.push(w); for(var a=990;a<=1010;a++) ws.push(a); for(var b=1290;b<=1310;b++) ws.push(b); window.__ws=ws; return ws.length; })()
 eval window.__title('Pilot')
-eval window.__sweep(window.__ws)
+eval (async function(){ var from=window.__w().innerWidth; await window.__at(window.__ws[0]); var label=window.__d().querySelector('#btn-write .btn-label'); var style=window.__w().getComputedStyle(label); return 'first width jump ' + JSON.stringify({from:from,to:window.__w().innerWidth,transition:style.transition,width:label.getBoundingClientRect().width,animations:label.getAnimations().map(function(a){return {property:a.transitionProperty,state:a.playState,pending:a.pending};})}); })()
+wait (function(){ var toolbar=window.__d().querySelector('.toolbar'); return window.__w().innerWidth === window.__ws[0] && !toolbar.classList.contains('is-width-jump') && toolbar.getAnimations({subtree:true}).every(function(a){return !a.transitionProperty || (!a.pending && (a.playState==='finished' || a.playState==='idle'));}); })()
+eval window.__bad=window.__check(window.__ws[0])
+expect window.__bad === ''
+eval window.__sweep(window.__ws.slice(1))
 expect window.__bad === ''
 eval window.__title('The Long Road Home: Episode Four of the Documentary Series!!')
 eval window.__sweep(window.__ws)
