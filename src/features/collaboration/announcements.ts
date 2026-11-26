@@ -1,3 +1,4 @@
+import { accessRemovedMessage } from "../../application/collaboration/state.ts";
 import type { CollaborationSnapshot } from "../../application/collaboration/state.ts";
 import type { CollaborationAnnouncementsPorts } from "./ports.ts";
 
@@ -28,7 +29,8 @@ export function mountCollaborationAnnouncements(document: Document, { collaborat
       interrupted = true;
       region.textContent = snapshot.refusal === "password-changed"
         ? "The link password changed. Re-enter it to reconnect."
-        : "Access removed. Your local copy is kept on this device.";
+        : snapshot.refusal === "device-credential-expired" ? accessRemovedMessage(snapshot.refusal)
+          : "Access removed. Your local copy is kept on this device.";
     } else if (wasOnline && !online && !snapshot.mergeTooLarge) {
       interrupted = true;
       region.textContent = "Offline. Your changes are kept on this device.";

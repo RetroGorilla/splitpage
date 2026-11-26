@@ -9,7 +9,7 @@ import type { NativeRelayEvent } from "../../adapters/collab/native/relay.ts";
 import { InvitationSnapshotError, readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
 import { exchangeLinkPassword } from "../../adapters/collab/native/password-exchange.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
-import { isPermanentCollaborationRefusal, localWriteErrorMessage } from "../../application/collaboration/state.ts";
+import { canReenterLinkPassword, isPermanentCollaborationRefusal, localWriteErrorMessage } from "../../application/collaboration/state.ts";
 import type { CollaborationLocalWriteError } from "../../application/collaboration/state.ts";
 import { sanitizeHtml } from "../richtext.ts";
 import { guardUnload, waitDuringLifetime } from "../startup/page-lifetime.ts";
@@ -394,7 +394,12 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
                 return;
               }
               if (event.kind === "session-replaced" && sessionCurrent()) collaborationState().dismissOfflineClashes();
-              pictureBinding.onRelayEvent(event);
+              if (event.kind === "authentication-failed" && event.reason === "permission-denied" && exchangePassword
+                && membership?.role === "guest" && membership.guestLinkToken) {
+                pictureBinding.onRelayEvent({ ...event, reason: "device-credential-expired" });
+              } else {
+                pictureBinding.onRelayEvent(event);
+              }
             }
           });
           liveRelay = relay;
@@ -484,7 +489,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
             const relay = liveRelay;
             const owner = collaborationState();
             if (!exchangePassword || !sessionCurrent() || !relay || !stage || !pictureOrigin || previous?.role !== "guest"
-              || managing || owner.snapshot().refusal !== "password-changed") return "access-removed";
+              || managing || !canReenterLinkPassword(owner.snapshot().refusal)) return "access-removed";
             managing = true;
             const lifetime = AbortSignal.any([signal, recoveryLifetime.signal]);
             const guestLinkToken = previous.guestLinkToken ?? previous.token;

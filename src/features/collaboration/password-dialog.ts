@@ -3,7 +3,9 @@ import { mountCollaborationDialog } from "./dialog.ts";
 
 export function passwordFailure(reason: string): string {
   if (reason === "wrong-password") return "The password is incorrect. Try again.";
+  if (reason === "password-changed") return "The link password changed. Re-enter it to reconnect.";
   if (reason === "password-rate-limited") return "Too many password attempts. Wait a minute and try again.";
+  if (reason === "device-limit") return "Too many guest devices are connected to this script. Wait a moment and try again.";
   if (reason === "access-removed") return "This link has been reset or revoked. Ask the owner for a new link.";
   if (reason === "relay-unreachable") return "Could not reach the relay. Check your connection and try again.";
   return "Could not save the new access on this device. Check your storage and try again.";

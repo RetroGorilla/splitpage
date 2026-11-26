@@ -1,4 +1,4 @@
-import { accessRemovedMessage } from "../../application/collaboration/state.ts";
+import { accessRemovedMessage, canReenterLinkPassword } from "../../application/collaboration/state.ts";
 import type { CollaborationLocalWriteError, CollaborationPermanentRefusal } from "../../application/collaboration/state.ts";
 import { sharedSaveStatus } from "../../application/save/status.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
@@ -104,7 +104,7 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
     if (!accessBanner) return;
     setText("collab-access-text", typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && refusal === "password-changed"
       ? "The link password changed. Re-enter it to sync your work." : accessRemovedMessage(refusal));
-    if (passwordButton) passwordButton.hidden = refusal !== "password-changed";
+    if (passwordButton) passwordButton.hidden = !canReenterLinkPassword(refusal);
     if (reveal) accessBanner.hidden = false;
   }
 

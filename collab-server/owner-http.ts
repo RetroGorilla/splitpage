@@ -172,7 +172,7 @@ export function ownerRequests(secret: string | undefined, limit: number, command
               reply(401);
             } else if (result.kind === "device-limit") {
               response.setHeader("Retry-After", "5");
-              reply(429);
+              reply(429, { reason: result.kind });
             } else reply(result.kind === "invalid-link" ? 403 : 409);
           } finally { exchangesInFlight -= 1; }
         }

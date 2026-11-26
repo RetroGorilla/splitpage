@@ -8,6 +8,7 @@ function savedContent({ narration, visual, fields, joined }: OfflineSavedBeat): 
 export type CollaborationPermanentRefusal =
   | "access-removed"
   | "password-changed"
+  | "device-credential-expired"
   | "invitation-revoked"
   | "script-deleted"
   | "script-unknown"
@@ -66,6 +67,7 @@ export interface CollaborationState extends CollaborationReads {
 export const PERMANENT_COLLABORATION_REFUSALS: readonly CollaborationPermanentRefusal[] = Object.freeze([
   "access-removed",
   "password-changed",
+  "device-credential-expired",
   "invitation-revoked",
   "script-deleted",
   "script-unknown",
@@ -90,6 +92,10 @@ export function isPermanentCollaborationRefusal(reason: string): reason is Colla
   return (PERMANENT_COLLABORATION_REFUSALS as readonly string[]).includes(reason);
 }
 
+export function canReenterLinkPassword(reason: CollaborationPermanentRefusal | null): boolean {
+  return reason === "password-changed" || reason === "device-credential-expired";
+}
+
 export function localWriteErrorMessage(reason: string): string {
   if (reason === "quota") return "This device is out of storage space — free some space and try again, or export a copy.";
   if (reason === "closed" || reason === "version") return "Storage on this device was interrupted — try again, or export a copy.";
@@ -98,6 +104,9 @@ export function localWriteErrorMessage(reason: string): string {
 }
 
 export function accessRemovedMessage(reason: CollaborationPermanentRefusal): string {
+  if (reason === "device-credential-expired") {
+    return "Your access on this device expired. Re-enter the link password to reconnect.";
+  }
   if (reason === "script-deleted" || reason === "script-unknown") {
     return "This shared script was deleted or is no longer available on the relay. Your copy on this device is still readable — export a copy before leaving.";
   }
