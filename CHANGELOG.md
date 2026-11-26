@@ -19,6 +19,8 @@ appear in the app under **Help**. The format follows
   now, and where each person is on the Rundown strip. Select someone to jump to
   their beat. The owner can copy or reset the link, add or change its password,
   or stop sharing for everyone. Anyone can save a copy or leave.
+- See where other people's carets and selections are in Split and Writer, with
+  their name and colour.
 - Keep writing when the relay can't be reached. Your changes stay on this
   device and sync when you reconnect. If edits overlapped, **Review changes**
   shows them, and **Put it back** restores your beat.
