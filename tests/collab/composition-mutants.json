@@ -115,8 +115,8 @@
     {
       "label": "a failed entry resets the standalone undo",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    ports.detach();\n    if (entrySettled) {\n      await entrySettled;\n      if (failedDuringEntry) throw new Error(\"The native session closed during entry\");\n    }\n    // why: the D34 reset belongs to a successful entry, so a failed one keeps the standalone history\n    undoOwner().adopt(null);\n",
-      "replace": "    undoOwner().adopt(null);\n    ports.detach();\n    if (entrySettled) {\n      await entrySettled;\n      if (failedDuringEntry) throw new Error(\"The native session closed during entry\");\n    }\n",
+      "find": "    ports.detach();\n    if (entrySettled) {\n      await entrySettled;\n      if (failedDuringEntry) throw new Error(\"The native session closed during entry\");\n    }\n    if (backend.finishEntry) await backend.finishEntry();\n    // why: the D34 reset belongs to a successful entry, so a failed one keeps the standalone history\n    undoOwner().adopt(null);\n",
+      "replace": "    undoOwner().adopt(null);\n    ports.detach();\n    if (entrySettled) {\n      await entrySettled;\n      if (failedDuringEntry) throw new Error(\"The native session closed during entry\");\n    }\n    if (backend.finishEntry) await backend.finishEntry();\n",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
       ]
