@@ -104,6 +104,7 @@ function renderInstallInfo() {
 async function onboardEligibleForAutoShow() {
   if (!ports.seedCheck.passes()) return false;
   if (ports.preferences.onboarding()) return false;
+  if (ports.sharedScripts.invited()) return false;
   if (ports.desktop() && ports.draftResume.restorePending()) return false;
   if (ports.place.home().kind === "file") return false;
   if (ports.desktop()) {
@@ -114,6 +115,9 @@ async function onboardEligibleForAutoShow() {
     let handle;
     try { handle = await ports.lastFile.load(); } catch (e) { handle = null; }
     if (handle) return false;
+    let shared;
+    try { shared = await ports.sharedScripts.onThisDevice(); } catch (e) { shared = false; }
+    if (shared) return false;
   }
   if (ports.preferences.onboarding()) return false;
   if (ports.place.home().kind === "file") return false;

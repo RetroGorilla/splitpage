@@ -106,6 +106,11 @@ function openJoinScreen(request: Extract<JoinRequest, { kind: "browser" }> | und
 }
 
 let desktopDialog: ReturnType<typeof openJoinScreen> | undefined;
+let invited = false;
+
+export function arrivedByInvitation(): boolean {
+  return invited || (typeof splitpageInvitation !== "undefined" && splitpageInvitation !== null);
+}
 
 export function openDesktopJoin(): void {
   if (desktopDialog && !desktopDialog.signal.aborted) return;
@@ -116,6 +121,7 @@ export function startInvitationEntry() {
   let connected = false, settled = false;
   const invitation = typeof splitpageInvitation !== "undefined" ? splitpageInvitation : null;
   if (typeof splitpageInvitation !== "undefined") splitpageInvitation = null;
+  if (invitation !== null) invited = true;
   const browserDialog = invitation === null ? undefined : openJoinScreen({ kind: "browser", invitation },
     value => { connected = value; }, () => { settled = true; });
   return {

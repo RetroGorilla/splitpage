@@ -86,12 +86,14 @@ test("on the desktop the install step says this is the installed app, and the la
   }
 });
 
-test("automatic onboarding respects the seed, saved file, document home and desktop launch facts", async () => {
+test("automatic onboarding respects the seed, saved file, shared scripts, document home and desktop launch facts", async () => {
   const cases: [string, (h: ReturnType<typeof fakeOnboardingPorts>) => void, boolean][] = [
     ["pristine", () => {}, false],
     ["changed seed", (h) => { h.state.seed = false; }, true],
     ["last file", (h) => { h.state.last = { name: "script" }; }, true],
-    ["file home", (h) => { h.state.home = { kind: "file" }; }, true],
+    ["invitation", (h) => { h.state.invited = true; }, true],
+    ["shared script on this device", (h) => { h.state.sharedHere = true; }, true],
+    ["shared scripts unreadable", (h) => { h.state.sharedHere = new Error("storage"); }, false],    ["file home", (h) => { h.state.home = { kind: "file" }; }, true],
     ["desktop pristine", (h) => { h.state.desktop = true; }, false],
     ["restore pending", (h) => { h.state.desktop = true; h.state.pending = true; }, true],
     ["later tab", (h) => { h.state.desktop = true; h.state.firstTab = false; }, true],

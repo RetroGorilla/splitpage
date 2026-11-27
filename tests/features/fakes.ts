@@ -631,6 +631,7 @@ export function fakeOnboardingPorts() {
   const state = {
     desktop: false, seed: true, pending: false, firstTab: true,
     prior: false, intent: { type: "blank" }, draft: false, last: null as unknown,
+    invited: false, sharedHere: false as boolean | Error,
     home: { kind: "none" } as ReturnType<DocumentPlace["home"]>
   };
   const actions = fakeActions();
@@ -654,6 +655,10 @@ export function fakeOnboardingPorts() {
       launchIntent: () => state.intent, hasDraftToRestore: () => state.draft
     },
     lastFile: { load: async () => state.last },
+    sharedScripts: {
+      invited: () => state.invited,
+      onThisDevice: async () => { if (state.sharedHere instanceof Error) throw state.sharedHere; return state.sharedHere; }
+    },
     onFileMenuChoice: (listener) => { choices.add(listener); return () => { choices.delete(listener); }; }
   };
   return { ports, state, actions, panels, recorded, choices };
