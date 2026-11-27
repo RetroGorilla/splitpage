@@ -10,7 +10,7 @@ import type { NativeDeltaItem } from "./inline.ts";
 import { compareNativeRankedIds } from "./rank.ts";
 import { foldNativeBrollRecords, nativeRegistryRowChanged, projectNativeRegistries, projectNativeTags } from "./registry-projection.ts";
 import type { NativeRegistryRowInputs } from "./registry-projection.ts";
-import { advanceNativeBrollLayout, nativeBrollClaims, nativeBrollClaimField, projectNativeBrollCell, readNativeBrollLayout } from "./broll-claims.ts";
+import { nativeBrollClaims, nativeBrollClaimField, projectNativeBrollCell, readNativeBrollLayout } from "./broll-claims.ts";
 import type { NativeBrollCellLayout } from "./broll-claims.ts";
 import type { NativeRoots } from "./roots.ts";
 import { NATIVE_SHOT_PROPS, OBSOLETE_SHOT_PROPS, nativeShotPropEntries } from "./shot-props.ts";
@@ -362,11 +362,7 @@ export class NativeScriptReader {
         if (typeof beat === "string") {
           this.dirtyBeats.add(beat);
           const visual = roots.visuals.get(beat);
-          if (visual instanceof Y.Text) {
-            this.visualDeltas.delete(visual);
-            const layout = this.visualLayouts.get(visual);
-            if (layout && (!(event instanceof Y.YTextEvent) || !advanceNativeBrollLayout(layout, event.delta))) this.visualLayouts.delete(visual);
-          }
+          if (visual instanceof Y.Text) this.visualDeltas.delete(visual);
         } else {
           this.structural = true;
           for (const key of event.keys.keys()) {
@@ -817,7 +813,7 @@ export class NativeScriptReader {
     const cached = this.visualDeltas.get(text);
     if (cached) return cached;
     const items = text.toDelta() as NativeDeltaItem[];
-    const layout = this.visualLayouts.get(text) ?? readNativeBrollLayout(items);
+    const layout = readNativeBrollLayout(items, this.visualLayouts.get(text));
     this.visualLayouts.set(text, layout);
     projectNativeBrollCell(items, this.brollClaims(), layout);
     this.visualDeltas.set(text, items);

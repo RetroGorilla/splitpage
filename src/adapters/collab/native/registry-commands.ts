@@ -7,12 +7,12 @@ import type { DocumentShape, DocumentTag } from "../../../core/document/validate
 import { PERSON_NAME_MAX } from "../../../core/production/records.ts";
 import { brollInCell, brollMarkerLines, brollSeedLocation, brollSeedRef } from "../../../core/production/broll.ts";
 import { NATIVE_BROLL_GAP, nativeCellView, nativeStoredOffset } from "./inline.ts";
-import { NATIVE_BROLL_MARKER, NATIVE_BROLL_SOURCE, nativeBrollMarkerAt } from "./broll-claims.ts";
+import { NATIVE_BROLL_SOURCE, nativeBrollMarkerAt, writeNativeBrollMarker } from "./broll-claims.ts";
 import { compareNativeRankedIds, isValidNativeRank, nativeRankBetween } from "./rank.ts";
 import { copyArgument, copyRecordValue, nativeRecordId, RECORD_UNCHANGED, RECORD_WRITTEN, refuseRecord } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
 import { nativeRegistryProduction, nativeShotLinePlan, nativeTagNamesInRows } from "./registry-projection.ts";
-import { transactPreparedNativeCommand, withNativeCommand } from "./script.ts";
+import { withNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { prepareNativeShotProps } from "./shot-prop-commands.ts";
 import { NATIVE_SHOT_PROPS, OBSOLETE_SHOT_PROPS, newNativeShotProps } from "./shot-props.ts";
@@ -147,7 +147,7 @@ export function closeNativeBroll(script: NativeScript, beat: string, stamp?: Nat
     const row = rows.find(row => row.id === beat), root = script.roots.shots, order = slots(root, true);
     if (!order) return refuseRecord("stored");
     let rank = order.at(-1)?.rank ?? null;
-    const writes: Write[] = [], splices: Write[] = [], markers: Write[] = [];
+    const writes: Write[] = [], splices: Write[] = [];
     const writer = mintNativeId(script.doc, "");
     for (const [ordinal, { line, marker }] of lines.entries()) {
       const shot = found[ordinal], source = view.text.slice(line.start, line.end);
@@ -163,13 +163,12 @@ export function closeNativeBroll(script: NativeScript, beat: string, stamp?: Nat
       if (!match) continue;
       const from = nativeStoredOffset(view, line.start);
       const until = nativeStoredOffset(view, line.start + match[0].trimEnd().length);
-      let markerSource = nativeBrollMarkerAt(items, until - 1);
+      const priorMarker = nativeBrollMarkerAt(items, until - 1);
+      let markerSource = priorMarker;
       if (!markerSource) {
         const point = Y.createRelativePositionFromTypeIndex(text, until - 1).item;
         if (!point) continue;
-        const id = `${point.client.toString(36)}-${point.clock.toString(36)}`;
-        markerSource = id;
-        markers.push(() => { text.format(until - 1, 1, { [NATIVE_BROLL_MARKER]: id }); });
+        markerSource = `${point.client.toString(36)}-${point.clock.toString(36)}`;
       }
       const id = `bs-visual-${markerSource}-${writer}-${ordinal.toString(36)}`;
       if (root.has(id)) return refuseRecord("taken");
@@ -178,17 +177,21 @@ export function closeNativeBroll(script: NativeScript, beat: string, stamp?: Nat
         audioRef: brollSeedRef(row, plainTextOf), location: brollSeedLocation(row, readers) }, rank);
       writes.push(() => { root.get(id)?.set(NATIVE_BROLL_SOURCE, markerSource); });
       splices.push(() => {
+        if (match[0] === match[0].trimEnd()) text.insert(until, " ", { [NATIVE_BROLL_GAP]: id });
+        if (!priorMarker) writeNativeBrollMarker(script.doc, text, until - 1, markerSource);
         text.insertEmbed(from, { k: id, label: (match[1] ?? "") + (match[2] ?? ""), [NATIVE_BROLL_SOURCE]: markerSource }, {});
         text.delete(from + 1, until - from);
-        if (match[0] === match[0].trimEnd()) text.insert(from + 1, " ", { [NATIVE_BROLL_GAP]: id });
       });
     }
     if (!splices.length && !writes.length) return RECORD_UNCHANGED;
     if (encoded) writes.push(() => { script.roots.edited.set(beat, encoded); });
     script.prepareWrite?.();
-    // why: the literal marker must retain its identity when Undo restores it with a new Yjs item
-    if (markers.length) script.doc.transact(() => finish(markers), "broll-marker");
-    return script.doc.transact(() => finish([...splices.reverse(), ...writes]), script.origin);
+    return script.doc.transact(() => {
+      if (script.closed() || script.reader.isClosed()) return refuseRecord("closed");
+      runWrites(splices.reverse());
+      runWrites(writes);
+      return RECORD_WRITTEN;
+    }, script.origin);
   });
 }
 

@@ -1,11 +1,11 @@
 import * as Y from "yjs";
 import { setNativeBrollHidden } from "./inline.ts";
 import type { NativeBrollHidden, NativeDeltaItem } from "./inline.ts";
-import { decodeNativeValue, nativeFieldKey } from "./values.ts";
+import { decodeNativeValue, nativeClock, nativeFieldKey } from "./values.ts";
 import type { NativeRoots } from "./roots.ts";
 
 export const NATIVE_BROLL_SOURCE = "brollSource";
-export const NATIVE_BROLL_MARKER = "brollMarker";
+const NATIVE_BROLL_MARKER = "brollMarker";
 
 export function nativeBrollMarkerAt(items: readonly NativeDeltaItem[], index: number): string | undefined {
   let at = 0;
@@ -16,6 +16,27 @@ export function nativeBrollMarkerAt(items: readonly NativeDeltaItem[], index: nu
     return typeof marker === "string" && /^[a-z0-9]+-[a-z0-9]+$/.test(marker) ? marker : undefined;
   }
   return undefined;
+}
+
+const markerFormats = new WeakMap<Y.Doc, Map<number, Set<number>>>();
+
+export function nativeBrollUndoFilter(doc: Y.Doc): (item: Y.Item) => boolean {
+  const formats = markerFormats.get(doc) ?? new Map<number, Set<number>>();
+  markerFormats.set(doc, formats);
+  return ({ id }) => !formats.get(id.client)?.has(id.clock);
+}
+
+export function writeNativeBrollMarker(doc: Y.Doc, text: Y.Text, delimiter: number, marker: string): void {
+  const formats = markerFormats.get(doc), client = doc.clientID;
+  const first = formats ? nativeClock(doc) : 0;
+  // why: the following space keeps the formatting span live while the delimiter is replaced
+  text.format(delimiter, 2, { [NATIVE_BROLL_MARKER]: marker });
+  if (!formats) return;
+  const end = nativeClock(doc);
+  const clocks = formats.get(client) ?? new Set<number>();
+  formats.set(client, clocks);
+  // why: keep only the delimiter's identity through Undo, including after another copy opens that state
+  for (let clock = first; clock < end; clock++) clocks.add(clock);
 }
 
 interface Claim {
@@ -47,7 +68,7 @@ type StoredEmbed = Readonly<Record<string, unknown>>;
 type Claims = ReturnType<typeof nativeBrollClaims>;
 
 export interface NativeBrollCellLayout {
-  readonly offsets: number[];
+  readonly objects: readonly StoredEmbed[];
   readonly embeds: readonly StoredEmbed[];
   fold?: { readonly claims: Claims; readonly hidden: NativeBrollHidden };
 }
@@ -70,50 +91,22 @@ function fold(embeds: readonly StoredEmbed[], claims: Claims): NativeBrollHidden
   return { embeds: hidden, gaps };
 }
 
-export function readNativeBrollLayout(items: readonly NativeDeltaItem[]): NativeBrollCellLayout {
-  const embeds: StoredEmbed[] = [], offsets: number[] = [];
-  let offset = 0;
-  for (const { insert } of items) {
-    if (typeof insert === "string") { offset += insert.length; continue; }
-    offsets.push(offset++);
-    if (typeof insert[NATIVE_BROLL_SOURCE] === "string" && typeof insert.k === "string" && typeof insert.label === "string") embeds.push(insert);
-  }
-  return { offsets, embeds };
-}
+const NO_EMBEDS: readonly StoredEmbed[] = Object.freeze([]);
 
-// why: text deltas move stored offsets without changing which claims are folded
-export function advanceNativeBrollLayout(layout: NativeBrollCellLayout, changes: Y.YTextEvent["delta"]): boolean {
-  let offset = 0, shift = 0, next = 0;
-  const offsets = layout.offsets;
-  for (const change of changes) {
-    if (change.retain) {
-      offset += change.retain;
-      if (shift) {
-        while (next < offsets.length && (offsets[next] ?? Infinity) < offset) {
-          offsets[next] = (offsets[next] as number) + shift;
-          next++;
-        }
-      } else {
-        let high = offsets.length;
-        while (next < high) {
-          const mid = (next + high) >> 1;
-          if ((offsets[mid] ?? Infinity) < offset) next = mid + 1;
-          else high = mid;
-        }
-      }
-    }
-    if (change.delete) {
-      offset += change.delete;
-      if ((offsets[next] ?? Infinity) < offset) return false;
-      shift -= change.delete;
-    }
-    if (change.insert !== undefined) {
-      if (typeof change.insert !== "string") return false;
-      shift += change.insert.length;
-    }
+export function readNativeBrollLayout(items: readonly NativeDeltaItem[], previous?: NativeBrollCellLayout): NativeBrollCellLayout {
+  const prior = previous?.objects ?? NO_EMBEDS;
+  let count = 0, changed: StoredEmbed[] | undefined;
+  for (const { insert } of items) {
+    if (typeof insert === "string") continue;
+    if (!changed && prior[count] !== insert) changed = prior.slice(0, count);
+    changed?.push(insert);
+    count++;
   }
-  if (shift) for (; next < offsets.length; next++) offsets[next] = (offsets[next] as number) + shift;
-  return true;
+  if (previous && !changed && count === prior.length) return previous;
+  const objects = changed ?? (count ? prior.slice(0, count) : NO_EMBEDS);
+  const embeds = objects.length ? objects.filter(embed => typeof embed[NATIVE_BROLL_SOURCE] === "string" &&
+    typeof embed.k === "string" && typeof embed.label === "string") : NO_EMBEDS;
+  return { objects, embeds };
 }
 
 export function projectNativeBrollCell(items: readonly NativeDeltaItem[], claims: Claims, layout: NativeBrollCellLayout): void {

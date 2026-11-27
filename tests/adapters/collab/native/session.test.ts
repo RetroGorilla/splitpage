@@ -128,6 +128,28 @@ function offlineBroll(t: TestContext, line: string) {
   return { first, second, sync };
 }
 
+test("closing shared B-roll publishes the marker, label and shot in one update", t => {
+  const { first, second } = offlineBroll(t, "B-roll:Desk\nB-roll: ");
+  const updates: Uint8Array[] = [];
+  let transactions = 0;
+  first.ydoc.on("update", update => updates.push(update));
+  first.ydoc.on("afterTransaction", () => { transactions++; });
+  written(first.commands.closeBroll("A"));
+  assert.equal(updates.length, 1);
+  assert.equal(transactions, 1);
+  const update = updates[0];
+  assert.ok(update);
+  Y.applyUpdate(second.ydoc, update, "peer");
+  assert.deepEqual(second.document(), first.document());
+  assert.deepEqual(second.document().brollShots.map(shot => shot.name), ["Desk"]);
+  assert.equal(second.document().rows[0]?.visualText?.match(/class="broll-key"/g)?.length, 2);
+  const closed = first.document();
+  written(first.commands.undo());
+  assert.equal(first.document().rows[0]?.visualText, "B-roll:Desk<br>B-roll: ");
+  written(first.commands.redo());
+  assert.deepEqual(first.document(), closed);
+});
+
 test("a deleted shared close cannot hide a stored surviving shot behind a derived shot", t => {
   const { first, second, sync } = offlineBroll(t, "B-roll: Desk");
   for (const replica of [first, second]) written(replica.commands.closeBroll("A"));
