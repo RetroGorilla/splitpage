@@ -1,10 +1,10 @@
 # Roadmap
 
-Release 0.5.0 documentation checked against GitHub, source and merge history. GitHub issues hold the current backlog. Recheck them before starting work. This page describes only merged behaviour as done.
+Release 0.5.1 documentation checked against GitHub, source and merge history. GitHub issues hold the current backlog. Recheck them before starting work. This page describes only merged behaviour as done.
 
 ## Current release
 
-Collaboration ships in Splitpage **0.5.0**, dated **2026-11-27** ([v0.5.0](https://github.com/RetroGorilla/splitpage/releases/tag/v0.5.0)). The previous release was [0.4.3](https://github.com/RetroGorilla/splitpage/releases/tag/v0.4.3) on 2026-11-09.
+Splitpage **0.5.1**, dated **2026-11-27** ([v0.5.1](https://github.com/RetroGorilla/splitpage/releases/tag/v0.5.1)), brings production tags, sound cues and B-roll to shared scripts. Collaboration first shipped in [0.5.0](https://github.com/RetroGorilla/splitpage/releases/tag/v0.5.0) on the same day. The release before that was [0.4.3](https://github.com/RetroGorilla/splitpage/releases/tag/v0.4.3) on 2026-11-09.
 
 The old plans used “3.x”, “4.0” and “4.1” as milestone names. See the remote tags and [releases](https://github.com/RetroGorilla/splitpage/releases) for shipped versions.
 
@@ -56,6 +56,13 @@ Scene descriptions (#1171) were closed as not planned. They are not queued work.
 | Collaboration: the shared-document layer on standard Yjs (slices 1–8), the relay with versioned storage, invitations, pictures, limits and verified backups (Stage 3), and sharing, joining, leaving, the **Shared** pill and popover, link passwords, the desktop file copy, relay version history with edit-author names, presence with remote carets and selections, the offline notice, phone layouts and help (Stages 4 and 5). Release builds include it. | [Build status](collaboration/native-adapter-design.md#build-status); [Stage 4 and 5](collaboration/native-adapter-design.md#stage-4-and-5-sharing-joining-version-history-and-presence); [performance record](architecture/performance-record.md#collaboration-stage-4-and-5-624bf5a25-to-ac0d3bc4b) |
 
 The owner's relay redeploy with storage version 8 and the restore drill are being handled separately during release preparation. Live `wss:` smoke checks from the packaged desktop app and a browser are part of relay validation.
+
+## Ships in 0.5.1
+
+| Work | Evidence |
+| --- | --- |
+| Shared scripts: production tags in Visual (toolbar and typed), `SFX:` / `Music:` sound cues in Audio and Writer, and typed `B-roll:` shots in Visual. Undo in a shared script keeps Production entries. | #1810, #1811, #1812; [native layer note](collaboration/native-adapter-design.md) |
+| Shared typing no longer stops after a space in Audio or Visual; peers' carets leave a deleted beat. | #1808, #1809 |
 
 ## Parked and manual checks
 

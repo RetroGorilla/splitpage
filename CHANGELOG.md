@@ -4,6 +4,26 @@ What changed for a person using Splitpage, newest first. The same entries
 appear in the app under **Help**. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions are in `VERSION`.
 
+## 0.5.1 — 2026-11-27
+
+This release brings tags, sound cues and B-roll to shared scripts.
+
+### Added
+- Add production tags in the Visual column of a shared script. Select words
+  and choose **Tag**, or type `Prop: lamp` and press **Tab**. Undo removes the
+  tag from the words and keeps the Production entry, so you can reuse it or
+  delete it from the list.
+- Start a line with `SFX:` or `Music:` in the Audio column or in Writer to
+  make a sound cue in a shared script.
+- Type `B-roll:` in the Visual column of a shared script to add a shot when you
+  leave the cell.
+
+### Fixed
+- Typing in the Audio or Visual column of a shared script no longer stops
+  after a space.
+- When someone deletes a beat, other people's carets and selections in it
+  disappear instead of jumping to the previous beat.
+
 ## 0.5.0 — 2026-11-27
 
 This release lets you write a script together.

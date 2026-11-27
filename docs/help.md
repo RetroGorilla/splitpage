@@ -9,6 +9,20 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 `.splitpage` files. Splitpage runs in a browser or as a
 [desktop app](#desktop-app) for Windows.
 
+## What's new in 0.5.1
+
+The instructions below describe this release.
+
+- **Tags in shared scripts.** Tag words in the Visual column with **Tag** or
+  by typing `Prop: lamp` and pressing **Tab**. Undo keeps the Production
+  entry; delete it from the list if you don't need it.
+- **Sound cues and B-roll in shared scripts.** Start a line with `SFX:` or
+  `Music:` to make a sound cue, and type `B-roll:` in the Visual column to
+  add a shot.
+- **Smoother shared typing.** Typing after a space no longer stops in the
+  Audio or Visual column, and co-writers' carets leave a beat when it is
+  deleted.
+
 ## What's new in 0.5.0
 
 The instructions below describe this release.
@@ -1179,6 +1193,9 @@ included (they're your files).
   The owner can copy or reset the guest link, and add, change or remove its
   password. After a reset, guests need the new link. If the password changes,
   guests may be asked to enter it again before their work can sync.
+- Tags, sound cues and B-roll work in a shared script as they do in your own.
+  Undoing a tag keeps its Production entry, which shows as **Not in script**
+  until you use it again or choose **Delete from list**.
 
 ### Offline work and version history
 

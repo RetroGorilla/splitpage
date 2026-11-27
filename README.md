@@ -10,9 +10,10 @@ and read the narration from a teleprompter.
 
 ## Get Splitpage
 
-[0.5.0, with collaboration](https://github.com/RetroGorilla/splitpage/releases/tag/v0.5.0)
+[0.5.1](https://github.com/RetroGorilla/splitpage/releases/tag/v0.5.1)
 lets you write a script together. Share from the desktop app through a relay
-you run, and invite co-writers to join in a browser or the desktop app.
+you run, and invite co-writers to join in a browser or the desktop app. Tags,
+sound cues and B-roll work in shared scripts too.
 See the [roadmap](docs/ROADMAP.md) for what the release contains.
 
 Download the Windows installer or the portable zip from the

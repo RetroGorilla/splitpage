@@ -2,7 +2,7 @@
 
 Written 2026-08-28, condensed 2026-09-15. For whoever (or whatever) picks this up next.
 
-**Current status:** Splitpage [0.5.0, with collaboration](https://github.com/RetroGorilla/splitpage/releases/tag/v0.5.0) is dated 2026-11-27. Start with [ROADMAP.md](ROADMAP.md) and the issue's latest owner decisions. Historical checks below apply to their named commits.
+**Current status:** Splitpage [0.5.1](https://github.com/RetroGorilla/splitpage/releases/tag/v0.5.1) is dated 2026-11-27. Start with [ROADMAP.md](ROADMAP.md) and the issue's latest owner decisions. Historical checks below apply to their named commits.
 
 `docs/help.md` is the **user-facing** doc — what the features are and how to
 use them, and the file `build.mjs` renders into the in-app Help page. Read it
