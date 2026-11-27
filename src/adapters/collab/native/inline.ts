@@ -9,7 +9,26 @@ export type NativeAttributes = Record<string, true>;
 export interface NativeDeltaItem {
   readonly insert: string | Readonly<Record<string, unknown>>;
   readonly attributes?: Readonly<Record<string, unknown>>;
-  readonly foldedBroll?: true;
+}
+
+export const NATIVE_BROLL_GAP = "brollGap";
+
+export interface NativeBrollHidden {
+  readonly embeds: ReadonlySet<Readonly<Record<string, unknown>>>;
+  readonly gaps: ReadonlySet<string>;
+}
+
+const HIDDEN_BROLL = new WeakMap<readonly NativeDeltaItem[], NativeBrollHidden>();
+
+export function setNativeBrollHidden(items: readonly NativeDeltaItem[], hidden: NativeBrollHidden): void {
+  HIDDEN_BROLL.set(items, hidden);
+}
+
+export function joinNativeBrollHidden(into: readonly NativeDeltaItem[], part: readonly NativeDeltaItem[]): void {
+  const added = HIDDEN_BROLL.get(part);
+  if (!added) return;
+  const prior = HIDDEN_BROLL.get(into);
+  setNativeBrollHidden(into, prior ? { embeds: new Set([...prior.embeds, ...added.embeds]), gaps: new Set([...prior.gaps, ...added.gaps]) } : added);
 }
 
 export interface NativePreparedRun {
@@ -295,12 +314,17 @@ function tagStretches(items: readonly NativeDeltaItem[]): ReadonlyMap<string, St
 
 // why: rendering needs only the kept text; the per-unit positions are built for command lookup alone
 function itemViews(items: readonly NativeDeltaItem[], positions: boolean): ItemView[] {
-  const perItem = tagStretches(items);
+  const perItem = tagStretches(items), hidden = HIDDEN_BROLL.get(items);
   let offset = 0;
   return items.map((item, index) => {
     const stretches = perItem[index] ?? NO_STRETCHES, keys = stretches.size ? orderKeys(stretches) : NO_KEYS, start = offset;
     offset += nativeItemLength(item);
-    if (item.foldedBroll) return { run: null, keys: NO_KEYS, start, shownCount: 0, shown: null, unknown: false, unshown: false, folded: true };
+    if (hidden) {
+      const gap = item.attributes?.[NATIVE_BROLL_GAP];
+      if (typeof item.insert === "string" ? typeof gap === "string" && hidden.gaps.has(gap) : hidden.embeds.has(item.insert)) {
+        return { run: null, keys: NO_KEYS, start, shownCount: 0, shown: null, unknown: false, unshown: false, folded: true };
+      }
+    }
     if (typeof item.insert === "string") {
       const value = item.insert;
       let kept = value, shown: number[] | null = null;

@@ -498,7 +498,8 @@ export function planBrollRecordsInState(
   const found = collectBrollFromRows(state.rows, readers);
   const live = keepLine ? found.filter(({ id }) => keepLine(id)) : found;
   const claimed: Record<string, boolean> = Object.create(null);
-  const held = brollHeldIds(live);
+  const held = brollHeldIds(found);
+  if (keepLine) for (const shot of shots) if (!keepLine(shot.id)) held[shot.id] = true;
   const byId = shotIndexById(shots);
   const plan: BrollPlan = { create: [], rename: [] };
   const seen: Record<string, number> = Object.create(null);

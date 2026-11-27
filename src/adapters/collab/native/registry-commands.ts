@@ -6,8 +6,8 @@ import { cappedLongText, cappedText, plainText } from "../../../core/document/te
 import type { DocumentShape, DocumentTag } from "../../../core/document/validated.ts";
 import { PERSON_NAME_MAX } from "../../../core/production/records.ts";
 import { brollInCell, brollMarkerLines, brollSeedLocation, brollSeedRef } from "../../../core/production/broll.ts";
-import { nativeCellView, nativeStoredOffset } from "./inline.ts";
-import { NATIVE_BROLL_GAP, NATIVE_BROLL_SOURCE } from "./broll-claims.ts";
+import { NATIVE_BROLL_GAP, nativeCellView, nativeStoredOffset } from "./inline.ts";
+import { NATIVE_BROLL_MARKER, NATIVE_BROLL_SOURCE, nativeBrollMarkerAt } from "./broll-claims.ts";
 import { compareNativeRankedIds, isValidNativeRank, nativeRankBetween } from "./rank.ts";
 import { copyArgument, copyRecordValue, nativeRecordId, RECORD_UNCHANGED, RECORD_WRITTEN, refuseRecord } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
@@ -134,19 +134,20 @@ function appendShot(writes: Write[], root: Root, id: string, fields: Fields, ran
 export function closeNativeBroll(script: NativeScript, beat: string, stamp?: NativeEditStamp): NativeRecordOutcome {
   const unavailable = nativeWriteAvailability(script);
   if (unavailable) return refuseRecord(unavailable);
-  return transactPreparedNativeCommand(script, () => encodeNativeEditStamp(stamp), encoded => {
+  return withNativeCommand(script, () => {
+    const encoded = encodeNativeEditStamp(stamp);
     if (script.closed() || script.reader.isClosed()) return refuseRecord("closed");
     if (encoded === null || !nativeRecordId(beat)) return refuseRecord("value");
     const text = script.roots.visuals.get(beat);
     if (!(text instanceof Y.Text) || !script.reader.beatBoundary(beat)) return RECORD_UNCHANGED;
-    const view = nativeCellView(script.reader.visualItems(beat)), lines = brollMarkerLines(view.runs), claims = script.reader.brollClaims();
+    const items = script.reader.visualItems(beat), view = nativeCellView(items), lines = brollMarkerLines(view.runs), claims = script.reader.brollClaims();
     if (!lines.some(({ marker }) => !marker.key || claims.get(marker.id)?.state === "unnamed")) return RECORD_UNCHANGED;
     const found = brollInCell(view.runs), rows = script.reader.rows();
     const { readers, plainTextOf } = nativeRegistryProduction(rows);
     const row = rows.find(row => row.id === beat), root = script.roots.shots, order = slots(root, true);
     if (!order) return refuseRecord("stored");
     let rank = order.at(-1)?.rank ?? null;
-    const writes: Write[] = [], splices: Write[] = [];
+    const writes: Write[] = [], splices: Write[] = [], markers: Write[] = [];
     const writer = mintNativeId(script.doc, "");
     for (const [ordinal, { line, marker }] of lines.entries()) {
       const shot = found[ordinal], source = view.text.slice(line.start, line.end);
@@ -162,9 +163,14 @@ export function closeNativeBroll(script: NativeScript, beat: string, stamp?: Nat
       if (!match) continue;
       const from = nativeStoredOffset(view, line.start);
       const until = nativeStoredOffset(view, line.start + match[0].trimEnd().length);
-      const point = Y.createRelativePositionFromTypeIndex(text, until - 1).item;
-      if (!point) continue;
-      const markerSource = `${point.client.toString(36)}-${point.clock.toString(36)}`;
+      let markerSource = nativeBrollMarkerAt(items, until - 1);
+      if (!markerSource) {
+        const point = Y.createRelativePositionFromTypeIndex(text, until - 1).item;
+        if (!point) continue;
+        const id = `${point.client.toString(36)}-${point.clock.toString(36)}`;
+        markerSource = id;
+        markers.push(() => { text.format(until - 1, 1, { [NATIVE_BROLL_MARKER]: id }); });
+      }
       const id = `bs-visual-${markerSource}-${writer}-${ordinal.toString(36)}`;
       if (root.has(id)) return refuseRecord("taken");
       rank = nativeRankBetween(rank, null);
@@ -179,8 +185,11 @@ export function closeNativeBroll(script: NativeScript, beat: string, stamp?: Nat
     }
     if (!splices.length && !writes.length) return RECORD_UNCHANGED;
     if (encoded) writes.push(() => { script.roots.edited.set(beat, encoded); });
-    return finish([...splices.reverse(), ...writes]);
-  }, refuseRecord);
+    script.prepareWrite?.();
+    // why: the literal marker must retain its identity when Undo restores it with a new Yjs item
+    if (markers.length) script.doc.transact(() => finish(markers), "broll-marker");
+    return script.doc.transact(() => finish([...splices.reverse(), ...writes]), script.origin);
+  });
 }
 
 function planNew(script: NativeScript, writes: Write[], collection: Collection, fields: Fields): string | Refused {

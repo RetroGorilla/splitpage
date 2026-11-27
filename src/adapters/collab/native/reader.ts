@@ -5,12 +5,13 @@ import { projectSharedJoinedFields } from "../../../core/collab/projection/joins
 import type { DocumentShape } from "../../../core/document/validated.ts";
 import { toHtml } from "../../../core/text/html.ts";
 import type { Run } from "../../../core/text/runs.ts";
-import { nativeBlockOf, nativeCellView, nativeItemLength, nativeRunsOf, nativeStoredOffset, nativeUnitCounts } from "./inline.ts";
+import { joinNativeBrollHidden, nativeBlockOf, nativeCellView, nativeItemLength, nativeRunsOf, nativeStoredOffset, nativeUnitCounts } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import { compareNativeRankedIds } from "./rank.ts";
 import { foldNativeBrollRecords, nativeRegistryRowChanged, projectNativeRegistries, projectNativeTags } from "./registry-projection.ts";
 import type { NativeRegistryRowInputs } from "./registry-projection.ts";
-import { nativeBrollClaims, nativeBrollClaimField, projectNativeBrollCell } from "./broll-claims.ts";
+import { advanceNativeBrollLayout, nativeBrollClaims, nativeBrollClaimField, projectNativeBrollCell, readNativeBrollLayout } from "./broll-claims.ts";
+import type { NativeBrollCellLayout } from "./broll-claims.ts";
 import type { NativeRoots } from "./roots.ts";
 import { NATIVE_SHOT_PROPS, OBSOLETE_SHOT_PROPS, nativeShotPropEntries } from "./shot-props.ts";
 import {
@@ -308,7 +309,7 @@ export class NativeScriptReader {
   private closeClaims: ReturnType<typeof nativeBrollClaims> | undefined;
   private shotFold?: ReturnType<typeof foldNativeBrollRecords> | undefined;
   private visualDeltas = new WeakMap<Y.Text, readonly NativeDeltaItem[]>();
-  private readonly visualLayouts = new WeakMap<Y.Text, NonNullable<ReturnType<typeof projectNativeBrollCell>["layout"]>>();
+  private readonly visualLayouts = new WeakMap<Y.Text, NativeBrollCellLayout>();
   private readonly visualClaimRows = new Set<string>();
   private readonly anchorsByRow = new Map<string, Set<string>>();
   private readonly rowsByAnchor = new Map<string, Map<string, CommentCell>>();
@@ -361,7 +362,11 @@ export class NativeScriptReader {
         if (typeof beat === "string") {
           this.dirtyBeats.add(beat);
           const visual = roots.visuals.get(beat);
-          if (visual instanceof Y.Text) this.visualDeltas.delete(visual);
+          if (visual instanceof Y.Text) {
+            this.visualDeltas.delete(visual);
+            const layout = this.visualLayouts.get(visual);
+            if (layout && (!(event instanceof Y.YTextEvent) || !advanceNativeBrollLayout(layout, event.delta))) this.visualLayouts.delete(visual);
+          }
         } else {
           this.structural = true;
           for (const key of event.keys.keys()) {
@@ -761,6 +766,7 @@ export class NativeScriptReader {
       }
       for (const item of items) audio.push(item);
       const delta = this.visualItems(member.id);
+      joinNativeBrollHidden(visual, delta);
       if (visual.length && delta.length) visual.push({ insert: "\n" });
       for (const item of delta) visual.push(item);
     }
@@ -810,15 +816,13 @@ export class NativeScriptReader {
     if (!(text instanceof Y.Text)) return [];
     const cached = this.visualDeltas.get(text);
     if (cached) return cached;
-    const { items, layout } = projectNativeBrollCell(text.toDelta() as NativeDeltaItem[], this.brollClaims(), this.visualLayouts.get(text));
+    const items = text.toDelta() as NativeDeltaItem[];
+    const layout = this.visualLayouts.get(text) ?? readNativeBrollLayout(items);
+    this.visualLayouts.set(text, layout);
+    projectNativeBrollCell(items, this.brollClaims(), layout);
     this.visualDeltas.set(text, items);
-    if (layout) {
-      this.visualLayouts.set(text, layout);
-      this.visualClaimRows.add(beat);
-    } else {
-      this.visualLayouts.delete(text);
-      this.visualClaimRows.delete(beat);
-    }
+    if (layout.embeds.length) this.visualClaimRows.add(beat);
+    else this.visualClaimRows.delete(beat);
     return items;
   }
 

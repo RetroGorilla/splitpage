@@ -261,9 +261,10 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
   const seededShots = new Set<string>();
   document.people = document.people.filter(person => !!person.name);
   const normalized = document.brollShots.flatMap(shot => shot.name ? [{ ...newBrollShot(shot.id, {}), ...shot }] : []);
-  document.brollShots = shotsRemoved ? repairNames(normalized, BROLL_NAME_MAX, normalizeTagName) : normalized;
   if (hasRemoved(roots.people)) document.people = repairNames(document.people, PERSON_NAME_MAX, normalizeTagName);
   const people = new Set(document.people.map(person => person.id));
+  const { hidden, alternatives } = projectShots(normalized, document.people, claims);
+  document.brollShots = shotsRemoved ? repairNames(normalized, BROLL_NAME_MAX, normalizeTagName) : normalized;
   const { stored, tags, groups, tagsRemoved, propLookup, published } = projectTags(document.productionTags, people);
   let derived: DocumentTag[] = [];
   if (tagsRemoved || shotsRemoved) {
@@ -297,7 +298,6 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
       shot.props = normalizeBrollProps(props, relevantTags(props));
     }
   }
-  const { hidden, alternatives } = projectShots(document.brollShots, document.people, claims);
   if (hidden.size) document.brollShots = document.brollShots.filter(shot => !hidden.has(shot.id));
   document.productionTags = derived.length ? [...published, ...derived] : published;
   return { inputs: { tags: tagsRemoved, shots: shotsRemoved, seededShots }, groups, shotAlternatives: alternatives };
