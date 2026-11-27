@@ -141,7 +141,6 @@ test("rundown: replacing the document cancels a click even when the connected ta
     Object.defineProperty(window, name, { configurable: true, ...descriptor });
     t.after(() => { if (original) Object.defineProperty(window, name, original); else Reflect.deleteProperty(window, name); });
   }
-  t.mock.method(window.performance, "now", () => 1000);
   row.scrollIntoView = () => { scrollY = 1100; writes.push(scrollY); };
   function frame(now: number): void {
     const callbacks = [...frames.values()];
@@ -150,6 +149,7 @@ test("rundown: replacing the document cancels a click even when the connected ta
   }
   try {
     button.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 1 }));
+    frame(1000);
     frame(1100);
     assert.equal(window.scrollY, 975);
     const stale = [...frames.values()][0];
@@ -169,8 +169,11 @@ test("rundown: replacing the document cancels a click even when the connected ta
     assert.equal(writes.length, writeCount);
     assert.equal(window.scrollY, 2378);
     button.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 1 }));
-    frame(1200);
+    frame(1400);
+    frame(1600);
     assert.equal(window.scrollY, 1100);
+    frame(1617);
+    frame(1634);
     assert.equal(frames.size, 0);
   } finally {
     owner.dispose();
