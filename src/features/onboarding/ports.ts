@@ -25,6 +25,7 @@ export interface OnboardingPorts {
   readonly seedCheck: SeedCheck;
   readonly launchFacts: Pick<LaunchFacts, "firstTabOfLaunch" | "hadPriorSession" | "launchIntent" | "hasDraftToRestore">;
   readonly lastFile: LastFile;
+  readonly sharedScripts: { readonly invited: () => boolean; readonly onThisDevice: () => Promise<boolean> };
   readonly onFileMenuChoice: (listener: () => void) => () => void;
 }
 

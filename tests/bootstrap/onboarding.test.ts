@@ -10,6 +10,7 @@ import { localFileMenuControls, mountLocalFilesFeature, stopLocalFilesFeature } 
 import { loadTestDocument } from "../../src/test/_document.mjs";
 import { domStartup } from "../../src/bootstrap/wiring/ports/startup.ts";
 import { connectStartup } from "../../src/application/startup-signal.ts";
+import { arrivedByInvitation, startInvitationEntry } from "../../src/bootstrap/wiring/collaboration-join.ts";
 
 test("onboarding readiness does not settle between DOM readiness and the app's startup listener", async () => {
   Object.defineProperty(document, "readyState", { configurable: true, get: () => "loading" });
@@ -29,6 +30,30 @@ test("onboarding readiness does not settle between DOM readiness and the app's s
   } finally {
     stop();
     Reflect.deleteProperty(document, "readyState");
+  }
+});
+
+test("a page opened from an invitation link still counts as invited after the join screen takes the link", async () => {
+  const global = globalThis as { splitpageInvitation?: unknown };
+  try {
+    assert.equal(arrivedByInvitation(), false);
+    global.splitpageInvitation = null;
+    assert.equal(arrivedByInvitation(), false);
+    global.splitpageInvitation = false;
+    assert.equal(arrivedByInvitation(), true);
+    const entry = startInvitationEntry();
+    try {
+      assert.equal(entry.hasInvitation, true);
+      assert.equal(global.splitpageInvitation, null);
+      assert.equal(arrivedByInvitation(), true);
+      await new Promise(resolve => setTimeout(resolve, 0));
+    } finally {
+      entry.dispose();
+    }
+    assert.equal(arrivedByInvitation(), true);
+  } finally {
+    delete global.splitpageInvitation;
+    document.body.innerHTML = "";
   }
 });
 

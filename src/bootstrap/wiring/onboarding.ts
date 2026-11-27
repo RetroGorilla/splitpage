@@ -13,6 +13,14 @@ import type { OnboardingMount, OnboardingPorts } from "../../features/onboarding
 import { owned } from "../../features/routing/owned.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { preferences } from "./preferences-owner.ts";
+import { arrivedByInvitation } from "./collaboration-join.ts";
+import { browserScriptsOnThisDevice } from "./ports/shared-scripts.ts";
+
+declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
+
+const sharedScripts: OnboardingPorts["sharedScripts"] = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI
+  ? { invited: arrivedByInvitation, onThisDevice: async () => (await browserScriptsOnThisDevice()).length > 0 }
+  : { invited: () => false, onThisDevice: async () => false };
 
 const onboarding = owned<OnboardingMount>();
 
@@ -32,6 +40,7 @@ export function mountOnboardingFeature(): OnboardingMount {
       seedCheck: portSeedCheck,
       launchFacts: portLaunch,
       lastFile: portLastFile,
+      sharedScripts,
       onFileMenuChoice: (listener) => localFileMenuControls().onFileMenuChoice(listener)
     };
     return mountOnboarding(ports);

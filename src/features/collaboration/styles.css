@@ -18,6 +18,24 @@
   .sharing-details[aria-modal="true"]::backdrop { background: var(--backdrop); }
   .collaboration-dialog :is(form, fieldset, label, input) { min-width: 0; }
   .collaboration-dialog .modal-panel { overflow-wrap: anywhere; }
+  .collaboration-dialog label.modal-hint { display: flex; flex-direction: column; gap: var(--space-6); font-weight: 500; }
+  .collaboration-dialog label.modal-hint > input {
+    height: 32px;
+    box-sizing: border-box;
+    padding: 0 9px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .collaboration-dialog label.modal-hint > input:focus { outline: none; border-color: var(--visual); box-shadow: 0 0 0 1px var(--visual); }
+  .collaboration-dialog .swatch-group { margin-bottom: var(--space-14); }
+  .collaboration-dialog .swatch-group legend { padding: 0; font-size: 13px; font-weight: 500; color: var(--text-dim); }
+  @media (hover: none), (pointer: coarse) {
+    .collaboration-dialog label.modal-hint > input { height: 44px; font-size: 16px; }
+  }
   .presence-carets {
     position: fixed;
     inset: 0;
