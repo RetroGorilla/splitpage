@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { brollCloseSource } from "../../../core/document/broll.ts";
 import type { StoredImageRef } from "../../../core/document/text-policy.ts";
 import { OBJ, cleanMarks, cleanText, normalizeCell, orderedMarks, sameMarks, tagStack, withTagStack } from "../../../core/text/runs.ts";
 import type { Marks, Run } from "../../../core/text/runs.ts";
@@ -35,6 +36,7 @@ export interface NativeCellView {
   readonly unknown: number;
   readonly ends: readonly number[];
   readonly lefts: readonly NativeLeft[];
+  readonly foldedBroll?: readonly number[] | undefined;
 }
 
 const PLAIN_MARKS = ["b", "i", "u", "s", "hl", "dir", "cue"] as const;
@@ -264,6 +266,7 @@ interface ItemView {
   readonly shown: readonly number[] | null;
   readonly unknown: boolean;
   readonly unshown: boolean;
+  readonly folded?: true;
 }
 
 const NO_KEYS: readonly string[] = Object.freeze([]);
@@ -292,8 +295,9 @@ function tagStretches(items: readonly NativeDeltaItem[]): ReadonlyMap<string, St
 // why: rendering needs only the kept text; the per-unit positions are built for command lookup alone
 function itemViews(items: readonly NativeDeltaItem[], positions: boolean): ItemView[] {
   const perItem = tagStretches(items);
+  let shots: Map<string, { id: string; index: number }> | undefined;
   let offset = 0;
-  return items.map((item, index) => {
+  const views: ItemView[] = items.map((item, index) => {
     const stretches = perItem[index] ?? NO_STRETCHES, keys = stretches.size ? orderKeys(stretches) : NO_KEYS, start = offset;
     offset += nativeItemLength(item);
     if (typeof item.insert === "string") {
@@ -310,7 +314,19 @@ function itemViews(items: readonly NativeDeltaItem[], positions: boolean): ItemV
     const atom = atomOf(item.insert, marksOf(item.attributes, NO_KEYS, true));
     let clean = atom ? cleanAtom(atom) : null, unshown = !!atom && !!item.attributes && unshownKeys(item.attributes, true);
     if (atom && !clean) { clean = carriedAtom(atom); unshown ||= !!clean; }
+    if (clean?.atom === "broll") {
+      shots ??= new Map();
+      const marker = brollCloseSource(clean.id) ?? ":" + clean.id;
+      const prior = shots.get(marker);
+      if (!prior || clean.id < prior.id) shots.set(marker, { id: clean.id, index });
+    }
     return { run: clean, keys: NO_KEYS, start, shownCount: clean ? 1 : 0, shown: positions ? clean ? [0] : [] : null, unknown: !atom, unshown };
+  });
+  if (!shots) return views;
+  return views.map((view, index) => {
+    const run = view.run;
+    if (run?.atom !== "broll" || shots?.get(brollCloseSource(run.id) ?? ":" + run.id)?.index === index) return view;
+    return { ...view, run: null, shownCount: 0, shown: null, folded: true };
   });
 }
 
@@ -334,16 +350,18 @@ export function nativeRunsOf(items: readonly NativeDeltaItem[], visitWidth?: (in
 export function nativeCellView(items: readonly NativeDeltaItem[]): NativeCellView {
   const views = itemViews(items, true), ends: number[] = [], lefts: NativeLeft[] = [];
   let text = "", hidden = 0, unknown = 0;
+  let foldedBroll: number[] | undefined;
   for (const [index, view] of views.entries()) {
     const stored = items[index], length = stored ? nativeItemLength(stored) : 0;
     hidden += length - view.shownCount;
     if (view.unknown) unknown++;
+    if (view.folded) (foldedBroll ??= []).push(view.start);
     if (!view.run) continue;
     const left: NativeLeft = { marks: view.run.marks, keys: view.keys, atom: !!view.run.atom };
     for (const at of view.shown ?? []) { ends.push(view.start + at + 1); lefts.push(left); }
     text += view.run.atom ? OBJ : view.run.text;
   }
-  return { runs: merged(views), text, length: ends.length, hidden, unknown, ends, lefts };
+  return { runs: merged(views), text, length: ends.length, hidden, unknown, ends, lefts, foldedBroll };
 }
 
 export function nativeStoredOffset(view: NativeCellView, shown: number): number {
@@ -362,7 +380,7 @@ export function nativeUnitCounts(items: readonly NativeDeltaItem[]): { readonly 
     const item = items[index];
     if (view.unknown) unknown++;
     if (view.unshown) unshown++;
-    hidden += (item ? nativeItemLength(item) : 0) - view.shownCount;
+    if (!view.folded) hidden += (item ? nativeItemLength(item) : 0) - view.shownCount;
   });
   return { hidden, unknown, unshown };
 }

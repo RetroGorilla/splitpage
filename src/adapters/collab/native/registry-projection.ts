@@ -1,9 +1,10 @@
 import * as Y from "yjs";
-import { BROLL_NAME_MAX, BROLL_PROP_NAME_MAX, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
+import { BROLL_EDIT_FIELDS, BROLL_NAME_MAX, BROLL_PROP_NAME_MAX, brollCloseSource, brollUnmergedEdits, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
+import type { BrollUnmergedEdit } from "../../../core/document/broll.ts";
 import { noFreeze } from "../../../core/document/freeze.ts";
 import { ensureTagIds, isTagId, normalizeTagName, registryKey, TAG_STATUS_IDS, unmergedTagEdits } from "../../../core/document/tags.ts";
 import { hasLoneSurrogate, plainText, settledNames } from "../../../core/document/text-policy.ts";
-import type { DocumentShape, DocumentTag, UnmergedTagEdit } from "../../../core/document/validated.ts";
+import type { DocumentShape, DocumentShot, DocumentTag, UnmergedTagEdit } from "../../../core/document/validated.ts";
 import { applyBrollRecords, brollInCell, planBrollRecordsInState } from "../../../core/production/broll.ts";
 import type { FieldHtml } from "../../../core/production/ports.ts";
 import { createProductionReaders } from "../../../core/production/readers.ts";
@@ -32,19 +33,26 @@ export interface NativeRegistryRowInputs {
 
 type KeyedTag = DocumentTag & { id: string };
 
+function recordIdOrder(left: { readonly id: string }, right: { readonly id: string }): number {
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
+function addRegistryMember<T>(groups: Map<string, T | T[]>, key: string, record: T): void {
+  const members = groups.get(key);
+  if (Array.isArray(members)) members.push(record);
+  else groups.set(key, members ? [members, record] : record);
+}
+
 function foldTags(tags: DocumentShape["productionTags"], roots: NativeRoots) {
   const byName = new Map<string, KeyedTag | KeyedTag[]>(), groups = new Map<string, readonly string[]>();
   for (const tag of tags) {
     if (!tag?.name || !isTagId(tag.id)) continue;
-    const key = registryKey(tag.cat, tag.name), members = byName.get(key);
-    const member = tag as KeyedTag;
-    if (Array.isArray(members)) members.push(member);
-    else byName.set(key, members ? [members, member] : member);
+    addRegistryMember(byName, registryKey(tag.cat, tag.name), tag as KeyedTag);
   }
   const folded = new Map<string, DocumentTag>();
   for (const members of byName.values()) {
     if (!Array.isArray(members)) continue;
-    members.sort((a, b) => a.id < b.id ? -1 : 1);
+    members.sort(recordIdOrder);
     const first = members[0];
     if (!first) continue;
     const ids = Object.freeze(members.map(tag => tag.id));
@@ -98,7 +106,43 @@ function foldTags(tags: DocumentShape["productionTags"], roots: NativeRoots) {
   return { tags: projected, groups };
 }
 
-function production(rows: readonly RegistryCellRow[]) {
+function shotEditValue(shot: DocumentShot, field: BrollUnmergedEdit["field"], people: ReadonlyMap<string, string>): string {
+  if (field === "owner") return people.get(shot.owner ?? "") ?? "Unassigned";
+  if (field === "status") return shot.status === "shot" ? "Filmed" : "To film";
+  if (field === "reshoot") return shot.reshoot === true ? "Flagged" : "Unflagged";
+  if (field === "props") return shot.props?.map(prop => prop?.name).filter(Boolean).join(", ") || "None";
+  return shot[field] || "None";
+}
+
+function foldShots(shots: DocumentShot[], people: DocumentShape["people"]): DocumentShot[] {
+  const bySource = new Map<string, DocumentShot | DocumentShot[]>();
+  for (const shot of shots) {
+    const source = brollCloseSource(shot.id);
+    if (source) addRegistryMember(bySource, source, shot);
+  }
+  const folded = new Map<string, DocumentShot>(), hidden = new Set<string>();
+  let names: ReadonlyMap<string, string> | undefined;
+  for (const members of bySource.values()) {
+    if (!Array.isArray(members)) continue;
+    names ??= new Map(people.map(person => [person.id, person.name]));
+    members.sort(recordIdOrder);
+    const first = members[0] as DocumentShot, edits: BrollUnmergedEdit[] = [];
+    const shot = { ...first }, saved = members.flatMap(member => brollUnmergedEdits(member.unmergedEdits));
+    for (const field of Object.keys(BROLL_EDIT_FIELDS) as BrollUnmergedEdit["field"][]) {
+      const primary = shotEditValue(shot, field, names), values = new Set<string>();
+      for (const member of members) values.add(shotEditValue(member, field, names));
+      for (const edit of saved) if (edit.field === field) values.add(edit.value);
+      values.delete(primary);
+      for (const value of values) edits.push({ field, value });
+    }
+    if (edits.length) shot.unmergedEdits = edits; else delete shot.unmergedEdits;
+    folded.set(first.id, shot);
+    for (const member of members.slice(1)) hidden.add(member.id);
+  }
+  return hidden.size ? shots.filter(shot => !hidden.has(shot.id)).map(shot => folded.get(shot.id) ?? shot) : shots;
+}
+
+export function nativeRegistryProduction(rows: readonly RegistryCellRow[]) {
   const cells = new Map<string, readonly Run[]>();
   for (const row of rows) {
     cells.set(row.audioText, row.narration);
@@ -127,12 +171,12 @@ export function nativeRegistryRowChanged(inputs: NativeRegistryRowInputs, previo
 }
 
 export function nativeTagNamesInRows(rows: readonly RegistryCellRow[]): ReadonlySet<string> {
-  const { readers } = production(rows);
+  const { readers } = nativeRegistryProduction(rows);
   return new Set(missingRegistryTags(rows, [], readers).map(tag => registryKey(tag.cat, tag.name)));
 }
 
 export function nativeShotLinePlan(document: DocumentShape, rows: readonly RegistryCellRow[]) {
-  const { readers, plainTextOf } = production(rows);
+  const { readers, plainTextOf } = nativeRegistryProduction(rows);
   return planBrollRecordsInState(document, readers, { id: () => "", docId: () => document.docId }, plainTextOf, () => false);
 }
 
@@ -216,7 +260,7 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
   if (tagsRemoved || shotsRemoved) {
     const visible = rows();
     if (tagsRemoved) {
-      const { readers } = production(visible);
+      const { readers } = nativeRegistryProduction(visible);
       derived = missingRegistryTags(document.rows, stored, readers);
       if (derived.length) {
         ensureTagIds([...stored, ...derived]);
@@ -244,6 +288,7 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
       shot.props = normalizeBrollProps(props, relevantTags(props));
     }
   }
+  document.brollShots = foldShots(document.brollShots, document.people);
   document.productionTags = derived.length ? [...published, ...derived] : published;
   return { inputs: { tags: tagsRemoved, shots: shotsRemoved, seededShots }, groups };
 }

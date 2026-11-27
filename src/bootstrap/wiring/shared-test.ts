@@ -62,6 +62,7 @@ function mountHook(invitationStatus: () => { readonly connected: boolean; readon
       split: (beat: string, offset: number) => nativePeer?.split(beat, offset),
       createFirstBeat: (narration?: string) => nativePeer?.createFirstBeat(narration),
       removeBeat: (id: string) => nativePeer?.removeBeat(id),
+      closeBroll: (id: string) => nativePeer?.closeBroll(id),
       replaceAll: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["replaceAll"]>) => nativePeer?.replaceAll(...args),
       undoPeer: () => nativePeer?.undoPeer(),
       redoPeer: () => nativePeer?.redoPeer(),

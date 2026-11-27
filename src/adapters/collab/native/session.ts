@@ -18,7 +18,7 @@ import type { NativePendingEditsData } from "./pending-edits.ts";
 import type { OfflineSavedBeat } from "../../../application/collaboration/offline-clashes.ts";
 import { moveNativeBlocks } from "./move-commands.ts";
 import { clearNativeField, setNativeField } from "./record-commands.ts";
-import { changeNativeRegistry } from "./registry-commands.ts";
+import { changeNativeRegistry, closeNativeBroll } from "./registry-commands.ts";
 import { beforeNativeWrite, openNativeScript, withNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { createNativeSizeTracker, resolveNativeSizeOptions } from "./size.ts";
@@ -410,6 +410,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     setField: bind(setNativeField, writing),
     clearField: bind(clearNativeField, writing),
     changeRegistry: bind(changeNativeRegistry, writing),
+    closeBroll: bind(closeNativeBroll, adding),
     createComment: bind((script, comment: NativeNewComment) => createNativeComment(script, comment, body), adding),
     createReply: bind((script, comment: string, reply: NativeNewReply) => createNativeReply(script, comment, reply, body), adding),
     setCommentBody: bind((script, target: NativeCommentTarget, html: string) => setNativeCommentBody(script, target, actor, html, body), adding),

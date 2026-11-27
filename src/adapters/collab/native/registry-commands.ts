@@ -1,19 +1,23 @@
 import * as Y from "yjs";
-import { BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_PROP_NAME_MAX, BROLL_TEXT_MAX, brollStatusId, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
+import { BROLL_MARKER_RE, BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_PROP_NAME_MAX, BROLL_TEXT_MAX, brollCloseSource, brollStatusId, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
 import type { BrollProp } from "../../../core/document/broll.ts";
 import { isTagId, nextTagStatus, normalizeTagName, registryKey, TAG_STATUS_IDS, tagCategoryId, tagStatusId } from "../../../core/document/tags.ts";
 import { cappedLongText, cappedText, plainText } from "../../../core/document/text-policy.ts";
 import type { DocumentShape, DocumentTag } from "../../../core/document/validated.ts";
 import { PERSON_NAME_MAX } from "../../../core/production/records.ts";
+import { brollAnchorTodo, brollInCell, brollMarkerLines, brollSeedLocation, brollSeedRef, planBrollAnchorsInState } from "../../../core/production/broll.ts";
+import { nativeCellView, nativeStoredOffset } from "./inline.ts";
+import type { NativeDeltaItem } from "./inline.ts";
 import { compareNativeRankedIds, isValidNativeRank, nativeRankBetween } from "./rank.ts";
 import { copyArgument, copyRecordValue, nativeRecordId, RECORD_UNCHANGED, RECORD_WRITTEN, refuseRecord } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
-import { nativeShotLinePlan, nativeTagNamesInRows } from "./registry-projection.ts";
-import { withNativeCommand } from "./script.ts";
+import { nativeRegistryProduction, nativeShotLinePlan, nativeTagNamesInRows } from "./registry-projection.ts";
+import { transactPreparedNativeCommand, withNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { prepareNativeShotProps } from "./shot-prop-commands.ts";
 import { NATIVE_SHOT_PROPS, OBSOLETE_SHOT_PROPS, newNativeShotProps } from "./shot-props.ts";
-import { nativeWriteAvailability } from "./text-commands.ts";
+import { encodeNativeEditStamp, nativeWriteAvailability } from "./text-commands.ts";
+import type { NativeEditStamp } from "./text-commands.ts";
 import { decodeNativeValue, encodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey, recordBag, sameNativeValue } from "./values.ts";
 import { nativeTagAlternativesKey, nativeTagCounter, nativeTagCounterKey, nativeTagFields, storedNativeTagAlternatives } from "./tag-fields.ts";
 
@@ -122,16 +126,65 @@ function append(writes: Write[], root: Root, id: string, fields: Fields, rank: s
   });
 }
 
+function appendShot(writes: Write[], root: Root, id: string, fields: Fields, rank: string): void {
+  const { props = [], ...ordinary } = fields;
+  append(writes, root, id, ordinary, rank, props as BrollProp[]);
+}
+
+export function closeNativeBroll(script: NativeScript, beat: string, stamp?: NativeEditStamp): NativeRecordOutcome {
+  const unavailable = nativeWriteAvailability(script);
+  if (unavailable) return refuseRecord(unavailable);
+  return transactPreparedNativeCommand(script, () => encodeNativeEditStamp(stamp), encoded => {
+    if (script.closed() || script.reader.isClosed()) return refuseRecord("closed");
+    if (encoded === null || !nativeRecordId(beat)) return refuseRecord("value");
+    const text = script.roots.visuals.get(beat);
+    if (!(text instanceof Y.Text) || !script.reader.beatBoundary(beat)) return RECORD_UNCHANGED;
+    const view = nativeCellView(text.toDelta() as NativeDeltaItem[]), lines = brollMarkerLines(view.runs);
+    if (!lines.some(({ marker }) => !marker.key)) return RECORD_UNCHANGED;
+    const found = brollInCell(view.runs), rows = script.reader.rows(), doc = script.reader.document();
+    const { readers, plainTextOf } = nativeRegistryProduction(rows);
+    const plan = planBrollAnchorsInState(doc, readers, { id: () => "", docId: () => doc.docId });
+    const existing = new Map(brollAnchorTodo(view.runs, beat, plan).flatMap(({ found, id }) => brollCloseSource(id) ? [] : [[found.index, id]]));
+    const row = rows.find(row => row.id === beat), root = script.roots.shots, order = slots(root, true);
+    if (!order) return refuseRecord("stored");
+    let rank = order.at(-1)?.rank ?? null;
+    const writes: Write[] = [], splices: Write[] = [];
+    const writer = mintNativeId(script.doc, "");
+    for (const [ordinal, { line, marker, index }] of lines.entries()) {
+      const shot = found[ordinal], source = view.text.slice(line.start, line.end);
+      const match = !marker.key && shot?.name ? BROLL_MARKER_RE.exec(source) : null;
+      if (!shot || !match) continue;
+      const from = nativeStoredOffset(view, line.start);
+      const until = nativeStoredOffset(view, line.start + match[0].trimEnd().length);
+      const point = Y.createRelativePositionFromTypeIndex(text, until - 1).item;
+      if (!point) continue;
+      const prior = existing.get(index);
+      const id = prior ?? `bs-visual-${point.client.toString(36)}-${point.clock.toString(36)}-${writer}-${ordinal.toString(36)}`;
+      if (!prior) {
+        if (root.has(id)) return refuseRecord("taken");
+        rank = nativeRankBetween(rank, null);
+        appendShot(writes, root, id, { ...defaults("shots"), origin: "script", name: shot.name, desc: shot.desc,
+          audioRef: brollSeedRef(row, plainTextOf), location: brollSeedLocation(row, readers) }, rank);
+      }
+      splices.push(() => {
+        text.insertEmbed(from, { k: id, label: (match[1] ?? "") + (match[2] ?? "") }, {});
+        text.delete(from + 1, until - from);
+      });
+    }
+    if (!splices.length) return RECORD_UNCHANGED;
+    if (encoded) writes.push(() => { script.roots.edited.set(beat, encoded); });
+    return finish([...splices.reverse(), ...writes]);
+  }, refuseRecord);
+}
+
 function planNew(script: NativeScript, writes: Write[], collection: Collection, fields: Fields): string | Refused {
   const root = script.roots[collection], order = slots(root, true);
   if (!order) return refuseRecord("stored");
   const id = collection === "tags" ? mintNativeTagId(script.doc) : mintNativeId(script.doc, collection === "people" ? "p" : "bs");
   if (root.has(id)) return refuseRecord("taken");
   const rank = nativeRankBetween(order.at(-1)?.rank ?? null, null);
-  if (collection === "shots") {
-    const { props = [], ...ordinary } = fields;
-    append(writes, root, id, ordinary, rank, props as BrollProp[]);
-  } else if (collection === "tags") appendTag(script, writes, id, fields, rank);
+  if (collection === "shots") appendShot(writes, root, id, fields, rank);
+  else if (collection === "tags") appendTag(script, writes, id, fields, rank);
   else append(writes, root, id, fields, rank);
   return id;
 }
@@ -159,6 +212,14 @@ function namedTag(document: DocumentShape, cat: unknown, name: unknown): Documen
 
 function tagTargets(script: NativeScript, ids: readonly string[]): readonly string[] {
   return [...new Set(ids.flatMap(id => script.reader.tagGroup(id) ?? [id]))];
+}
+
+function shotTargets(script: NativeScript, ids: readonly string[]): readonly string[] {
+  const sources = new Set(ids.flatMap(id => brollCloseSource(id) ?? []));
+  if (!sources.size) return ids;
+  const living = [...script.roots.shots].filter(([id, record]) => record instanceof Y.Map && record.get("removed") !== true && sources.has(brollCloseSource(id) ?? ""));
+  const matched = new Set(living.map(([id]) => brollCloseSource(id)));
+  return [...ids.filter(id => !matched.has(brollCloseSource(id))), ...living.map(([id]) => id).sort()];
 }
 
 function projectedTagIds(script: NativeScript, document: DocumentShape): ReadonlySet<string> {
@@ -294,7 +355,7 @@ function set(script: NativeScript, collection: Collection, ids: readonly string[
     }
     return planWrites(writes);
   }
-  for (const id of ids) {
+  for (const id of collection === "shots" ? shotTargets(script, ids) : ids) {
     const map = target(script.roots[collection], id);
     if (!(map instanceof Y.Map)) return map;
     const rename = checkRename(script, collection, map, id, owned, document);
@@ -365,7 +426,8 @@ function removeOrRestore(script: NativeScript, collection: Collection, ids: read
   const root = script.roots[collection];
   const names = restore && collection === "people" ? new Set([...root.values()].flatMap(map =>
     map instanceof Y.Map && map.get("removed") !== true ? [normalizeTagName(stored(map, "name"))] : [])) : null;
-  for (const id of collection === "tags" && !restore ? tagTargets(script, ids) : ids) {
+  const targets = restore ? ids : collection === "tags" ? tagTargets(script, ids) : collection === "shots" ? shotTargets(script, ids) : ids;
+  for (const id of targets) {
     const map = target(script.roots[collection], id, restore);
     if (!(map instanceof Y.Map)) return map;
     if (names) {

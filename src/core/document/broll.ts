@@ -27,6 +27,24 @@ export function brollStatusId(id: unknown): BrollStatusId | null {
 export const BROLL_MARKER_RE = /^[ \t]*(b[ \t]?-?[ \t]?roll)[ \t]*([:—–-])[ \t]*/i;
 export const BROLL_CLOSERS = ":—–-";
 
+export function brollCloseSource(id: string): string | undefined {
+  return /^bs-visual-([a-z0-9]+-[a-z0-9]+)-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$/.exec(id)?.[1];
+}
+
+export const BROLL_EDIT_FIELDS = Object.freeze({ name: "Name", desc: "Description", status: "Status", reshoot: "Reshoot",
+  notes: "Note", owner: "Assigned", audioRef: "Cuts against", location: "Location", props: "Props" });
+
+export type BrollUnmergedEdit = { readonly field: keyof typeof BROLL_EDIT_FIELDS; readonly value: string };
+
+export function brollUnmergedEdits(value: unknown): BrollUnmergedEdit[] {
+  if (!Array.isArray(value)) return [];
+  return (value as unknown[]).filter((edit): edit is BrollUnmergedEdit => {
+    if (!edit || typeof edit !== "object") return false;
+    const { field, value } = edit as Record<string, unknown>;
+    return typeof field === "string" && Object.hasOwn(BROLL_EDIT_FIELDS, field) && typeof value === "string";
+  });
+}
+
 export const BROLL_NAME_MAX = 200;
 export const BROLL_TEXT_MAX = 2000;
 export const BROLL_PROP_NAME_MAX = 80;

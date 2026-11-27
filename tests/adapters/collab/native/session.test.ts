@@ -55,6 +55,33 @@ function written(result: { kind: string }): void {
   assert.equal(result.kind, "written");
 }
 
+test("editing beside a folded B-roll label keeps the other creator's embed for undo", t => {
+  const seed = fromDocument();
+  t.after(seed.close);
+  type(seed, 0, "B-roll: Desk", visual);
+  const state = seed.encodeState();
+  const left = open({ kind: "state", state }), right = open({ kind: "state", state }, "Bob");
+  t.after(left.close);
+  t.after(right.close);
+  left.ydoc.clientID = 20;
+  right.ydoc.clientID = 30;
+  written(left.commands.closeBroll("A"));
+  written(right.commands.closeBroll("A"));
+  const first = left.document().brollShots[0]?.id, second = right.document().brollShots[0]?.id;
+  assert.ok(first && second && first < second);
+  Y.applyUpdate(left.ydoc, right.encodeState(), "peer");
+  Y.applyUpdate(right.ydoc, left.encodeState(), "peer");
+  assert.equal(left.document().brollShots[0]?.id, first);
+  written(right.commands.deleteText(anchor(right, 1, 2, visual)));
+  Y.applyUpdate(left.ydoc, right.encodeState(), "peer");
+  written(left.commands.undo());
+  Y.applyUpdate(right.ydoc, left.encodeState(), "peer");
+  assert.deepEqual(left.document(), right.document());
+  assert.equal(left.document().brollShots[0]?.id, second);
+  assert.match(left.document().rows[0]?.visualText ?? "", new RegExp(`data-broll-id="${second}"`));
+  assert.match(left.document().rows[0]?.visualText ?? "", /Desk$/);
+});
+
 function closedState(changes: NativeSessionChange[], reason: "requested" | "failed"): Uint8Array {
   const final = changes.at(-1);
   assert(final?.kind === "closed");

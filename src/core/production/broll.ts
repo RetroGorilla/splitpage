@@ -4,6 +4,7 @@ import {
   BROLL_PROP_NAME_MAX,
   BROLL_STATUS_IDS,
   BROLL_TEXT_MAX,
+  brollCloseSource,
   brollPropKey,
   brollStatusId,
   normalizeBrollProps
@@ -56,6 +57,7 @@ export type BrollShot = {
   location?: string | undefined;
   props?: readonly (BrollPropRef | null | undefined)[] | undefined;
   origin?: string | undefined;
+  unmergedEdits?: unknown;
 };
 
 type BrollSeedFields = { id: string; name: string; desc: string; audioRef: string; location: string };
@@ -173,6 +175,12 @@ function brollLineMarker(items: BrollLineItem[]): BrollMarker | null {
     if (!it.atom && carriesOnlyComments(it.marks) && !it.text.trim()) continue;
     if (it.atom && carriesOnlyComments(it.marks)) return { id: it.atom.id || "", key: it, rest: items.slice(i + 1) };
     break;
+  }
+  const restored = items.findIndex(item => item.atom && brollCloseSource(item.atom.id));
+  if (restored > 0) {
+    const key = items[restored] as BrollLineItem;
+    const prefix = brollLineText(items.slice(0, restored));
+    if (BROLL_MARKER_RE.exec(prefix)?.[0] === prefix) return { id: key.atom?.id ?? "", key, rest: items.slice(restored + 1) };
   }
   const m = BROLL_MARKER_RE.exec(brollLineText(items));
   return m ? { id: "", key: null, rest: null, strip: m[0].length } : null;

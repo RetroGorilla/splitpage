@@ -528,10 +528,19 @@ export function resolveNativeUndoSelection(script: NativeScript, recorded: Nativ
   return Object.freeze({ anchor, head: samePoint ? anchor : head });
 }
 
-export function deleteNativePieces(live: NativeLiveRange, added = 0): void {
+export function deleteNativePieces(live: NativeLiveRange, added = 0, foldedBroll?: readonly number[]): void {
   for (const piece of live.pieces.toReversed()) {
+    if (piece.until <= piece.from) continue;
     const shift = piece.text === live.text && piece.from >= live.from ? added : 0;
-    if (piece.until > piece.from) piece.text.delete(piece.from + shift, piece.until - piece.from);
+    let until = piece.until;
+    // why: editing beside the visible label must keep the other writer's label available for Undo
+    if (foldedBroll) for (const offset of foldedBroll.toReversed()) {
+      const at = piece.start + offset;
+      if (at < piece.from || at >= until) continue;
+      if (at + 1 < until) piece.text.delete(at + 1 + shift, until - at - 1);
+      until = at;
+    }
+    if (until > piece.from) piece.text.delete(piece.from + shift, until - piece.from);
   }
 }
 
@@ -593,7 +602,7 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
     if (dormant) for (const piece of dormant.pieces) piece.text.format(piece.from, piece.until - piece.from, { cue: null });
     const end = writeNativeRuns(script.doc, live.text, live.from, prepared, nativeLeftAt(view, live.from - live.start));
     const added = end - live.from;
-    deleteNativePieces(live, added);
+    deleteNativePieces(live, added, checked.target.cell === "visual" ? view.foldedBroll : undefined);
     if (dormant?.markedInsertion) live.text.format(live.from, added, { cue: null });
     if (encoded && updateStamp) script.roots.edited.set(checked.target.beat, encoded);
     if (afterWrite) {

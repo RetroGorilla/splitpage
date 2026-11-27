@@ -303,8 +303,8 @@ waits for a new caret. App stop and entry rollback release any active wait.
 | Waiting tag person editor | Expanding a second tag card leaves the first card open with its unsaved person name in the box. In the old shared editor the draft moved to the unsaved strip until the first card was reopened. | [Draft mapping](slice-8-test-mapping.md) |
 | Waiting tag rename editor | Expanding a second tag card leaves the first card open with its unsaved new name in the rename box. In the old shared editor the draft moved to the unsaved strip until the first card was reopened. | [Draft mapping](slice-8-test-mapping.md) |
 | Tag notes during a peer rename | If a peer renames a tag while its note is unsaved, the note box stays open on the renamed card. A new tag that reuses the old name has a blank note. In the old shared editor the moved draft first appeared in the unsaved strip. | [Draft mapping](slice-8-test-mapping.md) |
-| B-roll script rewrites | Adding a B-roll key to a line or renaming a script shot through its line is unavailable. | [#1665](https://github.com/RetroGorilla/splitpage/pull/1665), [#1681](https://github.com/RetroGorilla/splitpage/pull/1681) |
-| Closing a Visual B-roll edit | Typing `B-roll: Close up` stays as plain text when focus leaves the Split Visual cell or Escape closes the Writer Visual box. The old shared editor added a key on leaving the field. | [Native app tests](../../src/test/shared-native-measure-undo-mapped-app.test.mjs) |
+| B-roll script rewrites | Renaming a script shot through its line remains unavailable. | [#1665](https://github.com/RetroGorilla/splitpage/pull/1665), [#1681](https://github.com/RetroGorilla/splitpage/pull/1681) |
+| Closing a Split Visual B-roll edit | Leaving the Split Visual cell turns each named `B-roll:` line into a protected label and a shot in one undo step. Concurrent closes keep their own shot IDs. IDs include the original delimiter's text identity, so the reader shows one label and one shot per marker, including when separate lines have the same name. The B-roll panel shows differing record fields as read-only **Unmerged edit** entries. | [Native app tests](../../src/test/shared-native-measure-undo-mapped-app.test.mjs), [Split Visual browser suite](../../.claude/skills/run-splitpage-app/tests/1016-shared-native-split-broll.txt) |
 | B-roll text on leaving Writer Visual | Escape, Close and a view switch keep a typed `B-roll:` line in its literal form during sharing, with the shot list empty. Undo and redo step the text change itself and keep the Visual box's current visibility with an actionable visible caret (in visible narration when Visual is hidden, or in Visual when manually open). | [Native caller tests](../../src/test/shared-native-callers-mapped-app.test.mjs), [native suite 1000](../../.claude/skills/run-splitpage-app/tests/1000-shared-native-writer-broll-exit.txt), [native suite 1001](../../.claude/skills/run-splitpage-app/tests/1001-shared-native-writer-visual-history-caret.txt) |
 | Derived B-roll shots | A shot projected only from a surviving key has no live record to edit. Undo can reveal the kept fields. | [#1681](https://github.com/RetroGorilla/splitpage/pull/1681) |
 | Unkeyed B-roll removal | Removing the shot behind an unkeyed line leaves it absent from the live projection. Core reload derives a shot with a new ID. | [#1670](https://github.com/RetroGorilla/splitpage/pull/1670) |
@@ -1438,6 +1438,12 @@ document updates and relative positions. Rule ids such as U14 are from
 | A 1,000-letter paste | 1,014 bytes plain; 37,809 with one key per letter; 145,593 with four |
 | A new history built from the visible text, synced with the old | The text doubled |
 | A comment body as a whole string, two people adding at once | One addition kept, the same on both copies |
+
+**Accepted Split Visual B-roll outcomes.** After two concurrent closes and one creator's undo, a literal `B-roll:` can
+reappear beside the surviving label. Both creators undoing can restore two copies of the literal marker, as in the
+double-delete result above. If two people close offline, a third person sees only the first shot and adds a note, and
+the first creator then undoes after sync, the surviving shot does not carry that note. The same record-creation undo
+behavior is listed above. The visual embed and shot record use the existing shared format.
 
 The throw-in-transaction check is why every command checks before its first write (section 2). The cleared-undo
 check backs the rebuild in appendix C. The rebuilt-history check is why a stored room is never rebuilt from its
