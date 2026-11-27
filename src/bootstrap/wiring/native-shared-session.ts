@@ -24,9 +24,11 @@ const UNSUPPORTED = "native-command-unavailable";
 
 export function nativePublication() {
   let document: unknown, revision = 0;
+  let peerProjection = false;
   let observe: ((origin: ReplicaOrigin) => void) | null = null;
   const replica: ReplicaPort = {
     revision: () => revision,
+    isPeerProjection: () => peerProjection,
     project: () => document,
     changes: () => WHOLE_PROJECTION,
     recovery: () => [],
@@ -35,8 +37,9 @@ export function nativePublication() {
   };
   return {
     replica,
-    publish: (snapshot: unknown, origin: "hydration" | "remote") => {
+    publish: (snapshot: unknown, origin: "hydration" | "remote", fromPeer = origin === "remote") => {
       document = snapshot;
+      peerProjection = fromPeer;
       revision++;
       observe?.(origin);
     }
@@ -71,11 +74,12 @@ export function bindNativeEditor(ports: SharedSwitchPorts, native: ReturnType<ty
   function publish(buffered?: Parameters<typeof keepNativeFieldPaint>[0]): void {
     const revision = native.revision();
     if (published === revision) return;
+    const fromPeer = native.peerRevision() > published;
     const snapshot = readPaint();
     if (buffered) keepNativeFieldPaint(buffered, snapshot.rows.find(row => row.id === buffered.beat));
     input?.clearMovePaint();
     published = revision;
-    publication.publish(snapshot, "remote");
+    publication.publish(snapshot, "remote", fromPeer);
   }
   const stop = native.subscribe(event => {
     try {

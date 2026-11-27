@@ -103,8 +103,13 @@ test("the presence view sends the focused cell's selection as a caret, clamping 
   h.el("writer-doc").tabIndex = 0;
   h.el("writer-doc").innerHTML = '<div class="wr-beat" data-id="r2" data-field="audioText">First</div><div class="wr-beat" data-id="r3" data-field="audioText">Second</div>';
   const asked: unknown[] = [];
+  const removalListeners = new Set<(ids: readonly string[]) => void>();
   const caret = { anchor: { type: { client: 1, clock: 0 }, item: null, assoc: 0 }, head: { type: { client: 1, clock: 0 }, item: null, assoc: 0 } } as const;
   const { collaboration, ports, published } = fakePresenceView({
+    document: { onBeatsRemoving: listener => {
+      removalListeners.add(listener);
+      return () => { removalListeners.delete(listener); };
+    } },
     caret: (where, cell, ends) => { asked.push([where.beat, where.side, (cell as HTMLElement).dataset.id, ends]); return caret; }
   });
   const dispose = mountPresenceView(ports);
@@ -139,5 +144,21 @@ test("the presence view sends the focused cell's selection as a caret, clamping 
   h.document.dispatchEvent(new h.window.Event("selectionchange"));
   t.mock.timers.tick(100);
   assert.deepEqual(asked.at(-1), ["r3", "audioText", "r3", { anchor: 0, head: 2 }], "an anchor on the Writer before this beat clamps to its start");
+
+  for (const notify of removalListeners) notify(["r3"]);
+  assert.equal(published.at(-1)?.caret, null, "deleting the current beat clears its published caret immediately");
+  second?.remove();
+  h.document.getSelection()?.collapse(first?.firstChild ?? null, 1);
+  h.document.dispatchEvent(new h.window.Event("selectionchange"));
+  t.mock.timers.tick(100);
+  assert.deepEqual(published.at(-1), { name: "Ada", color: "#80BDFB", view: "writer", beat: "r2", side: "audioText", caret: null });
+  assert.equal(h.document.getSelection()?.focusOffset, 1, "local focus recovery can keep its caret");
+  writer.dispatchEvent(new h.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+  h.document.getSelection()?.collapse(first?.firstChild ?? null, 2);
+  h.document.dispatchEvent(new h.window.Event("selectionchange"));
+  t.mock.timers.tick(100);
+  assert.deepEqual(asked.at(-1), ["r2", "audioText", "r2", { anchor: 2, head: 2 }]);
+  assert.deepEqual(published.at(-1)?.caret, caret);
   dispose();
+  assert.equal(removalListeners.size, 0);
 });

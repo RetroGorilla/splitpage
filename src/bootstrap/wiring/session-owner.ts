@@ -81,6 +81,7 @@ interface Hearing {
 }
 
 const changeListeners: Hearing[] = [];
+const beatRemovalListeners = new Set<(ids: readonly string[]) => void>();
 
 const refreshListeners: ((jobs: ReadonlySet<string>) => void)[] = [];
 
@@ -197,6 +198,11 @@ export function onDocumentReplaced(listener: () => void): () => void {
     const at = replacedListeners.indexOf(listener);
     if (at !== -1) replacedListeners.splice(at, 1);
   };
+}
+
+export function onBeatsRemoving(listener: (ids: readonly string[]) => void): () => void {
+  beatRemovalListeners.add(listener);
+  return () => { beatRemovalListeners.delete(listener); };
 }
 
 export function onRefresh(listener: (jobs: ReadonlySet<string>) => void): () => void {
@@ -368,7 +374,13 @@ export function adoptShared(build: (ports: SharedOwnerPorts) => SharedDocumentSe
     made.dispose();
     throw new Error("A shared owner is adopted before it is hydrated, so the app hears its first document");
   }
-  made.subscribe(change => { now.numbering.changed(change.changes); });
+  made.subscribe(({ kind, changes }) => {
+    now.numbering.changed(changes);
+    // why: the presence publisher must see the old selection before view listeners restore focus.
+    if (changes.rowsRemoved.length && kind === "remote" && made.isPeerProjection()) {
+      for (const listener of beatRemovalListeners) listener(changes.rowsRemoved);
+    }
+  });
   changeListeners.forEach(function (entry) { made.subscribe(hearing(entry)); });
   now.current = { kind: "shared", session: made, entered: entered };
   now.capability = nextCapability;

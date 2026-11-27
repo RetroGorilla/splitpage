@@ -13,10 +13,11 @@ const driver = ".claude/skills/run-splitpage-app/driver.mjs";
 const testFile = ".claude/skills/run-splitpage-app/presence.txt";
 const at = "2026-11-24T00:00:00.000Z";
 const long = process.argv.includes("--perf-long");
+const perf = process.argv.includes("--perf");
 const typed = "presenceoverarealrelaypresenceoverarealrelay";
 const rows = long ? Object.fromEntries(Array.from({ length: 300 }, (_, i) => [
   "r" + (i + 1), "Narration for beat " + (i + 1) + ". Leave enough words for this beat to take its place in the rundown."
-])) : { r1: "First beat", r2: "Second beat" };
+])) : { r1: perf ? "First beat" : "<mark>First beat</mark>", r2: "Second beat", ...perf ? {} : { r3: "Third beat" } };
 const session = openNativeSession({
   kind: "document",
   document: structureScript(rows, { r1: "First visual", r2: "Second visual" }),
@@ -89,7 +90,7 @@ mkdirSync(ignored, { recursive: true });
 const work = mkdtempSync(join(ignored, "run-"));
 try {
   const suite = join(work, "presence.txt");
-  const checks = long || process.argv.includes("--perf") ? benchmark() : [readFileSync(join(REPO, testFile), "utf8")];
+  const checks = long || perf ? benchmark() : [readFileSync(join(REPO, testFile), "utf8")];
   writeFileSync(suite, [...setup, ...checks].join("\n") + "\n");
   const base = Number(process.env.PERF_PORT_BASE ?? "17090");
   const { stdout, stderr } = await promisify(execFile)(process.execPath, [

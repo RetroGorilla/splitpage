@@ -5,7 +5,7 @@ import { migrateRows } from "../bootstrap/document-ports.ts";
 import { adoptReplacement, currentDocument, sharedRecoverySession, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { getEditorName } from "../bootstrap/wiring/preferences-owner.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
-import { enterSharedSession, leaveRunningSharedSession, nativeEditorRecords } from "../bootstrap/wiring/shared-session.ts";
+import { enterSharedSession, leaveRunningSharedSession, nativeEditorRecords, nativePresenceCarets } from "../bootstrap/wiring/shared-session.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { nativeEntrySwitchFixture as entrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 import { nativeGalleryOf } from "../adapters/collab/native/values.ts";
@@ -13,7 +13,7 @@ import { pictures } from "../bootstrap/wiring/ports/pictures.ts";
 import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
 import { setBeatLength } from "../features/rows/read-time.ts";
 import { setBeatFilmed } from "../bootstrap/wiring/beat-status.ts";
-import { setCellSelection } from "../features/common/cell-selection.ts";
+import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
 import { openCommentsPanel } from "../features/comments/comments.ts";
 import { blobStore, createMemoryBackend, setBackend } from "../adapters/storage/02c-blobs.ts";
 import { createHeldFetch, createHeldImageDecode } from "./_m4-matrix.mjs";
@@ -23,6 +23,10 @@ import { closeGalleryOverlay, openGalleryOverlay } from "../features/gallery/ove
 import { createNativeEditorRecords } from "../bootstrap/wiring/native-shared-records.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { sanitizeHtml } from "../bootstrap/richtext.ts";
+import { collaborationState } from "../bootstrap/wiring/collaboration-owner.ts";
+import { documentReader } from "../bootstrap/wiring/ports/document.ts";
+import { sharedPresence } from "../bootstrap/wiring/ports/presence.ts";
+import { mountPresenceView } from "../features/collaboration/presence.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -221,6 +225,78 @@ function fakeImageDecoder(t) {
   t.mock.method(window.HTMLCanvasElement.prototype, "getContext", () => ({ drawImage() {} }));
   t.mock.method(window.HTMLCanvasElement.prototype, "toDataURL", () => png);
 }
+
+function trackPresence(t) {
+  const collaboration = collaborationState();
+  const published = [];
+  const dispose = mountPresenceView({
+    collaboration, document: documentReader, presence: sharedPresence(),
+    identity: () => ({ name: "Guest", color: "#EF958E" }),
+    onIdentityChange: () => () => {},
+    setLocal: profile => published.push(profile),
+    caret: (...args) => nativePresenceCarets()?.caret(...args) ?? null
+  });
+  t.after(dispose);
+  return {
+    connect: connected => collaboration.setRelay({ connected, firstSyncDone: true, pendingChangeCount: 0 }),
+    last: () => published.at(-1)
+  };
+}
+
+test("a gallery paste that finishes after a peer deletion keeps the recovered caret hidden", async t => {
+  await enter(t);
+  fakeImageDecoder(t);
+  const persistStarted = Promise.withResolvers(), release = Promise.withResolvers();
+  t.after(() => release.resolve([]));
+  t.mock.method(pictures, "isDurable", () => true);
+  t.mock.method(pictures, "persist", () => { persistStarted.resolve(); return release.promise; });
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const presence = trackPresence(t);
+  presence.connect(true);
+  const selected = cell("audioText", "r2");
+  selected.focus();
+  setCellSelection(selected, 2);
+  t.mock.timers.tick(100);
+  assert.equal(presence.last()?.beat, "r2");
+  assert.ok(presence.last()?.caret);
+
+  assert.equal(transfer("paste", cell("visualText"), [file()]).defaultPrevented, true);
+  await persistStarted.promise;
+  assert.equal(hook.nativePeer.removeBeat("r2").kind, "written");
+  await until(() => !cell("audioText", "r2"));
+  t.mock.timers.tick(100);
+  const recovered = cell("audioText");
+  assert.equal(document.activeElement, recovered);
+  const selection = cellSelection(recovered);
+  assert.ok(selection);
+  assert.equal(presence.last()?.caret, null);
+
+  release.resolve([]);
+  await until(() => hook.read().peer.rows[0].imageRef && currentDocument().rows[0].imageRef);
+  t.mock.timers.tick(100);
+  assert.deepEqual(cellSelection(cell("audioText")), selection);
+  assert.equal(presence.last()?.caret, null);
+});
+
+test("presence reconnects three times without leaving callbacks in the shared session", async t => {
+  await enter(t);
+  const session = sharedRecoverySession();
+  const subscribe = session.subscribe;
+  let callbacks = 0;
+  t.mock.method(session, "subscribe", listener => {
+    const unsubscribe = subscribe(listener);
+    callbacks++;
+    return () => { callbacks--; unsubscribe(); };
+  });
+  const presence = trackPresence(t);
+  presence.connect(true);
+  const initial = callbacks;
+  for (let reconnect = 0; reconnect < 3; reconnect++) {
+    presence.connect(false);
+    presence.connect(true);
+  }
+  assert.equal(callbacks, initial);
+});
 
 async function enterWithNative(t, rows) {
   const fixture = entrySwitchFixture();

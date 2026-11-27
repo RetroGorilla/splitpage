@@ -14,6 +14,7 @@ export interface CollaborationAnnouncementsPorts {
 
 export interface PresenceViewPorts {
   readonly collaboration: CollaborationReads;
+  readonly document: Pick<DocumentReader, "onBeatsRemoving">;
   readonly presence: PresenceReads;
   readonly identity: () => Pick<PresenceProfile, "name" | "color">;
   readonly onIdentityChange: (listener: () => void) => () => void;

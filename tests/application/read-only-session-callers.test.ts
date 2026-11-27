@@ -44,6 +44,7 @@ import type { SurfacePorts } from "../../src/features/writer/flow-surface.ts";
 type SessionReadContract = Pick<CommonDocumentSession, "epoch" | "generation" | "read"> & {
   readonly current: () => DocumentView | null;
   readonly onChange: CommonDocumentSession["subscribe"];
+  readonly onBeatsRemoving: (listener: (ids: readonly string[]) => void) => () => void;
   readonly numbering: () => DocumentNumbering;
   readonly onReplaced: (listener: () => void) => () => void;
   readonly onRefresh: (listener: (jobs: ReadonlySet<string>) => void) => () => void;
@@ -57,7 +58,7 @@ function caller<Actual extends Partial<SessionReadContract>>() {
 }
 
 const READ_ONLY_CALLERS = {
-  "application/session/document-reader.ts:DocumentReader": caller<DocumentReader>()("current", "read", "onChange", "numbering", "onReplaced", "onRefresh"),
+  "application/session/document-reader.ts:DocumentReader": caller<DocumentReader>()("current", "read", "onChange", "onBeatsRemoving", "numbering", "onReplaced", "onRefresh"),
   "application/save/capture.ts:CapturePorts": caller<CapturePorts>()("read", "readModels", "clock"),
   "application/save/export-kit.ts:ExportKitPorts": caller<ExportKitPorts>()("read", "preferences", "clock", "ids", "services", "entry", "assets", "following"),
   "application/commands/production-actions.ts:RemoveTagPorts": caller<RemoveTagPorts>()("read", "mentions", "run", "edit", "rewrites", "stamps"),

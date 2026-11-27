@@ -6,7 +6,7 @@ const REPO = fileURLToPath(new URL("../../", import.meta.url));
 export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/export-capture.ts": { functions: ["startExportKit"] },
   "src/bootstrap/wiring/export-kit.ts": { functions: ["wireExportKit"] },
-  "src/bootstrap/wiring/session-owner.ts": { functions: ["startSessionBridge", "onDocumentReplaced", "onSessionChange", "onRefresh", "onStamped"] },
+  "src/bootstrap/wiring/session-owner.ts": { functions: ["startSessionBridge", "onDocumentReplaced", "onSessionChange", "onRefresh", "onStamped", "onBeatsRemoving"] },
   "src/bootstrap/wiring/undo.ts": { functions: ["startUndo", "configureUndo", "routeUndoReplays", "routeSharedUndo"] },
   "src/bootstrap/wiring/ports/actions.ts": { functions: ["installAppActions"], facade: { name: "appActions", methods: ["register", "presentRefusals"] } },
   "src/bootstrap/wiring/export-registry.ts": { functions: ["installExportFormats"], facade: { name: "exportFormats", methods: ["defineCard", "register", "onChange"] } },
