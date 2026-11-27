@@ -39,6 +39,13 @@ function history(target, redo = false) {
   assert.equal(target.dispatchEvent(event), false);
 }
 
+function deleteSelection(target, from, to) {
+  setCellSelection(target, from, to);
+  assert.equal(target.dispatchEvent(new window.InputEvent("beforeinput", {
+    bubbles: true, cancelable: true, inputType: "deleteContentBackward"
+  })), false);
+}
+
 async function check(cell, expected) {
   window.dispatchEvent(new window.Event("pagehide"));
   for (let i = 0; i < 6; i++) await Promise.resolve();
@@ -128,6 +135,33 @@ test("a cue in a joined beat formats and replays on its own line", async t => {
   await check(audio, "Lead Words<br>" + cue("SFX: tone"));
 });
 
+test("a cue line spanning joined beats formats both members in one undo step", async t => {
+  await enter(t, "SFX", "tone");
+  assert.equal(peer.join("r2", "r1").kind, "written");
+  await check(audio, "SFX tone");
+  audio().focus();
+  setCellSelection(audio(), 3);
+  type(audio(), ":");
+  await check(audio, cue("SFX: tone"));
+  history(audio());
+  await check(audio, "SFX: tone");
+  assert.deepEqual(cellSelection(audio()), { from: 4, to: 4 });
+  history(audio(), true);
+  await check(audio, cue("SFX: tone"));
+  deleteSelection(audio(), 3, 4);
+  await check(audio, "SFX tone");
+  type(audio(), ":");
+  await check(audio, cue("SFX: tone"));
+  history(audio());
+  await check(audio, "SFX: tone");
+  history(audio(), true);
+  await check(audio, cue("SFX: tone"));
+  assert.equal(peer.unjoin("r2").kind, "written");
+  assert.equal(peer.type("r2", 0, "Music: ").kind, "written");
+  await check(audio, cue("SFX:"));
+  assert.equal(shared.read().app.rows[1].audioText, cue("Music: tone"));
+});
+
 test("a peer can uncover the cue prefix while the preceding letter is buffered", async t => {
   await enter(t, "A sf click");
   audio().focus();
@@ -146,10 +180,7 @@ test("retyping a cue colon records a formatting step even when the line used to 
   setCellSelection(audio(), 3);
   type(audio(), ":");
   await check(audio, cue("SFX: tone"));
-  setCellSelection(audio(), 3, 4);
-  assert.equal(audio().dispatchEvent(new window.InputEvent("beforeinput", {
-    bubbles: true, cancelable: true, inputType: "deleteContentBackward"
-  })), false);
+  deleteSelection(audio(), 3, 4);
   await check(audio, "SFX tone");
   type(audio(), ":");
   await check(audio, cue("SFX: tone"));
@@ -157,6 +188,23 @@ test("retyping a cue colon records a formatting step even when the line used to 
   await check(audio, "SFX: tone");
   history(audio(), true);
   await check(audio, cue("SFX: tone"));
+});
+
+test("a cue colon replacing a line break leaves the replacement in place on first Undo", async t => {
+  await enter(t, "SFX tone<br>tail");
+  audio().focus();
+  setCellSelection(audio(), 3);
+  type(audio(), ":");
+  await check(audio, cue("SFX: tone") + "<br>tail");
+  deleteSelection(audio(), 3, 4);
+  await check(audio, "SFX tone<br>tail");
+  setCellSelection(audio(), 3, 9);
+  type(audio(), ":");
+  await check(audio, cue("SFX:tail"));
+  history(audio());
+  await check(audio, "SFX:tail");
+  history(audio(), true);
+  await check(audio, cue("SFX:tail"));
 });
 
 test("a formatting boundary inside the prefix keeps the colon literal", async t => {

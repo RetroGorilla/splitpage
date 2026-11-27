@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import { isTypedCuePrefix } from "../../../core/text/cues.ts";
 import { firstReplacementMarks, replacementInsert } from "../../../core/text/edits.ts";
-import { CUE_LINE_RE, isCueRun, OBJ } from "../../../core/text/runs.ts";
+import { CUE_LINE_RE, isCueRun, OBJ, projection } from "../../../core/text/runs.ts";
 import type { Marks, Run } from "../../../core/text/runs.ts";
 import { copyNativeCompoundInput, copyNativeDenseList } from "./compound-input.ts";
 import { nativeCellView, nativeLeftAt, nativeStoredOffset, nativeTextAllowed, prepareNativeRuns, writeNativeRuns } from "./inline.ts";
@@ -549,20 +549,22 @@ function removedTypingRange(script: NativeScript, range: NativeRangeData, source
   return { ...piece, pieces: [piece] };
 }
 
-function dormantCueRange(live: NativeLiveRange, view: NativeCellView, insertion: readonly NativePreparedRun[], cueAt: number) {
-  if (live.pieces.length !== 1) return null;
-  const markedInsertion = insertion.some(run => run.marks.cue);
-  if (!markedInsertion && !live.items.some(item => item.attributes?.cue === true)) return null;
-  const from = view.ends.filter(end => end <= live.from - live.start).length;
-  const until = view.ends.filter(end => end <= live.until - live.start).length;
-  const start = from === 0 ? 0 : view.text.lastIndexOf("\n", from - 1) + 1;
-  const end = view.text.indexOf("\n", from);
-  const stop = end === -1 ? view.length : end;
-  if (until > stop || CUE_LINE_RE.test(view.text.slice(start, stop))) return null;
-  if (!markedInsertion && !view.lefts.slice(start, stop).some(left => left.marks.cue)) return null;
+function dormantCuePieces(script: NativeScript, beat: string, live: NativeLiveRange, insertion: readonly NativePreparedRun[], cueAt: number) {
+  const head = script.reader.rowMembers(beat)[0]?.id, last = live.pieces.at(-1);
+  const row = head && script.reader.row(head);
+  if (!row || !last) return null;
+  const from = script.reader.narrationOffset(row.id, { type: live.text, index: live.from, assoc: 0 });
+  const until = script.reader.narrationOffset(row.id, { type: last.text, index: last.until, assoc: -1 });
+  if (from === null || until === null) return null;
+  const text = projection(row.narration), start = from === 0 ? 0 : text.lastIndexOf("\n", from - 1) + 1;
+  const end = text.indexOf("\n", from), stop = end === -1 ? text.length : end;
+  if (CUE_LINE_RE.test(text.slice(start, stop))) return null;
   const inserted = insertion.map(run => typeof run.insert === "string" ? run.insert : OBJ).join("");
-  if (inserted.includes("\n") || !isTypedCuePrefix(view.text.slice(start, from) + inserted.slice(0, cueAt))) return null;
-  return { from: live.start + nativeStoredOffset(view, start), to: live.start + nativeStoredOffset(view, stop) };
+  if (inserted.includes("\n") || !isTypedCuePrefix(text.slice(start, from) + inserted.slice(0, cueAt))) return null;
+  const pieces = script.reader.narrationPieces(row.id, start, until > stop ? from : stop)
+    .filter(piece => piece.items.some(item => item.attributes?.cue === true));
+  const markedInsertion = insertion.some(run => run.marks.cue);
+  return { pieces, markedInsertion };
 }
 
 // why: a command called while another transaction is open refuses, since that transaction's changes are not yet
@@ -585,13 +587,14 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
     const updateStamp = encoded && script.reader.beatBoundary(checked.target.beat) && !sameStamp(script.roots.edited.get(checked.target.beat), encoded);
     beforeWrite?.(checked.target, live);
     const view = nativeCellView(live.items);
-    const dormant = !stray && checked.target.cell === "narration" && points?.[2] && points[1] !== null
-      ? dormantCueRange(live, view, prepared, points[1]) : null;
+    const dormant = points?.[2] && points[1] !== null && !stray && checked.target.cell === "narration"
+      ? dormantCuePieces(script, checked.target.beat, live, prepared, points[1]) : null;
+    // why: a restored cue needs its own undo step even if the invalid line still held its old mark
+    if (dormant) for (const piece of dormant.pieces) piece.text.format(piece.from, piece.until - piece.from, { cue: null });
     const end = writeNativeRuns(script.doc, live.text, live.from, prepared, nativeLeftAt(view, live.from - live.start));
     const added = end - live.from;
     deleteNativePieces(live, added);
-    // why: a restored cue needs its own undo step even if the invalid line still held its old mark
-    if (dormant) live.text.format(dormant.from, dormant.to - dormant.from + added - (live.until - live.from), { cue: null });
+    if (dormant?.markedInsertion) live.text.format(live.from, added, { cue: null });
     if (encoded && updateStamp) script.roots.edited.set(checked.target.beat, encoded);
     if (afterWrite) {
       const anchor = undoEndpoint(checked.target, live.text, end, stray ? -1 : 0);

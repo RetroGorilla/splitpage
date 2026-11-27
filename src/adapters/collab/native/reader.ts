@@ -812,7 +812,7 @@ export class NativeScriptReader {
   private narrationSpansOnScreen(row: string) {
     this.sync();
     let length = 0, hasItems = false;
-    const shown: { text: Y.Text; start: number; end: number; offset: number; view: ReturnType<typeof nativeCellView> }[] = [];
+    const shown: { text: Y.Text; span: ParsedSpan; offset: number; view: ReturnType<typeof nativeCellView> }[] = [];
     for (const { id, glue } of this.groups.get(row) ?? []) {
       const spans = (this.narration.get(id) ?? EMPTY_SPANS).flatMap(ref => {
         const span = this.spanAt(ref), segment = this.roots.segments.get(ref.segment);
@@ -822,7 +822,7 @@ export class NativeScriptReader {
       if (hasItems && hasMember) length += glue.length;
       for (const { span, text } of spans) {
         const view = nativeCellView(span.items);
-        if (text instanceof Y.Text) shown.push({ text, start: span.start, end: span.end, offset: length, view });
+        if (text instanceof Y.Text) shown.push({ text, span, offset: length, view });
         length += view.length;
       }
       hasItems ||= hasMember;
@@ -831,7 +831,7 @@ export class NativeScriptReader {
   }
 
   narrationOffset(row: string, position: Y.AbsolutePosition): number | null {
-    for (const { text, start, end, offset, view } of this.narrationSpansOnScreen(row)) {
+    for (const { text, span: { start, end }, offset, view } of this.narrationSpansOnScreen(row)) {
       if (text === position.type && position.index >= start && position.index <= end) {
         return offset + view.ends.filter(unit => unit <= position.index - start).length;
       }
@@ -839,12 +839,20 @@ export class NativeScriptReader {
     return null;
   }
 
+  narrationPieces(row: string, from: number, to: number) {
+    if (row === this.stray) return [];
+    return this.narrationSpansOnScreen(row).flatMap(({ text, span: { start, items }, offset, view }) => {
+      const first = Math.max(from - offset, 0), last = Math.min(to - offset, view.length);
+      return first < last ? [{ text, start, items, from: start + nativeStoredOffset(view, first), until: start + nativeStoredOffset(view, last) }] : [];
+    });
+  }
+
   narrationPaint(row: string, retain: boolean) {
     const shown = this.narrationSpansOnScreen(row), visible = shown.filter(part => part.view.length);
     const spans = visible.length ? visible : shown.slice(0, 1);
     const reverse = spans.toReversed();
     const point = (part: (typeof spans)[number], offset: number, assoc: 0 | -1) =>
-      Y.createRelativePositionFromTypeIndex(part.text, part.start + nativeStoredOffset(part.view, offset - part.offset), assoc);
+      Y.createRelativePositionFromTypeIndex(part.text, part.span.start + nativeStoredOffset(part.view, offset - part.offset), assoc);
     const at = (offset: number, assoc: 0 | -1): Y.RelativePosition | null => {
       const span = (assoc === 0 ? reverse : spans).find(part => offset >= part.offset && offset <= part.offset + part.view.length);
       return span ? point(span, offset, assoc) : null;

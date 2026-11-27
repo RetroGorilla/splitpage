@@ -10,7 +10,6 @@ import { sceneBeforeBeat, sceneForBeat, scenesInOrder, storedSceneName } from ".
 import type { SceneDocument } from "../../core/document/scenes.ts";
 import { beatPos, enterAt, HEADING_MARKER, headingPos, startsParagraph } from "../../core/flow/flow.ts";
 import type { FlowDoc, FlowPos, FlowRange } from "../../core/flow/flow.ts";
-import { cueShortcutRange } from "../../core/text/cues.ts";
 import { breakLine, deleteRange, markThroughout, replaceText, sliceCell, typingMarks } from "../../core/text/edits.ts";
 import { cellLength, cleanText, projection } from "../../core/text/runs.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
@@ -718,19 +717,13 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     live.innerHTML = html;
     const caretPoint = posToDom(live, offset);
     if (!cueShortcutHint(caretPoint.node, caretPoint.offset)) return;
-    const span = cueShortcutRange(scriptCellOf(html), offset);
-    if (!span) return;
-    const from = native.narrationCaret(beat, span.from, true), to = native.narrationCaret(beat, span.to);
     const at = native.narrationCaret(beat, offset);
-    if (!from || !to || !at || from.beat !== to.beat || from.beat !== at.beat) return;
-    const target = { beat: from.beat, cell: "narration" } as const;
-    const cue = native.commands.anchorText(target, from.offset, to.offset);
-    const caret = native.commands.anchorText(target, at.offset);
-    if (cue.kind !== "anchored" || caret.kind !== "anchored") return;
+    const caret = at && caretAnchor(at.beat, at.offset);
+    if (!caret) return;
     // why: the first Undo takes off the cue mark and leaves the typed colon in place
-    const step = native.commands.formatText.withSelection(caret.range, cue.range, { kind: "plain", mark: "cue", on: true });
+    const step = native.commands.formatCue.withSelection(caret, beat, offset);
     if (step.result.kind === "refused") refuseCommand(step.result.reason);
-    if (step.result.kind === "written") step.recordAfter(caret.range);
+    if (step.result.kind === "written") step.recordAfter(caret);
   }
 
   function finish(selection?: SelectionCapture, moveCaret = true, quiet = false, composed = false): string | null {
