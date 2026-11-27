@@ -137,7 +137,7 @@ function liveCells(script: NativeScript, target: NativeTextTarget, segments: Par
   if (target.cell === "visual") {
     const visual = script.roots.visuals.get(target.beat);
     return script.reader.beatBoundary(target.beat) && visual instanceof Y.Text
-      ? [{ text: visual, start: 0, end: visual.length, items: visual.toDelta() as NativeDeltaItem[] }] : [];
+      ? [{ text: visual, start: 0, end: visual.length, items: script.reader.visualItems(target.beat) }] : [];
   }
   const cells: LiveCell[] = [], own = script.reader.beatBoundary(target.beat);
   for (const place of places) {

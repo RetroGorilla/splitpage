@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { BROLL_MARKER_RE, BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_PROP_NAME_MAX, BROLL_TEXT_MAX, brollCloseSource, brollStatusId, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
+import { BROLL_MARKER_RE, BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_PROP_NAME_MAX, BROLL_TEXT_MAX, brollStatusId, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
 import type { BrollProp } from "../../../core/document/broll.ts";
 import { isTagId, nextTagStatus, normalizeTagName, registryKey, TAG_STATUS_IDS, tagCategoryId, tagStatusId } from "../../../core/document/tags.ts";
 import { cappedLongText, cappedText, plainText } from "../../../core/document/text-policy.ts";
@@ -7,7 +7,7 @@ import type { DocumentShape, DocumentTag } from "../../../core/document/validate
 import { PERSON_NAME_MAX } from "../../../core/production/records.ts";
 import { brollInCell, brollMarkerLines, brollSeedLocation, brollSeedRef } from "../../../core/production/broll.ts";
 import { nativeCellView, nativeStoredOffset } from "./inline.ts";
-import type { NativeDeltaItem } from "./inline.ts";
+import { NATIVE_BROLL_GAP, NATIVE_BROLL_SOURCE } from "./broll-claims.ts";
 import { compareNativeRankedIds, isValidNativeRank, nativeRankBetween } from "./rank.ts";
 import { copyArgument, copyRecordValue, nativeRecordId, RECORD_UNCHANGED, RECORD_WRITTEN, refuseRecord } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
@@ -139,8 +139,8 @@ export function closeNativeBroll(script: NativeScript, beat: string, stamp?: Nat
     if (encoded === null || !nativeRecordId(beat)) return refuseRecord("value");
     const text = script.roots.visuals.get(beat);
     if (!(text instanceof Y.Text) || !script.reader.beatBoundary(beat)) return RECORD_UNCHANGED;
-    const view = nativeCellView(text.toDelta() as NativeDeltaItem[]), lines = brollMarkerLines(view.runs);
-    if (!lines.some(({ marker }) => !marker.key)) return RECORD_UNCHANGED;
+    const view = nativeCellView(script.reader.visualItems(beat)), lines = brollMarkerLines(view.runs), claims = script.reader.brollClaims();
+    if (!lines.some(({ marker }) => !marker.key || claims.get(marker.id)?.state === "unnamed")) return RECORD_UNCHANGED;
     const found = brollInCell(view.runs), rows = script.reader.rows();
     const { readers, plainTextOf } = nativeRegistryProduction(rows);
     const row = rows.find(row => row.id === beat), root = script.roots.shots, order = slots(root, true);
@@ -150,26 +150,34 @@ export function closeNativeBroll(script: NativeScript, beat: string, stamp?: Nat
     const writer = mintNativeId(script.doc, "");
     for (const [ordinal, { line, marker }] of lines.entries()) {
       const shot = found[ordinal], source = view.text.slice(line.start, line.end);
-      const match = !marker.key ? BROLL_MARKER_RE.exec(source) : null;
+      if (marker.key) {
+        if (claims.get(marker.id)?.state === "unnamed" && shot?.name) {
+          const record = target(root, marker.id);
+          if (!(record instanceof Y.Map)) return record;
+          if (!planFields(writes, record, { name: shot.name, desc: shot.desc })) return refuseRecord("stored");
+        }
+        continue;
+      }
+      const match = BROLL_MARKER_RE.exec(source);
       if (!match) continue;
       const from = nativeStoredOffset(view, line.start);
       const until = nativeStoredOffset(view, line.start + match[0].trimEnd().length);
       const point = Y.createRelativePositionFromTypeIndex(text, until - 1).item;
       if (!point) continue;
-      const id = `bs-visual-${point.client.toString(36)}-${point.clock.toString(36)}-${writer}-${ordinal.toString(36)}`;
+      const markerSource = `${point.client.toString(36)}-${point.clock.toString(36)}`;
+      const id = `bs-visual-${markerSource}-${writer}-${ordinal.toString(36)}`;
       if (root.has(id)) return refuseRecord("taken");
-      if (shot?.name) {
-        rank = nativeRankBetween(rank, null);
-        appendShot(writes, root, id, { ...defaults("shots"), origin: "script", name: shot.name, desc: shot.desc,
-          audioRef: brollSeedRef(row, plainTextOf), location: brollSeedLocation(row, readers) }, rank);
-      }
+      rank = nativeRankBetween(rank, null);
+      appendShot(writes, root, id, { ...defaults("shots"), origin: "script", name: shot?.name ?? "", desc: shot?.desc ?? "",
+        audioRef: brollSeedRef(row, plainTextOf), location: brollSeedLocation(row, readers) }, rank);
+      writes.push(() => { root.get(id)?.set(NATIVE_BROLL_SOURCE, markerSource); });
       splices.push(() => {
-        text.insertEmbed(from, { k: id, label: (match[1] ?? "") + (match[2] ?? "") }, {});
+        text.insertEmbed(from, { k: id, label: (match[1] ?? "") + (match[2] ?? ""), [NATIVE_BROLL_SOURCE]: markerSource }, {});
         text.delete(from + 1, until - from);
-        if (match[0] === match[0].trimEnd()) text.insert(from + 1, " ", {});
+        if (match[0] === match[0].trimEnd()) text.insert(from + 1, " ", { [NATIVE_BROLL_GAP]: id });
       });
     }
-    if (!splices.length) return RECORD_UNCHANGED;
+    if (!splices.length && !writes.length) return RECORD_UNCHANGED;
     if (encoded) writes.push(() => { script.roots.edited.set(beat, encoded); });
     return finish([...splices.reverse(), ...writes]);
   }, refuseRecord);
@@ -213,11 +221,12 @@ function tagTargets(script: NativeScript, ids: readonly string[]): readonly stri
 }
 
 function shotTargets(script: NativeScript, ids: readonly string[]): readonly string[] {
-  const sources = new Set(ids.flatMap(id => brollCloseSource(id) ?? []));
+  const claims = script.reader.brollClaims();
+  const sources = new Set(ids.flatMap(id => claims.get(id)?.source ?? []));
   if (!sources.size) return ids;
-  const living = [...script.roots.shots].filter(([id, record]) => record instanceof Y.Map && record.get("removed") !== true && sources.has(brollCloseSource(id) ?? ""));
-  const matched = new Set(living.map(([id]) => brollCloseSource(id)));
-  return [...ids.filter(id => !matched.has(brollCloseSource(id))), ...living.map(([id]) => id).sort()];
+  const living = [...claims].filter(([, claim]) => claim.state === "named" && sources.has(claim.source));
+  const matched = new Set(living.map(([, claim]) => claim.source));
+  return [...ids.filter(id => !matched.has(claims.get(id)?.source ?? "")), ...living.map(([id]) => id).sort()];
 }
 
 function projectedTagIds(script: NativeScript, document: DocumentShape): ReadonlySet<string> {

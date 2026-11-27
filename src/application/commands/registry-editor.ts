@@ -14,6 +14,7 @@ export interface RegistryEditor {
   readonly gear: (raw: string) => RecordCommandRun;
   readonly addShot: (name: string) => RegistryCreation;
   readonly shotUnmergedEdits: (id: string) => readonly BrollUnmergedEdit[];
+  readonly showBrollLine: (id: string) => boolean;
   readonly setShots: (ids: readonly string[], fields: ShotFields, owner?: OwnerChoice) => RecordCommandRun;
   readonly removeShot: (id: string) => RecordCommandRun;
   readonly addShotProp: (id: string, prop: string) => RecordCommandRun;

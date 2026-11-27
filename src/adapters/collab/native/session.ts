@@ -30,7 +30,6 @@ import { openNativeUndo } from "./undo-commands.ts";
 import type { NativeUndoOutcome } from "./undo-commands.ts";
 import { NATIVE_FORMAT_VERSION } from "./roots.ts";
 import { nativeCellView, nativeStoredOffset } from "./inline.ts";
-import type { NativeDeltaItem } from "./inline.ts";
 import type { PresenceLocation, PresencePoint } from "../../../application/collaboration/presence.ts";
 
 export type NativeSessionSource =
@@ -368,7 +367,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   function presenceVisual(row: string) {
     const text = script.roots.visuals.get(row);
     if (!script.reader.beatBoundary(row) || !(text instanceof Y.Text)) return null;
-    return { text, view: nativeCellView(text.toDelta() as NativeDeltaItem[]) };
+    return { text, view: nativeCellView(script.reader.visualItems(row)) };
   }
 
   const commands = Object.freeze({
@@ -438,6 +437,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     sizeLimits: sizeOptions.limits,
     document: (joinedNarration?: Parameters<typeof script.reader.document>[0]) => script.reader.document(joinedNarration),
     tagGroup: (id: string) => script.reader.tagGroup(id),
+    brollClaimState: (id: string) => script.reader.brollClaims().get(id)?.state,
     shotAlternatives: () => script.reader.shotAlternatives(),
     pictureReferences: () => script.reader.pictureReferences(),
     revision: () => revision,

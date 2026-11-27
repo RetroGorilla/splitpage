@@ -202,6 +202,13 @@ export function brollInCell(cell: readonly Run[]): BrollItem[] {
     if (open) open.desc.push(brollLineText(line.items));
   });
   return out.map(function (item) {
+    if (!item.name && brollCloseSource(item.id)) {
+      const named = item.desc.findIndex(line => !!line.trim());
+      if (named !== -1) {
+        item.name = cappedName(item.desc[named] ?? "", BROLL_NAME_MAX);
+        item.desc.splice(named, 1);
+      }
+    }
     return { id: item.id, name: item.name, desc: cappedLongText(item.desc.join("\n").replace(/\s+$/, ""), BROLL_TEXT_MAX) };
   });
 }
@@ -434,10 +441,12 @@ export function brollEntries(
   readers: ProductionReaders,
   ids: IdSource,
   plainTextOf: FieldText,
-  numbering: DocumentNumbering = deriveDocumentNumbering(state)
+  numbering: DocumentNumbering = deriveDocumentNumbering(state),
+  keepLine?: (id: string) => boolean
 ): BrollEntry[] {
   const shots = state.brollShots;
-  const live = collectBrollFromRows(state.rows, readers);
+  const lines = collectBrollFromRows(state.rows, readers);
+  const live = keepLine ? lines.filter(({ id }) => keepLine(id)) : lines;
   const claimed: Record<string, boolean> = Object.create(null);
   const held = brollHeldIds(live);
   const byId = shotIndexById(shots);
@@ -482,10 +491,12 @@ export function planBrollRecordsInState(
   plainTextOf: FieldText,
   unkeyedIn: UnkeyedScope,
   lines?: LineShotIds,
-  drawLineId?: (key: string, shared: string | undefined) => string
+  drawLineId?: (key: string, shared: string | undefined) => string,
+  keepLine?: (id: string) => boolean
 ): BrollPlan {
   const shots = state.brollShots;
-  const live = collectBrollFromRows(state.rows, readers);
+  const found = collectBrollFromRows(state.rows, readers);
+  const live = keepLine ? found.filter(({ id }) => keepLine(id)) : found;
   const claimed: Record<string, boolean> = Object.create(null);
   const held = brollHeldIds(live);
   const byId = shotIndexById(shots);

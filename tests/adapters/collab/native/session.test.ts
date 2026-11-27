@@ -110,6 +110,81 @@ test("undoing a folded close keeps hand-added props on the surviving claim", t =
   assert.deepEqual(left.document().brollShots[0]?.props, props);
 });
 
+function offlineBroll(t: TestContext, line: string) {
+  const seed = fromDocument();
+  t.after(seed.close);
+  type(seed, 0, line, visual);
+  const state = seed.encodeState();
+  const first = open({ kind: "state", state }), second = open({ kind: "state", state }, "Bob");
+  t.after(first.close);
+  t.after(second.close);
+  first.ydoc.clientID = 20;
+  second.ydoc.clientID = 30;
+  const sync = () => {
+    Y.applyUpdate(first.ydoc, second.encodeState(), "peer");
+    Y.applyUpdate(second.ydoc, first.encodeState(), "peer");
+    assert.deepEqual(first.document(), second.document());
+  };
+  return { first, second, sync };
+}
+
+test("a deleted shared close cannot hide a stored surviving shot behind a derived shot", t => {
+  const { first, second, sync } = offlineBroll(t, "B-roll: Desk");
+  for (const replica of [first, second]) written(replica.commands.closeBroll("A"));
+  const deleted = first.document().brollShots[0]?.id, id = second.document().brollShots[0]?.id;
+  assert.ok(deleted && id);
+  written(first.commands.changeRegistry({ kind: "remove", collection: "shots", ids: [deleted] }));
+  written(second.commands.typeText(anchor(second, 2, 6, visual), "Lamp", {}));
+  sync();
+  assert.deepEqual(first.document().brollShots.map(shot => shot.id), [id]);
+  assert.match(first.document().rows[0]?.visualText ?? "", new RegExp(`data-broll-id="${id}"`));
+  written(first.commands.changeRegistry({ kind: "set", collection: "shots", ids: [id], fields: { notes: "Keep this note" } }));
+  sync();
+  assert.equal(second.document().brollShots[0]?.notes, "Keep this note");
+});
+
+test("a named close wins over an empty close and keeps a same-name list shot separate", t => {
+  const { first, second, sync } = offlineBroll(t, "B-roll: ");
+  const list = first.commands.changeRegistry({ kind: "create", collection: "shots", fields: { name: "Desk" } });
+  assert.ok("created" in list);
+  written(first.commands.closeBroll("A"));
+  type(second, 8, "Desk", visual);
+  written(second.commands.closeBroll("A"));
+  const id = second.document().brollShots[0]?.id;
+  assert.ok(id);
+  sync();
+  assert.match(first.document().rows[0]?.visualText ?? "", new RegExp(`data-broll-id="${id}"`));
+  assert.deepEqual(first.document().brollShots.map(shot => shot.id).sort(), [list.created, id].sort());
+});
+
+test("concurrent B-roll closes project one separator before the shot name", t => {
+  const { first, second, sync } = offlineBroll(t, "B-roll:Desk");
+  for (const replica of [first, second]) written(replica.commands.closeBroll("A"));
+  sync();
+  assert.match(first.document().rows[0]?.visualText ?? "", /<\/span> Desk$/);
+});
+
+test("ordinary prose edits reuse close topology and alternatives after an unrelated shot deletion", t => {
+  const { first, second, sync } = offlineBroll(t, "B-roll: Desk");
+  for (const replica of [first, second]) written(replica.commands.closeBroll("A"));
+  const id = second.document().brollShots[0]?.id;
+  assert.ok(id);
+  written(second.commands.changeRegistry({ kind: "set", collection: "shots", ids: [id], fields: { notes: "Wide" } }));
+  const unrelated = first.commands.changeRegistry({ kind: "create", collection: "shots", fields: { name: "Unrelated" } });
+  assert.ok("created" in unrelated);
+  written(first.commands.changeRegistry({ kind: "remove", collection: "shots", ids: [unrelated.created] }));
+  sync();
+  const alternatives = first.shotAlternatives();
+  assert.equal(alternatives?.size, 1);
+  const cell = first.ydoc.getMap<Y.Text>("visuals").get("A");
+  assert.ok(cell);
+  const delta = t.mock.method(cell, "toDelta");
+  type(first, 6, "s", visual);
+  assert.match(first.document().rows[0]?.visualText ?? "", /Desks$/);
+  assert.equal(first.shotAlternatives(), alternatives);
+  assert.equal(delta.mock.callCount(), 1);
+});
+
 function closedState(changes: NativeSessionChange[], reason: "requested" | "failed"): Uint8Array {
   const final = changes.at(-1);
   assert(final?.kind === "closed");

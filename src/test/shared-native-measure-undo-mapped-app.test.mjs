@@ -692,20 +692,43 @@ test("an offline list shot and concurrent Visual closes keep the list shot and o
   assert.equal(cell("r1", "visualText").querySelectorAll(".broll-key").length, 1);
 });
 
-test("entering sharing preserves repeated legacy B-roll labels", async t => {
-  const key = '<span class="broll-key" data-broll-id="S1" contenteditable="false">B-roll:</span>';
+for (const id of ["S1", "bs-visual-1-2-3-4-0"]) test(`entering sharing preserves repeated imported B-roll labels with ${id}`, async t => {
+  const key = `<span class="broll-key" data-broll-id="${id}" contenteditable="false">B-roll:</span>`;
   const visualText = `${key} Desk<br>${key} Wide`, rows = [["r1", "Hello", visualText]];
   const migrated = docOf(rows);
   const doc = { ...migrated, rows: [{ ...migrated.rows[0], visualText }],
-    brollShots: [{ ...migrated.brollShots[0], id: "S1" }] };
+    brollShots: [{ ...migrated.brollShots[0], id }] };
   const seed = openNativeSession({ kind: "document", document: doc, conversion: {
     cells: scriptCellOf, creation: doc.docId, at: "2026-11-20", by: "Writer"
   } }, { actor: "Writer", sanitize: sanitizeHtml });
   t.after(seed.close);
   await enter(t, rows, seed.encodeState());
-  assert.equal(cell("r1", "visualText").querySelectorAll('.broll-key[data-broll-id="S1"]').length, 2);
+  assert.equal(cell("r1", "visualText").querySelectorAll(`.broll-key[data-broll-id="${id}"]`).length, 2);
   assert.deepEqual(hook.read().app, hook.read().peer);
   assert.equal(hook.read().app.rows[0].visualText, visualText);
+});
+
+test("Split: naming a previously empty B-roll key on the following line makes an editable shared shot", async t => {
+  await enter(t, [["r1", "Hello", ""], ["r2", "World"]]);
+  const visual = () => cell("r1", "visualText");
+  visual().focus();
+  setCellSelection(visual(), 0);
+  assert.equal(input(visual(), "insertText", "B-roll: "), true);
+  cell("r2").focus();
+  await new Promise(setImmediate);
+  assert.deepEqual(hook.read().app.brollShots, []);
+  const id = visual().querySelector(".broll-key").dataset.brollId;
+  visual().focus();
+  setCellSelection(visual(), 2);
+  assert.equal(input(visual(), "insertLineBreak"), true);
+  assert.equal(input(visual(), "insertText", "Desk"), true);
+  cell("r2").focus();
+  await new Promise(setImmediate);
+  assert.deepEqual(hook.read().app.brollShots.map(shot => [shot.id, shot.name]), [[id, "Desk"]]);
+  written(hook.nativePeer.registry({ kind: "set", collection: "shots", ids: [id], fields: { notes: "Wide angle" } }));
+  await new Promise(setImmediate);
+  assert.deepEqual(hook.read().app, hook.read().peer);
+  assert.equal(JSON.parse(buildSplitpageCopy(captureExportDocument())).brollShots[0].notes, "Wide angle");
 });
 
 test("ordinary edits beside a B-roll chip do not rescan the rendered cell for folds", () => {

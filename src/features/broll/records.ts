@@ -71,7 +71,8 @@ export function createBrollRecords(ports: BrollRecordsPorts): BrollRecordsMount 
 
   function brollEntries(): BrollEntry[] {
     const doc = ports.document.current();
-    return doc ? readBrollEntries(doc, ports.text.productionReaders, ports.ids, ports.text.htmlToPlainText, ports.document.numbering()) : [];
+    return doc ? readBrollEntries(doc, ports.text.productionReaders, ports.ids, ports.text.htmlToPlainText, ports.document.numbering(),
+      ports.shared.native?.()?.showBrollLine) : [];
   }
 
   function brollUnshotCount(): number {

@@ -1,5 +1,4 @@
 import * as Y from "yjs";
-import { BROLL_MARKER_RE, brollCloseSource } from "../../../core/document/broll.ts";
 import type { StoredImageRef } from "../../../core/document/text-policy.ts";
 import { OBJ, cleanMarks, cleanText, normalizeCell, orderedMarks, sameMarks, tagStack, withTagStack } from "../../../core/text/runs.ts";
 import type { Marks, Run } from "../../../core/text/runs.ts";
@@ -10,6 +9,7 @@ export type NativeAttributes = Record<string, true>;
 export interface NativeDeltaItem {
   readonly insert: string | Readonly<Record<string, unknown>>;
   readonly attributes?: Readonly<Record<string, unknown>>;
+  readonly foldedBroll?: true;
 }
 
 export interface NativePreparedRun {
@@ -272,56 +272,13 @@ interface ItemView {
 const NO_KEYS: readonly string[] = Object.freeze([]);
 const NO_STRETCHES: ReadonlyMap<string, Stretch> = new Map();
 
-type BrollClaim = { readonly id: string; readonly source: string };
-type BrollLayout = { readonly previous: BrollLayout | null; readonly claim: BrollClaim | null; readonly count: number;
-  readonly next: WeakMap<object, BrollLayout>; hidden?: ReadonlySet<number> };
-
-const BROLL_CLAIMS = new WeakMap<object, BrollClaim | null>();
-const EMPTY_BROLL_LAYOUT: BrollLayout = { previous: null, claim: null, count: 0, next: new WeakMap() };
-const NO_FOLDED_BROLL: ReadonlySet<number> = new Set();
-
-function brollClaim(insert: Readonly<Record<string, unknown>>): BrollClaim | null {
-  const known = BROLL_CLAIMS.get(insert);
-  if (known !== undefined) return known;
-  const { k: id, label } = insert, source = typeof id === "string" ? brollCloseSource(id) : undefined;
-  const claim = typeof id === "string" && source && typeof label === "string" &&
-    BROLL_MARKER_RE.test(cleanText(label).replace(/\n/g, " ").trim()) ? { id, source } : null;
-  BROLL_CLAIMS.set(insert, claim);
-  return claim;
-}
-
-function nextBroll(layout: BrollLayout, insert: Readonly<Record<string, unknown>>): BrollLayout {
-  const claim = brollClaim(insert);
-  if (!claim) return layout;
-  const known = layout.next.get(insert);
-  if (known) return known;
-  const next = { previous: layout, claim, count: layout.count + 1, next: new WeakMap<object, BrollLayout>() };
-  layout.next.set(insert, next);
-  return next;
-}
-
-// why: Y.Text keeps each embed value across prose edits, so its sequence can reuse the winning claims
-function foldedBroll(layout: BrollLayout): ReadonlySet<number> {
-  if (layout.count < 2) return NO_FOLDED_BROLL;
-  if (layout.hidden) return layout.hidden;
-  const winners = new Map<string, { id: string; index: number }>(), hidden = new Set<number>();
-  for (let node: BrollLayout | null = layout; node?.claim; node = node.previous) {
-    const { id, source } = node.claim, index = node.count - 1, winner = winners.get(source);
-    if (!winner || id <= winner.id) {
-      if (winner) hidden.add(winner.index);
-      winners.set(source, { id, index });
-    } else hidden.add(index);
-  }
-  return layout.hidden = hidden;
-}
 
 // why: an application is judged by its whole extent in the cell, so plain letters typed inside it do not change
 // how it nests or crosses another
-function tagStretches(items: readonly NativeDeltaItem[]) {
+function tagStretches(items: readonly NativeDeltaItem[]): ReadonlyMap<string, Stretch>[] {
   const extents = new Map<string, Stretch>(), present: (string[] | null)[] = [];
-  let offset = 0, layout = EMPTY_BROLL_LAYOUT;
+  let offset = 0;
   for (const item of items) {
-    if (typeof item.insert !== "string") layout = nextBroll(layout, item.insert);
     const length = nativeItemLength(item), attributes = item.attributes ?? {};
     let keys: string[] | null = null;
     for (const key in attributes) {
@@ -333,17 +290,17 @@ function tagStretches(items: readonly NativeDeltaItem[]) {
     present.push(keys);
     offset += length;
   }
-  return { perItem: present.map(keys => keys ? new Map(keys.map(key => [key, extents.get(key) as Stretch])) : NO_STRETCHES),
-    folded: foldedBroll(layout) };
+  return present.map(keys => keys ? new Map(keys.map(key => [key, extents.get(key) as Stretch])) : NO_STRETCHES);
 }
 
 // why: rendering needs only the kept text; the per-unit positions are built for command lookup alone
 function itemViews(items: readonly NativeDeltaItem[], positions: boolean): ItemView[] {
-  const { perItem, folded } = tagStretches(items);
-  let offset = 0, chip = 0;
+  const perItem = tagStretches(items);
+  let offset = 0;
   return items.map((item, index) => {
     const stretches = perItem[index] ?? NO_STRETCHES, keys = stretches.size ? orderKeys(stretches) : NO_KEYS, start = offset;
     offset += nativeItemLength(item);
+    if (item.foldedBroll) return { run: null, keys: NO_KEYS, start, shownCount: 0, shown: null, unknown: false, unshown: false, folded: true };
     if (typeof item.insert === "string") {
       const value = item.insert;
       let kept = value, shown: number[] | null = null;
@@ -354,9 +311,6 @@ function itemViews(items: readonly NativeDeltaItem[], positions: boolean): ItemV
       } else if (positions) shown = Array.from({ length: value.length }, (_, at) => at);
       const unshown = !!item.attributes && unshownKeys(item.attributes, false);
       return { run: kept ? { text: kept, marks: marksOf(item.attributes, keys, false) } : null, keys, start, shownCount: kept.length, shown: positions ? shown : null, unknown: false, unshown };
-    }
-    if (folded.size && brollClaim(item.insert) && folded.has(chip++)) {
-      return { run: null, keys: NO_KEYS, start, shownCount: 0, shown: null, unknown: false, unshown: false, folded: true };
     }
     const atom = atomOf(item.insert, marksOf(item.attributes, NO_KEYS, true));
     let clean = atom ? cleanAtom(atom) : null, unshown = !!atom && !!item.attributes && unshownKeys(item.attributes, true);
@@ -390,7 +344,7 @@ export function nativeCellView(items: readonly NativeDeltaItem[]): NativeCellVie
     const stored = items[index], length = stored ? nativeItemLength(stored) : 0;
     hidden += length - view.shownCount;
     if (view.unknown) unknown++;
-    if (view.folded) (foldedBroll ??= []).push(view.start);
+    if (view.folded) for (let at = 0; at < length; at++) (foldedBroll ??= []).push(view.start + at);
     if (!view.run) continue;
     const left: NativeLeft = { marks: view.run.marks, keys: view.keys, atom: !!view.run.atom };
     for (const at of view.shown ?? []) { ends.push(view.start + at + 1); lefts.push(left); }

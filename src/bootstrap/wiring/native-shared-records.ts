@@ -91,6 +91,10 @@ export function createNativeEditorRecords(
   const registry: RegistryEditor = {
     canonicalTagId: id => native.tagGroup(id)?.[0] ?? id,
     shotUnmergedEdits: id => native.shotAlternatives()?.get(id) ?? [],
+    showBrollLine: id => {
+      const state = native.brollClaimState(id);
+      return state === undefined || state === "named";
+    },
     addPerson: raw => {
       const name = cappedText(raw, PERSON_NAME_MAX);
       if (!name) return { run: NOTHING_RAN, id: "" };

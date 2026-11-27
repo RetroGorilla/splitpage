@@ -38,7 +38,7 @@ import { repaintWriterAfterPublish, writerControls, writerFlowPorts } from "./wr
 import { currentWhoList } from "./who-list.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "trackVisualPeerSelection" | "titleOffset" | "trackTitlePaint" | "resolveTextSelection" | "captureTextIdentity" | "captureCompositionCaret" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "trackVisualPeerSelection" | "titleOffset" | "trackTitlePaint" | "resolveTextSelection" | "captureTextIdentity" | "captureCompositionCaret" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker" | "brollClaimState">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -2068,7 +2068,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       && target.getAttribute("data-field") === field);
     const wrap = cell.closest(".field-wrap");
     const closeBroll = !!beat && field === "visualText" && !!cell.closest("#rows") &&
-      brollMarkerLines(scriptCellOf(cell.innerHTML)).some(({ marker }) => !marker.key);
+      brollMarkerLines(scriptCellOf(cell.innerHTML)).some(({ marker }) => !marker.key || native.brollClaimState(marker.id) === "unnamed");
     function finishBroll(): void {
       if (!closeBroll || !beat || stopped || draft?.cell === cell || admissionRefusal()) return;
       try {
