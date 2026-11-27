@@ -20,7 +20,7 @@ import type { NativePlainMark, NativeVisualLabel } from "../../adapters/collab/n
 import { domToPos, posToDom, readSelection } from "../../features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
 import { cueShortcutHint, noteFieldPainted, renderRow } from "../../features/rows/render.ts";
-import { existingPlainTagEnd, hidePlainTagHint, plainTagKeywordAtCaret, plainTagPhrase, showPlainTagHint, updatePlainTagHint } from "../../features/tags/plain-tags.ts";
+import { existingPlainTagEnd, hidePlainTagHint, matchPlainTagKeyword, plainTagKeywordAtCaret, plainTagPhrase, showPlainTagHint, updatePlainTagHint } from "../../features/tags/plain-tags.ts";
 import { showToolbarTagPicker } from "../../features/tags/toolbar-picker.ts";
 import { undoGesture } from "../../features/undo/routes.ts";
 import { scriptCellOf } from "../richtext.ts";
@@ -37,7 +37,7 @@ import { repaintWriterAfterPublish, writerControls, writerFlowPorts } from "./wr
 import { currentWhoList } from "./who-list.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "titleOffset" | "trackTitlePaint" | "resolveTextSelection" | "captureTextIdentity" | "captureCompositionCaret" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "trackVisualPeerSelection" | "titleOffset" | "trackTitlePaint" | "resolveTextSelection" | "captureTextIdentity" | "captureCompositionCaret" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -282,7 +282,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     readonly range: NativeTextRange;
     cell: Element;
     start: number;
-    caret: RelativePoint;
+    readonly peerSelection: ReturnType<NativeInputPorts["native"]["trackVisualPeerSelection"]>;
     candidates: Parameters<typeof registryCompletion>[0];
     typed: string;
     suggestion: string | null;
@@ -807,9 +807,6 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         if (cuePoint) markTypedCue(buffered.beat, cuePoint);
         const caret = cuePoint ?? result.caret;
         if (moveCaret && caret) placement = { buffered, caret: visualCaret ?? caret };
-        if (typedTag && result.caret && buffered.field === "visualText" && typedTag.range.target.beat === buffered.beat) {
-          typedTag.caret = result.caret;
-        }
         if (selection && result.selection) selection.inserted = result.selection;
       }
       publish(buffered);
@@ -1313,9 +1310,13 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (from === null) return;
     const keyword = at.kw, start = from + keyword.length;
     const anchor = native.commands.anchorText({ beat, cell: "visual" }, from, start);
-    if (anchor.kind !== "anchored" || !anchor.range.to) return;
+    if (anchor.kind !== "anchored") return;
     const candidates = visualTagCandidates(native.document(), keyword.cat);
-    typedTag = { keyword, range: anchor.range, cell, start, caret: anchor.range.to, candidates, typed: "", suggestion: null, dismissed: null };
+    const peerSelection = native.trackVisualPeerSelection(beat, () => {
+      const active = typedTag?.cell;
+      return active && document.activeElement === active ? readSelection(active, document.getSelection()) : null;
+    });
+    typedTag = { keyword, range: anchor.range, cell, start, peerSelection, candidates, typed: "", suggestion: null, dismissed: null };
     showPlainTagHint(cell, from, keyword.cat, "");
   }
 
@@ -1334,15 +1335,17 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (!opened || typedTag !== opened) return;
       const { beat } = opened.range.target;
       const cell = visualTextSurface.cell(beat), html = doc.rows.find(row => row.id === beat)?.visualText;
-      const caret = native.resolveTextSelection({ ...opened.range, to: opened.caret })?.head.offset;
-      const proposal = cell && typeof html === "string" && caret !== undefined && visualTagDraft(cell, caret, html);
-      if (!cell || !proposal || caret === undefined || !cell.closest("#rows") || active !== opened.cell ||
+      const selection = opened.peerSelection.take();
+      if (!cell || !selection || !cell.closest("#rows") || active !== opened.cell ||
         !visualTextSurface.mayRestore(opened.cell, cell)) { closeTypedTag(); return; }
+      const repainted = cell !== opened.cell;
+      if (repainted) visualTextSurface.place(cell, beat, selection.anchor, selection.head, false);
+      const proposal = selection.anchor === selection.head && typeof html === "string" && visualTagDraft(cell, selection.head, html);
+      if (!proposal) { closeTypedTag(); return; }
       opened.candidates = visualTagCandidates(doc, opened.keyword.cat);
-      if (cell !== opened.cell || opened.start !== proposal.start) {
+      if (repainted || opened.start !== proposal.start) {
         opened.cell = cell;
         opened.start = proposal.start;
-        visualTextSurface.place(cell, beat, caret, caret, false);
         showPlainTagHint(cell, proposal.from, opened.keyword.cat, opened.suggestion ?? "");
       }
       refreshVisualTag(beat);
@@ -1351,6 +1354,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   function closeTypedTag(): void {
     if (!typedTag) return;
+    typedTag.peerSelection.dispose();
     typedTag = null;
     hidePlainTagHint();
   }
@@ -1362,7 +1366,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (!source || source.head.offset > offset) return null;
     const from = source.anchor.offset, start = source.head.offset;
     const model = scriptCellOf(html), text = projection(model);
-    if (text.slice(from, start) !== opened.keyword.keyword) return null;
+    if (start - from !== opened.keyword.length ||
+      matchPlainTagKeyword(text.slice(Math.max(0, from - 1), start))?.keyword !== opened.keyword.keyword) return null;
     const limit = existingPlainTagEnd(model, start);
     if (offset > limit) return null;
     const end = offset === start ? limit : offset;

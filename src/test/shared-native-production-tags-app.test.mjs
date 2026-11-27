@@ -11,6 +11,7 @@ import { adoptReplacement, currentDocument } from "../bootstrap/wiring/session-o
 import { enterSharedSession, forceLeaveSharedSession } from "../bootstrap/wiring/shared-session.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
+import { posToDom, readSelection } from "../features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
 import { nativeEntrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 
@@ -317,6 +318,44 @@ test("an open typed tag offers a production name a peer just added", async t => 
   assert.equal(tab(), false);
   await exchange(native, peer);
   assert.deepEqual(tags(), [["gear", "Camera", "Camera"]]);
+});
+
+for (const backward of [false, true]) {
+  test(`a peer repaint preserves a ${backward ? "backward" : "forward"} draft selection and Tab leaves it literal`, async t => {
+    const { native, peer } = await start(t, "Near ");
+    select(5);
+    type("prop: Lamp");
+    await exchange(native, peer);
+    const anchor = posToDom(visual(), backward ? 15 : 0), head = posToDom(visual(), backward ? 0 : 15);
+    document.getSelection().setBaseAndExtent(anchor.node, anchor.offset, head.node, head.offset);
+    const at = peer.commands.anchorText(target, 0);
+    assert.equal(at.kind, "anchored");
+    assert.equal(peer.commands.typeText(at.range, "Look: ", {}).kind, "written");
+    await exchange(native, peer);
+    assert.equal(document.activeElement, visual());
+    const restored = readSelection(visual(), document.getSelection());
+    assert.deepEqual([restored?.anchor, restored?.head], backward ? [21, 6] : [6, 21]);
+    assert.equal(tab(), true);
+    await exchange(native, peer);
+    assert.equal(currentDocument().rows[0].visualText, "Look: Near prop: Lamp");
+    assert.deepEqual(tags(), []);
+  });
+}
+
+test("removing the keyword boundary from a peer closes the draft and Tab leaves it literal", async t => {
+  const { native, peer } = await start(t, "Near ");
+  select(5);
+  type("prop: Lamp");
+  await exchange(native, peer);
+  const space = peer.commands.anchorText(target, 4, 5);
+  assert.equal(space.kind, "anchored");
+  assert.equal(peer.commands.deleteText(space.range).kind, "written");
+  await exchange(native, peer);
+  assert.equal(document.getElementById("tag-open-hint").classList.contains("is-visible"), false);
+  assert.equal(tab(), true);
+  await exchange(native, peer);
+  assert.equal(currentDocument().rows[0].visualText, "Nearprop: Lamp");
+  assert.deepEqual(tags(), []);
 });
 
 test("Tab labels an existing suffix as written even when it matches a longer name", async t => {

@@ -488,6 +488,40 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
         dispose
       };
     },
+    trackVisualPeerSelection: (row: string, read: () => { readonly anchor: number; readonly head: number } | null) => {
+      let paintedPeerRevision = peerRevision;
+      let retained: readonly [Y.RelativePosition, Y.RelativePosition] | null = null;
+      const capture = (transaction: Y.Transaction): void => {
+        if (transaction.local || peerRevision !== paintedPeerRevision) return;
+        script.guardSharedCallback(() => {
+          retained = null;
+          const selection = read(), visual = selection && presenceVisual(row);
+          if (!selection || !visual || Math.max(selection.anchor, selection.head) > visual.view.length) return;
+          const at = (offset: number, assoc: 0 | -1) =>
+            Y.createRelativePositionFromTypeIndex(visual.text, nativeStoredOffset(visual.view, offset), assoc);
+          const anchor = at(selection.anchor, selection.anchor < selection.head ? 0 : -1);
+          const head = selection.anchor === selection.head ? anchor : at(selection.head, selection.head < selection.anchor ? 0 : -1);
+          retained = [anchor, head];
+        });
+      };
+      doc.on("beforeTransaction", capture);
+      return {
+        take() {
+          const positions = retained;
+          retained = null;
+          paintedPeerRevision = peerRevision;
+          const visual = positions && presenceVisual(row);
+          if (!positions || !visual) return null;
+          const offset = (point: Y.RelativePosition) => {
+            const at = Y.createAbsolutePositionFromRelativePosition(point, doc);
+            return at?.type === visual.text ? visual.view.ends.filter(end => end <= at.index).length : null;
+          };
+          const anchor = offset(positions[0]), head = offset(positions[1]);
+          return anchor === null || head === null ? null : { anchor, head };
+        },
+        dispose: () => { doc.off("beforeTransaction", capture); }
+      };
+    },
     titleOffset: (range: Pick<NativeTextRange, "from">, assoc: 0 | -1 = 0) => {
       if (refusal()) return null;
       return perform(() => {
