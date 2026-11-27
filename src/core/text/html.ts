@@ -14,7 +14,23 @@ function escText(t: string): string {
   return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\u00a0/g, "&nbsp;");
 }
 function escAttr(t: unknown): string {
-  return String(t).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/\u00a0/g, "&nbsp;");
+  return escText(String(t)).replace(/"/g, "&quot;");
+}
+
+function mapAttributeValues(html: string, map: (value: string) => string): string {
+  return html.replace(/<[a-z][a-z0-9-]*(?: [a-z0-9-]+="[^"]*")+>/g, tag => tag.replace(/"[^"]*"/g, map));
+}
+
+export function escapeHtmlAttributeAngles(html: string): string {
+  return mapAttributeValues(html, value => value.replaceAll("<", "&lt;").replaceAll(">", "&gt;"));
+}
+
+export function matchesLegacyAttributeAngles(stored: unknown, canonical: string): boolean {
+  if (typeof stored !== "string") return false;
+  const extra = canonical.length - stored.length;
+  // why: Only legacy angle brackets can account for this byte difference, so ordinary edits need no markup scan.
+  if (extra <= 0 || extra % 3 !== 0 || !/&[lg]t;/.test(canonical)) return false;
+  return stored === mapAttributeValues(canonical, value => value.replaceAll("&lt;", "<").replaceAll("&gt;", ">"));
 }
 
 const FORMAT_TAG: Record<FormatMark, string> = { hl: "mark", b: "strong", i: "em", u: "u", s: "s" };

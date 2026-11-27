@@ -35,7 +35,7 @@ export function withDocumentPorts<T>(fields: readonly StateField[], pass: (ports
       images: images,
       sanitize: function (html, ids) {
         if (ids && ids !== textIds) { textIds = ids; text = null; }
-        return richText().sanitize(html);
+        return richText().sanitizeStored(html);
       },
       htmlIds: function (html) {
         return Array.from(richText().inertBody(html).getElementsByTagName("*"))

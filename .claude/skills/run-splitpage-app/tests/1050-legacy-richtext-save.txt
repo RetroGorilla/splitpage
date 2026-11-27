@@ -1,0 +1,15 @@
+open
+eval (async function(){ window.F = window.__splitpageFormats; const response = await fetch('/tests/collab/fixtures/projection-reference.json'); if (!response.ok) throw new Error('Could not load the projection fixture'); const { fixtures } = await response.json(); window.legacyBytes = fixtures.find(fixture => fixture.name === 'quoted-tag.splitpage').appSaved.full; const name = 'quoted-tag.splitpage'; const file = new File([legacyBytes], name, { lastModified: 1000 }); const handle = { name, getFile: async () => file, createWritable: async () => ({ write: async body => { window.savedBytes = body; }, close: async () => {} }) }; await F.openFile(file, handle); return true; })()
+wait F.docFile().name === 'quoted-tag.splitpage' && !!document.querySelector('#rows [data-id="quote-row"] .visual-cell .cell-editable')
+eval (function(){ window.openedState = JSON.stringify(F.state()); window.originalField = JSON.parse(legacyBytes).rows[0].visualText; return true; })()
+expect originalField.includes('data-tag-name="A > B"')
+expect F.state().rows[0].visualText === originalField
+caret #rows [data-id="quote-row"] .visual-cell .cell-editable
+expect document.activeElement.matches('#rows [data-id="quote-row"] .visual-cell .cell-editable')
+eval document.activeElement.blur()
+expect JSON.stringify(F.state()) === openedState
+expect document.getElementById('save-status').textContent === 'Saved'
+eval (async function(){ await F.save(); return true; })()
+wait typeof window.savedBytes === 'string'
+expect JSON.parse(savedBytes).rows[0].visualText === originalField
+expect (function(){ const expected = JSON.parse(legacyBytes), saved = JSON.parse(savedBytes); expected.rev += 1; expected.lastEditedBy = saved.lastEditedBy; expected.lastEditedAt = saved.lastEditedAt; return savedBytes === JSON.stringify(expected, null, 2); })()
