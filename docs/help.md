@@ -13,15 +13,16 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 
 The instructions below describe this release.
 
-- **Tags in shared scripts.** Tag words in the Visual column with **Tag** or
-  by typing `Prop: lamp` and pressing **Tab**. Undo keeps the Production
-  entry; delete it from the list if you don't need it.
+- **Tags in shared scripts.** In Split's **Visual** column, select words and
+  choose **Tag**, or type `Prop: lamp` and press **Tab**. Undo keeps the
+  Production entry; once nothing uses it, choose **Delete from list**.
 - **Sound cues and B-roll in shared scripts.** Start a line with `SFX:` or
-  `Music:` to make a sound cue, and type `B-roll:` in the Visual column to
-  add a shot.
+  `Music:` in Split's **Audio** column or in Writer narration to make a sound
+  cue. Start a line in Split's **Visual** column with `B-roll: Desk`; the shot
+  appears in **B-roll** when you leave the cell.
 - **Smoother shared typing.** Typing after a space no longer stops in the
-  Audio or Visual column, and co-writers' carets leave a beat when it is
-  deleted.
+  Audio or Visual column. When a beat is deleted, co-writers' carets and
+  selections in it disappear until they move them again.
 
 ## What's new in 0.5.0
 
@@ -1193,9 +1194,12 @@ included (they're your files).
   The owner can copy or reset the guest link, and add, change or remove its
   password. After a reset, guests need the new link. If the password changes,
   guests may be asked to enter it again before their work can sync.
-- Tags, sound cues and B-roll work in a shared script as they do in your own.
-  Undoing a tag keeps its Production entry, which shows as **Not in script**
-  until you use it again or choose **Delete from list**.
+- In shared **Split**, select words and choose a category from **Tag**, or type
+  a keyword such as `Prop: lamp` and press **Tab** in **Visual**. Typed
+  `B-roll:` shots also start in **Visual**. Sound cues work in **Audio** and in
+  **Writer** narration. **Undo** removes a tag and keeps its **Production**
+  entry. If nothing uses the entry, it shows **Not in script** and offers
+  **Delete from list**.
 
 ### Offline work and version history
 
