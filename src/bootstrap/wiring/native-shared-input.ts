@@ -2009,6 +2009,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   const pageHide = (): void => { finish(); };
   const visibility = (): void => { if (document.visibilityState === "hidden") pageHide(); };
+  const rows = document.getElementById("rows");
   let stopUnload: (() => void) | undefined;
   const dispose = (): void => {
     clearTimeout(timer);
@@ -2024,12 +2025,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     window.removeEventListener("pagehide", pageHide);
     document.removeEventListener("visibilitychange", visibility);
     for (const type of EVENTS) window.removeEventListener(type, intercept, true);
+    rows?.removeAttribute("data-native-shared-input");
   };
   try {
     stopUnload = guardUnload(window, () => !!finish());
     window.addEventListener("pagehide", pageHide);
     document.addEventListener("visibilitychange", visibility);
     for (const type of EVENTS) window.addEventListener(type, intercept, true);
+    rows?.setAttribute("data-native-shared-input", "");
   } catch (error) {
     dispose();
     throw error;

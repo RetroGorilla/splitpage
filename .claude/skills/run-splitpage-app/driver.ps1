@@ -524,7 +524,8 @@ function Ime-Input([string]$Rest) {
 $KeyMap = @{
   Enter     = @{ key = 'Enter';     code = 'Enter';     vk = 13; text = "`r" }
   Tab       = @{ key = 'Tab';       code = 'Tab';       vk = 9;  text = "`t" }
-  Escape    = @{ key = 'Escape';    code = 'Escape';    vk = 27 }
+  Space     = @{ key = ' ';         code = 'Space';     vk = 32; text = ' ' }
+  Escape   = @{ key = 'Escape';    code = 'Escape';    vk = 27 }
   Backspace = @{ key = 'Backspace'; code = 'Backspace'; vk = 8 }
   ArrowDown = @{ key = 'ArrowDown'; code = 'ArrowDown'; vk = 40 }
   ArrowUp   = @{ key = 'ArrowUp';   code = 'ArrowUp';   vk = 38 }
