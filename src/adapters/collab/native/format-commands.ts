@@ -1,3 +1,4 @@
+import { cueShortcutRange } from "../../../core/text/cues.ts";
 import { cleanMarks, tagNameOf, withTagStack } from "../../../core/text/runs.ts";
 import type { Marks } from "../../../core/text/runs.ts";
 import { nativeMarkName, nativeRangeUnits, nativeTagKey } from "./inline.ts";
@@ -5,7 +6,7 @@ import type { NativeRangeUnits } from "./inline.ts";
 import { transactPreparedNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability, nativeLiveRange, nativeRangeSnapshot } from "./text-commands.ts";
-import type { NativeLiveRange, NativeRefusal, NativeTextRange } from "./text-commands.ts";
+import type { NativeLivePiece, NativeRefusal, NativeTextRange } from "./text-commands.ts";
 import { nativeWellFormed } from "./values.ts";
 
 export type NativePlainMark = "b" | "i" | "u" | "s" | "hl" | "dir" | "cue";
@@ -102,8 +103,8 @@ function writesFor(script: NativeScript, change: CheckedChange, units: NativeRan
   return units.shownKeys.has(change.key) ? { clear: { [change.key]: null }, set: null } : null;
 }
 
-function planMark(script: NativeScript, live: NativeLiveRange, checked: CheckedChange): (() => NativeFormatOutcome) | null {
-  const planned = live.pieces.flatMap(piece => {
+function planMark(script: NativeScript, pieces: readonly NativeLivePiece[], checked: CheckedChange): (() => NativeFormatOutcome) | null {
+  const planned = pieces.flatMap(piece => {
     const units = nativeRangeUnits(piece.items, piece.from - piece.start, piece.until - piece.start, checked.on ? checked.key : null, checked.carry);
     const writes = writesFor(script, checked, units);
     return writes && piece.until > piece.from ? [{ piece, units, writes }] : [];
@@ -122,7 +123,7 @@ function planMark(script: NativeScript, live: NativeLiveRange, checked: CheckedC
 export function planNativeCommentMark(script: NativeScript, snapshot: NonNullable<ReturnType<typeof nativeRangeSnapshot>>, id: string) {
   const checked = commentChange(id, true), live = nativeLiveRange(script, snapshot);
   if (!checked || typeof live === "string") return null;
-  return planMark(script, live, checked);
+  return planMark(script, live.pieces, checked);
 }
 
 export function formatNativeText(script: NativeScript, range: NativeTextRange, change: NativeMarkChange): NativeFormatOutcome {
@@ -135,6 +136,20 @@ export function formatNativeText(script: NativeScript, range: NativeTextRange, c
     if (!snapshot || snapshot.target.cell === "name") return refused("range");
     const live = nativeLiveRange(script, snapshot);
     if (typeof live === "string") return refused(live);
-    return planMark(script, live, checked)?.() ?? UNCHANGED;
+    return planMark(script, live.pieces, checked)?.() ?? UNCHANGED;
+  }, refused);
+}
+
+export function formatNativeCue(script: NativeScript, beat: string, offset: number): NativeFormatOutcome {
+  const unavailable = nativeAvailability(script);
+  if (unavailable) return refused(unavailable);
+  if (!nativeWellFormed(beat) || !Number.isSafeInteger(offset) || offset <= 0) return refused("range");
+  return transactPreparedNativeCommand(script, () => null, () => {
+    const row = script.reader.row(beat);
+    if (!row) return refused("missing");
+    const span = cueShortcutRange(row.narration, offset);
+    if (!span || offset > span.to) return UNCHANGED;
+    const pieces = script.reader.narrationPieces(beat, span.from, span.to);
+    return planMark(script, pieces, { key: "cue", on: true, carry: { cue: true }, family: null, tag: null })?.() ?? UNCHANGED;
   }, refused);
 }

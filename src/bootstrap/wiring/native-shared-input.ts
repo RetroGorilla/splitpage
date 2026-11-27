@@ -10,13 +10,14 @@ import { sceneBeforeBeat, sceneForBeat, scenesInOrder, storedSceneName } from ".
 import type { SceneDocument } from "../../core/document/scenes.ts";
 import { beatPos, enterAt, HEADING_MARKER, headingPos, startsParagraph } from "../../core/flow/flow.ts";
 import type { FlowDoc, FlowPos, FlowRange } from "../../core/flow/flow.ts";
+import { cueShortcutRange } from "../../core/text/cues.ts";
 import { breakLine, deleteRange, markThroughout, replaceText, sliceCell, typingMarks } from "../../core/text/edits.ts";
 import { cellLength, cleanText, projection } from "../../core/text/runs.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
 import type { NativePlainMark } from "../../adapters/collab/native/format-commands.ts";
 import { domToPos, posToDom, readSelection } from "../../features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
-import { noteFieldPainted, renderRow } from "../../features/rows/render.ts";
+import { cueShortcutHint, noteFieldPainted, renderRow } from "../../features/rows/render.ts";
 import { undoGesture } from "../../features/undo/routes.ts";
 import { scriptCellOf } from "../richtext.ts";
 import { guardUnload } from "../startup/page-lifetime.ts";
@@ -710,6 +711,23 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return step.result;
   }
 
+  function markTypedCue(beat: string, point: RelativePoint): void {
+    const offset = native.narrationOffset(beat, { from: point }, -1), html = native.narrationHtml(beat);
+    if (offset === null || html == null) return;
+    const live = document.createElement("div");
+    live.innerHTML = html;
+    const caretPoint = posToDom(live, offset);
+    if (!cueShortcutHint(caretPoint.node, caretPoint.offset)) return;
+    if (!cueShortcutRange(scriptCellOf(html), offset)) return;
+    const at = native.narrationCaret(beat, offset);
+    const caret = at && caretAnchor(at.beat, at.offset);
+    if (!caret) return;
+    // why: the first Undo takes off the cue mark and leaves the typed colon in place
+    const step = native.commands.formatCue.withSelection(caret, beat, offset);
+    if (step.result.kind === "refused") refuseCommand(step.result.reason);
+    if (step.result.kind === "written") step.recordAfter(caret);
+  }
+
   function finish(selection?: SelectionCapture, moveCaret = true, quiet = false, composed = false): string | null {
     clearTimeout(timer);
     timer = undefined;
@@ -769,7 +787,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (result.kind === "written") {
         lastWrite = at;
         if (buffered.surface === writerNarration) refusedJoinedHeadings.delete(buffered.beat);
-        if (moveCaret && result.caret) placement = { buffered, caret: visualCaret ?? result.caret };
+        const cuePoint = selection?.indices[2] ? result.selection?.[1] : null;
+        if (cuePoint) markTypedCue(buffered.beat, cuePoint);
+        const caret = cuePoint ?? result.caret;
+        if (moveCaret && caret) placement = { buffered, caret: visualCaret ?? caret };
         if (selection && result.selection) selection.inserted = result.selection;
       }
       publish(buffered);
@@ -931,6 +952,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   function atBatchBoundary(buffered: Draft): boolean {
     return buffered.units >= BATCH_UNITS || /\s$/.test(buffered.text);
+  }
+
+  function finishTypedCue(buffered: Draft): void {
+    finish({ indices: [null, buffered.previewCaret - buffered.selection.from, true] });
   }
 
   function caretAnchor(beat: string, offset: number) {
@@ -1381,7 +1406,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (buffered && !buffered.deletion && insideDraft(buffered, cell, selection)) {
       reviseDraft(buffered, selection, text);
       preview(cell, selection, text);
-      if (atBatchBoundary(buffered)) finish();
+      if (text.endsWith(":") && buffered.field === "audioText") finishTypedCue(buffered);
+      else if (atBatchBoundary(buffered)) finish();
       return;
     }
     if (!isTitle && touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return; }
@@ -1401,6 +1427,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     draft = typeof anchored === "string" ? next : anchored;
     preview(current.cell, current.selection, text);
     if (typeof anchored === "string") { stop(anchored); return; }
+    if (text.endsWith(":") && anchored.field === "audioText") { finishTypedCue(anchored); return; }
     if (anchored.field === "visualText" || atBatchBoundary(anchored)) {
       const reason = finish();
       if (!reason && anchored.field === "visualText" && anchored.cell.closest("#rows")) {

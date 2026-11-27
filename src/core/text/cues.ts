@@ -9,6 +9,10 @@ export type Cue = { kind: string; name: string; text: string };
 
 const CUE_TYPED_RE = /^[ \t\u00a0]*(sfx|music)[ \t\u00a0]*:$/i;
 
+export function isTypedCuePrefix(text: string): boolean {
+  return CUE_TYPED_RE.test(text);
+}
+
 export function cueLines(cell: CellInput): CueLine[] {
   const runs = normalizeCell(cell);
   const lines: CueLine[] = [{ from: 0, to: 0, cue: false }];
@@ -91,17 +95,22 @@ export function withoutCues(cell: CellInput): Run[] {
   return out;
 }
 
-export function cueShortcut(cell: CellInput, pos: number): Run[] | null {
+export function cueShortcutRange(cell: CellInput, pos: number): TextSpan | null {
   pos = clamp(cell, pos);
   const p = projection(cell);
   if (p.charAt(pos - 1) !== ":") return null;
   const from = p.lastIndexOf("\n", pos - 1) + 1;
-  if (!CUE_TYPED_RE.test(p.slice(from, pos))) return null;
+  if (!isTypedCuePrefix(p.slice(from, pos))) return null;
   let to = p.indexOf("\n", pos);
   if (to === -1) to = p.length;
   const line = cueLines(cell).filter(function (l) { return l.from === from; })[0];
   if (line && line.cue) return null;
-  return setMark(cell, from, to, "cue", true);
+  return { from, to };
+}
+
+export function cueShortcut(cell: CellInput, pos: number): Run[] | null {
+  const range = cueShortcutRange(cell, pos);
+  return range ? setMark(cell, range.from, range.to, "cue", true) : null;
 }
 
 export function importCues(cell: CellInput): Run[] {

@@ -1,6 +1,7 @@
 import * as Y from "yjs";
+import { isTypedCuePrefix } from "../../../core/text/cues.ts";
 import { firstReplacementMarks, replacementInsert } from "../../../core/text/edits.ts";
-import { isCueRun, OBJ } from "../../../core/text/runs.ts";
+import { CUE_LINE_RE, isCueRun, OBJ, projection } from "../../../core/text/runs.ts";
 import type { Marks, Run } from "../../../core/text/runs.ts";
 import { copyNativeCompoundInput, copyNativeDenseList } from "./compound-input.ts";
 import { nativeCellView, nativeLeftAt, nativeStoredOffset, nativeTextAllowed, prepareNativeRuns, writeNativeRuns } from "./inline.ts";
@@ -91,7 +92,7 @@ type ParsedTextSegments = Map<string, { text: Y.Text; spans: NonNullable<ReturnT
 const WRITTEN = Object.freeze({ kind: "written" } as const);
 const UNCHANGED = Object.freeze({ kind: "unchanged" } as const);
 
-export type NativeTextPlacement = readonly [number | null, number | null];
+export type NativeTextPlacement = readonly [number | null, number | null, cue?: true];
 
 export interface NativeLivePiece {
   readonly text: Y.Text;
@@ -548,6 +549,24 @@ function removedTypingRange(script: NativeScript, range: NativeRangeData, source
   return { ...piece, pieces: [piece] };
 }
 
+function dormantCuePieces(script: NativeScript, beat: string, live: NativeLiveRange, insertion: readonly NativePreparedRun[], cueAt: number) {
+  const head = script.reader.rowMembers(beat)[0]?.id, last = live.pieces.at(-1);
+  const row = head && script.reader.row(head);
+  if (!row || !last) return null;
+  const from = script.reader.narrationOffset(row.id, { type: live.text, index: live.from, assoc: 0 });
+  const until = script.reader.narrationOffset(row.id, { type: last.text, index: last.until, assoc: -1 });
+  if (from === null || until === null) return null;
+  const text = projection(row.narration), start = from === 0 ? 0 : text.lastIndexOf("\n", from - 1) + 1;
+  const end = text.indexOf("\n", from), stop = end === -1 ? text.length : end;
+  if (CUE_LINE_RE.test(text.slice(start, stop))) return null;
+  const inserted = insertion.map(run => typeof run.insert === "string" ? run.insert : OBJ).join("");
+  if (inserted.includes("\n") || !isTypedCuePrefix(text.slice(start, from) + inserted.slice(0, cueAt))) return null;
+  const pieces = script.reader.narrationPieces(row.id, start, until > stop ? from : stop)
+    .filter(piece => piece.items.some(item => item.attributes?.cue === true));
+  const markedInsertion = insertion.some(run => run.marks.cue);
+  return { pieces, markedInsertion };
+}
+
 // why: a command called while another transaction is open refuses, since that transaction's changes are not yet
 // observed
 export function replaceNativeText(script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp,
@@ -567,9 +586,15 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
     if (!prepared.length && !live.pieces.some(piece => piece.until > piece.from)) return UNCHANGED;
     const updateStamp = encoded && script.reader.beatBoundary(checked.target.beat) && !sameStamp(script.roots.edited.get(checked.target.beat), encoded);
     beforeWrite?.(checked.target, live);
-    const end = writeNativeRuns(script.doc, live.text, live.from, prepared, nativeLeftAt(nativeCellView(live.items), live.from - live.start));
+    const view = nativeCellView(live.items);
+    const dormant = points?.[2] && points[1] !== null && !stray && checked.target.cell === "narration"
+      ? dormantCuePieces(script, checked.target.beat, live, prepared, points[1]) : null;
+    // why: a restored cue needs its own undo step even if the invalid line still held its old mark
+    if (dormant) for (const piece of dormant.pieces) piece.text.format(piece.from, piece.until - piece.from, { cue: null });
+    const end = writeNativeRuns(script.doc, live.text, live.from, prepared, nativeLeftAt(view, live.from - live.start));
     const added = end - live.from;
     deleteNativePieces(live, added);
+    if (dormant?.markedInsertion) live.text.format(live.from, added, { cue: null });
     if (encoded && updateStamp) script.roots.edited.set(checked.target.beat, encoded);
     if (afterWrite) {
       const anchor = undoEndpoint(checked.target, live.text, end, stray ? -1 : 0);
@@ -587,7 +612,8 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
 function capturePlacement(placement: NativeTextPlacement | undefined): NativeTextPlacement | null {
   if (!placement) return null;
   const first = placement[0], last = placement[1];
-  return [wholeNumber(first) ? first : null, wholeNumber(last) ? last : null];
+  const indices = [wholeNumber(first) ? first : null, wholeNumber(last) ? last : null] as const;
+  return placement[2] === true ? [...indices, true] : indices;
 }
 
 export function typeNativeText(script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp,
