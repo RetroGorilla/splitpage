@@ -1,0 +1,32 @@
+open
+wait document.querySelector('#rows .row')
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.keyed='<span class="broll-key" data-broll-id="s1" contenteditable="false">B-roll:</span> Close up<br><span class="broll-key" data-broll-id="s2" contenteditable="false">B-roll:</span> Wide shot';F.openFile(new File([JSON.stringify({schema:2,title:'Shared Split spaces',rows:[{id:'r1',visualText:'Camera',audioText:'sfx:'},{id:'r2',visualText:keyed}],brollShots:[{id:'s1',name:'Close up'},{id:'s2',name:'Wide shot'}]})],'split-spaces.splitpage'))
+wait F.state().title === 'Shared Split spaces'
+eval window.cell=(id,field='visualText')=>document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="'+field+'"]');window.splitWhiteSpace=()=>['visualText','audioText'].map(field=>getComputedStyle(cell('r1',field)).whiteSpace).join();window.standaloneWhiteSpace=splitWhiteSpace();true
+eval S.enter()
+wait S.read().peer !== null
+eval window.agree=(id,html,field='visualText')=>[S.read().app,S.read().peer].every(doc=>doc.rows.find(r=>r.id===id)[field]===html)&&cell(id,field).innerHTML===html;window.clean=()=>!document.querySelector('#toast-host .toast.warn');window.seed=cell('r2').innerHTML;true
+expect cell('r2').querySelectorAll('.broll-key[contenteditable="false"]').length === 2
+caret #rows .visual-cell .cell-editable[data-id=r1]
+key Space
+expect agree('r1','Camera ')
+press move
+key Space
+press left
+expect agree('r1','Camera move left') && clean()
+caret #rows .visual-cell .cell-editable[data-id=r2]
+key Space
+expect agree('r2',seed+' ')
+press with
+key Space
+press lights
+expect agree('r2',seed+' with lights') && clean()
+expect cell('r2').querySelectorAll('.broll-key[contenteditable="false"]').length === 2
+caret #rows .audio-cell .cell-editable[data-id=r1]
+key Space
+wait agree('r1','sfx: ','audioText')
+press click
+wait agree('r1','sfx: click','audioText')
+expect clean()
+eval S.leave()
+expect S.read().peer === null && splitWhiteSpace() === standaloneWhiteSpace

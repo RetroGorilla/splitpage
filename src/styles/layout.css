@@ -193,6 +193,8 @@ body.is-scene-selecting #rows, body.is-scene-selecting #rows * {
 }
 #rows .mini-toolbar button.tb-tag { width: auto; gap: var(--space-2); padding: 0 var(--space-6) 0 var(--space-8); }
 #rows .cell-editable { min-height: calc(28px * var(--script-scale)); }
+/* why: collapsed spaces make Chromium target a position before the shared caret. */
+#rows[data-native-shared-input] .cell-editable:is([data-field="visualText"], [data-field="audioText"]) { white-space: pre-wrap; }
 #rows .cell-editable:hover, #rows .cell-editable:focus { background: transparent; box-shadow: none; }
 @media (hover: hover) {
   #rows .cell-editable:hover { background: var(--field-hint); }
