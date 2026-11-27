@@ -70,10 +70,10 @@ type Claims = ReturnType<typeof nativeBrollClaims>;
 export interface NativeBrollCellLayout {
   readonly objects: readonly StoredEmbed[];
   readonly embeds: readonly StoredEmbed[];
-  fold?: { readonly claims: Claims; readonly hidden: NativeBrollHidden };
+  claimFold?: { readonly claims: Claims; readonly hidden: NativeBrollHidden };
 }
 
-function fold(embeds: readonly StoredEmbed[], claims: Claims): NativeBrollHidden {
+function hiddenByClaims(embeds: readonly StoredEmbed[], claims: Claims): NativeBrollHidden {
   const winners = new Map<string, { id: string; priority: number; embed: StoredEmbed }>();
   const hidden = new Set<StoredEmbed>(), gaps = new Set<string>();
   for (const embed of embeds) {
@@ -111,6 +111,6 @@ export function readNativeBrollLayout(items: readonly NativeDeltaItem[], previou
 
 export function projectNativeBrollCell(items: readonly NativeDeltaItem[], claims: Claims, layout: NativeBrollCellLayout): void {
   if (layout.embeds.length < 2) return;
-  if (layout.fold?.claims !== claims) layout.fold = { claims, hidden: fold(layout.embeds, claims) };
-  if (layout.fold.hidden.embeds.size) setNativeBrollHidden(items, layout.fold.hidden);
+  if (layout.claimFold?.claims !== claims) layout.claimFold = { claims, hidden: hiddenByClaims(layout.embeds, claims) };
+  if (layout.claimFold.hidden.embeds.size) setNativeBrollHidden(items, layout.claimFold.hidden);
 }
