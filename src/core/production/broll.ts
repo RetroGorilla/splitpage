@@ -4,6 +4,7 @@ import {
   BROLL_PROP_NAME_MAX,
   BROLL_STATUS_IDS,
   BROLL_TEXT_MAX,
+  brollCloseSource,
   brollPropKey,
   brollStatusId,
   normalizeBrollProps
@@ -174,6 +175,12 @@ function brollLineMarker(items: BrollLineItem[]): BrollMarker | null {
     if (it.atom && carriesOnlyComments(it.marks)) return { id: it.atom.id || "", key: it, rest: items.slice(i + 1) };
     break;
   }
+  const restored = items.findIndex(item => item.atom && brollCloseSource(item.atom.id));
+  if (restored > 0) {
+    const key = items[restored] as BrollLineItem;
+    const prefix = brollLineText(items.slice(0, restored));
+    if (BROLL_MARKER_RE.exec(prefix)?.[0] === prefix) return { id: key.atom?.id ?? "", key, rest: items.slice(restored + 1) };
+  }
   const m = BROLL_MARKER_RE.exec(brollLineText(items));
   return m ? { id: "", key: null, rest: null, strip: m[0].length } : null;
 }
@@ -195,6 +202,13 @@ export function brollInCell(cell: readonly Run[]): BrollItem[] {
     if (open) open.desc.push(brollLineText(line.items));
   });
   return out.map(function (item) {
+    if (!item.name && brollCloseSource(item.id)) {
+      const named = item.desc.findIndex(line => !!line.trim());
+      if (named !== -1) {
+        item.name = cappedName(item.desc[named] ?? "", BROLL_NAME_MAX);
+        item.desc.splice(named, 1);
+      }
+    }
     return { id: item.id, name: item.name, desc: cappedLongText(item.desc.join("\n").replace(/\s+$/, ""), BROLL_TEXT_MAX) };
   });
 }
@@ -427,10 +441,12 @@ export function brollEntries(
   readers: ProductionReaders,
   ids: IdSource,
   plainTextOf: FieldText,
-  numbering: DocumentNumbering = deriveDocumentNumbering(state)
+  numbering: DocumentNumbering = deriveDocumentNumbering(state),
+  keepLine?: (id: string) => boolean
 ): BrollEntry[] {
   const shots = state.brollShots;
-  const live = collectBrollFromRows(state.rows, readers);
+  const lines = collectBrollFromRows(state.rows, readers);
+  const live = keepLine ? lines.filter(({ id }) => keepLine(id)) : lines;
   const claimed: Record<string, boolean> = Object.create(null);
   const held = brollHeldIds(live);
   const byId = shotIndexById(shots);
@@ -475,12 +491,15 @@ export function planBrollRecordsInState(
   plainTextOf: FieldText,
   unkeyedIn: UnkeyedScope,
   lines?: LineShotIds,
-  drawLineId?: (key: string, shared: string | undefined) => string
+  drawLineId?: (key: string, shared: string | undefined) => string,
+  keepLine?: (id: string) => boolean
 ): BrollPlan {
   const shots = state.brollShots;
-  const live = collectBrollFromRows(state.rows, readers);
+  const found = collectBrollFromRows(state.rows, readers);
+  const live = keepLine ? found.filter(({ id }) => keepLine(id)) : found;
   const claimed: Record<string, boolean> = Object.create(null);
-  const held = brollHeldIds(live);
+  const held = brollHeldIds(found);
+  if (keepLine) for (const shot of shots) if (!keepLine(shot.id)) held[shot.id] = true;
   const byId = shotIndexById(shots);
   const plan: BrollPlan = { create: [], rename: [] };
   const seen: Record<string, number> = Object.create(null);

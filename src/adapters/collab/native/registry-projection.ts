@@ -1,9 +1,10 @@
 import * as Y from "yjs";
-import { BROLL_NAME_MAX, BROLL_PROP_NAME_MAX, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
+import { BROLL_EDIT_FIELDS, BROLL_NAME_MAX, BROLL_PROP_NAME_MAX, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
+import type { BrollUnmergedEdit } from "../../../core/document/broll.ts";
 import { noFreeze } from "../../../core/document/freeze.ts";
 import { ensureTagIds, isTagId, normalizeTagName, registryKey, TAG_STATUS_IDS, unmergedTagEdits } from "../../../core/document/tags.ts";
 import { hasLoneSurrogate, plainText, settledNames } from "../../../core/document/text-policy.ts";
-import type { DocumentShape, DocumentTag, UnmergedTagEdit } from "../../../core/document/validated.ts";
+import type { DocumentShape, DocumentShot, DocumentTag, UnmergedTagEdit } from "../../../core/document/validated.ts";
 import { applyBrollRecords, brollInCell, planBrollRecordsInState } from "../../../core/production/broll.ts";
 import type { FieldHtml } from "../../../core/production/ports.ts";
 import { createProductionReaders } from "../../../core/production/readers.ts";
@@ -15,6 +16,7 @@ import type { Run } from "../../../core/text/runs.ts";
 import type { NativeRoots } from "./roots.ts";
 import { NATIVE_TAG_FIELDS, nativeTagCounter, nativeTagFields, readNativeTagAlternatives } from "./tag-fields.ts";
 import { sameNativeValue } from "./values.ts";
+import { nativeBrollClaims } from "./broll-claims.ts";
 
 interface RegistryCellRow {
   readonly id: string;
@@ -32,19 +34,26 @@ export interface NativeRegistryRowInputs {
 
 type KeyedTag = DocumentTag & { id: string };
 
+function recordIdOrder(left: { readonly id: string }, right: { readonly id: string }): number {
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
+function addRegistryMember<T>(groups: Map<string, T | T[]>, key: string, record: T): void {
+  const members = groups.get(key);
+  if (Array.isArray(members)) members.push(record);
+  else groups.set(key, members ? [members, record] : record);
+}
+
 function foldTags(tags: DocumentShape["productionTags"], roots: NativeRoots) {
   const byName = new Map<string, KeyedTag | KeyedTag[]>(), groups = new Map<string, readonly string[]>();
   for (const tag of tags) {
     if (!tag?.name || !isTagId(tag.id)) continue;
-    const key = registryKey(tag.cat, tag.name), members = byName.get(key);
-    const member = tag as KeyedTag;
-    if (Array.isArray(members)) members.push(member);
-    else byName.set(key, members ? [members, member] : member);
+    addRegistryMember(byName, registryKey(tag.cat, tag.name), tag as KeyedTag);
   }
   const folded = new Map<string, DocumentTag>();
   for (const members of byName.values()) {
     if (!Array.isArray(members)) continue;
-    members.sort((a, b) => a.id < b.id ? -1 : 1);
+    members.sort(recordIdOrder);
     const first = members[0];
     if (!first) continue;
     const ids = Object.freeze(members.map(tag => tag.id));
@@ -98,7 +107,47 @@ function foldTags(tags: DocumentShape["productionTags"], roots: NativeRoots) {
   return { tags: projected, groups };
 }
 
-function production(rows: readonly RegistryCellRow[]) {
+function shotEditValue(shot: DocumentShot, field: BrollUnmergedEdit["field"], people: ReadonlyMap<string, string>): string {
+  if (field === "owner") return people.get(shot.owner ?? "") ?? "Unassigned";
+  if (field === "status") return shot.status === "shot" ? "Filmed" : "To film";
+  if (field === "reshoot") return shot.reshoot === true ? "Flagged" : "Unflagged";
+  if (field === "props") return shot.props?.map(prop => prop?.name).filter(Boolean).join(", ") || "None";
+  const value = shot[field];
+  return typeof value === "string" && value ? value : "Blank";
+}
+
+const NO_SHOT_ALTERNATIVES: ReadonlyMap<string, readonly BrollUnmergedEdit[]> = new Map();
+
+export function foldNativeBrollRecords(shots: DocumentShot[], people: DocumentShape["people"], claims: ReturnType<typeof nativeBrollClaims>) {
+  const bySource = new Map<string, DocumentShot | DocumentShot[]>();
+  for (const shot of shots) {
+    const claim = claims.get(shot.id);
+    if (claim?.state === "named") addRegistryMember(bySource, claim.source, shot);
+  }
+  const alternatives = new Map<string, readonly BrollUnmergedEdit[]>(), hidden = new Set<string>();
+  let names: ReadonlyMap<string, string> | undefined;
+  for (const members of bySource.values()) {
+    if (!Array.isArray(members)) continue;
+    names ??= new Map(people.map(person => [person.id, person.name]));
+    const [first, ...rest] = members.toSorted(recordIdOrder);
+    if (!first) continue;
+    const edits: BrollUnmergedEdit[] = [];
+    for (const field of Object.keys(BROLL_EDIT_FIELDS) as BrollUnmergedEdit["field"][]) {
+      const seen = [first[field]];
+      for (const member of rest) {
+        const value = member[field];
+        if (seen.some(previous => sameNativeValue(previous, value))) continue;
+        seen.push(value);
+        edits.push({ field, value: shotEditValue(member, field, names) });
+      }
+    }
+    if (edits.length) alternatives.set(first.id, Object.freeze(edits));
+    for (const member of rest) hidden.add(member.id);
+  }
+  return { hidden, alternatives: alternatives.size ? alternatives : NO_SHOT_ALTERNATIVES };
+}
+
+export function nativeRegistryProduction(rows: readonly RegistryCellRow[]) {
   const cells = new Map<string, readonly Run[]>();
   for (const row of rows) {
     cells.set(row.audioText, row.narration);
@@ -117,9 +166,10 @@ function tagsInCellChanged(previousHtml: string, html: string, previous: readonl
   return !sameNativeValue(names(previousHtml), names(html)) || !sameNativeValue(tagIds(previous), tagIds(runs));
 }
 
-export function nativeRegistryRowChanged(inputs: NativeRegistryRowInputs, previous: RegistryCellRow, row: RegistryCellRow): boolean {
+export function nativeRegistryRowChanged(inputs: NativeRegistryRowInputs, previous: RegistryCellRow, row: RegistryCellRow,
+  claims: ReturnType<typeof nativeBrollClaims>): boolean {
   if (inputs.shots) {
-    if (previous.visualText !== row.visualText && (brollInCell(previous.visual).length || brollInCell(row.visual).length)) return true;
+    if (previous.visualText !== row.visualText && [previous.visual, row.visual].some(cell => brollInCell(cell).some(line => !claims.has(line.id)))) return true;
     if (previous.audioText !== row.audioText && row.visual.some(run => run.atom === "broll" && inputs.seededShots.has(run.id))) return true;
   }
   return inputs.tags && (tagsInCellChanged(previous.audioText, row.audioText, previous.narration, row.narration)
@@ -127,13 +177,14 @@ export function nativeRegistryRowChanged(inputs: NativeRegistryRowInputs, previo
 }
 
 export function nativeTagNamesInRows(rows: readonly RegistryCellRow[]): ReadonlySet<string> {
-  const { readers } = production(rows);
+  const { readers } = nativeRegistryProduction(rows);
   return new Set(missingRegistryTags(rows, [], readers).map(tag => registryKey(tag.cat, tag.name)));
 }
 
-export function nativeShotLinePlan(document: DocumentShape, rows: readonly RegistryCellRow[]) {
-  const { readers, plainTextOf } = production(rows);
-  return planBrollRecordsInState(document, readers, { id: () => "", docId: () => document.docId }, plainTextOf, () => false);
+export function nativeShotLinePlan(document: DocumentShape, rows: readonly RegistryCellRow[], claims?: ReturnType<typeof nativeBrollClaims>) {
+  const { readers, plainTextOf } = nativeRegistryProduction(rows);
+  return planBrollRecordsInState(document, readers, { id: () => "", docId: () => document.docId }, plainTextOf, () => false,
+    undefined, undefined, claims && (id => !claims.has(id)));
 }
 
 function hasRemoved(root: Y.Map<Y.Map<unknown>>): boolean {
@@ -203,20 +254,23 @@ export function projectNativeTags(stored: DocumentShape["productionTags"], roots
 
 export function projectNativeRegistries(document: DocumentShape, roots: NativeRoots, rows: () => readonly RegistryCellRow[],
   projectTags: (stored: DocumentShape["productionTags"], people: ReadonlySet<string>) => ReturnType<typeof projectNativeTags>
-    = (stored, people) => projectNativeTags(stored, roots, people)) {
-  const shotsRemoved = hasRemoved(roots.shots) || document.brollShots.some(shot => !shot.name);
+    = (stored, people) => projectNativeTags(stored, roots, people), claims = nativeBrollClaims(roots.shots),
+  projectShots = foldNativeBrollRecords) {
+  const shotsRemoved = [...roots.shots].some(([id, record]) => !claims.has(id) && record instanceof Y.Map && record.get("removed") === true) ||
+    document.brollShots.some(shot => !claims.has(shot.id) && !shot.name);
   const seededShots = new Set<string>();
   document.people = document.people.filter(person => !!person.name);
-  document.brollShots = document.brollShots.flatMap(shot => shot.name ? [{ ...newBrollShot(shot.id, {}), ...shot }] : []);
+  const normalized = document.brollShots.flatMap(shot => shot.name ? [{ ...newBrollShot(shot.id, {}), ...shot }] : []);
   if (hasRemoved(roots.people)) document.people = repairNames(document.people, PERSON_NAME_MAX, normalizeTagName);
   const people = new Set(document.people.map(person => person.id));
+  const { hidden, alternatives } = projectShots(normalized, document.people, claims);
+  document.brollShots = shotsRemoved ? repairNames(normalized, BROLL_NAME_MAX, normalizeTagName) : normalized;
   const { stored, tags, groups, tagsRemoved, propLookup, published } = projectTags(document.productionTags, people);
   let derived: DocumentTag[] = [];
-  if (shotsRemoved) document.brollShots = repairNames(document.brollShots, BROLL_NAME_MAX, normalizeTagName);
   if (tagsRemoved || shotsRemoved) {
     const visible = rows();
     if (tagsRemoved) {
-      const { readers } = production(visible);
+      const { readers } = nativeRegistryProduction(visible);
       derived = missingRegistryTags(document.rows, stored, readers);
       if (derived.length) {
         ensureTagIds([...stored, ...derived]);
@@ -225,7 +279,7 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
     }
     // why: a surviving keyed line seeds its default shot on core reload; unkeyed lines have their own command path
     if (shotsRemoved) {
-      const plan = nativeShotLinePlan(document, visible);
+      const plan = nativeShotLinePlan(document, visible, claims);
       for (const shot of plan.create) seededShots.add(shot.id);
       applyBrollRecords(document.brollShots, plan);
     }
@@ -244,6 +298,7 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
       shot.props = normalizeBrollProps(props, relevantTags(props));
     }
   }
+  if (hidden.size) document.brollShots = document.brollShots.filter(shot => !hidden.has(shot.id));
   document.productionTags = derived.length ? [...published, ...derived] : published;
-  return { inputs: { tags: tagsRemoved, shots: shotsRemoved, seededShots }, groups };
+  return { inputs: { tags: tagsRemoved, shots: shotsRemoved, seededShots }, groups, shotAlternatives: alternatives };
 }

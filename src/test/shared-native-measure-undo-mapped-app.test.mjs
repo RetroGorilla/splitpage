@@ -10,12 +10,17 @@ import { sanitizeHtml, scriptCellOf } from "../bootstrap/richtext.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
+import { nativeCellView } from "../adapters/collab/native/inline.ts";
 import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
 import { posToDom } from "../features/common/cell-dom.ts";
-import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession } from "../bootstrap/wiring/shared-session.ts";
+import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession, nativeEditorRecords } from "../bootstrap/wiring/shared-session.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
 import { appActions } from "../bootstrap/wiring/ports/actions.ts";
+import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
+import { openBrollPanel } from "../features/broll/panel.ts";
+import { buildSplitpageCopy } from "../adapters/formats/project-file.ts";
+import { captureExportDocument } from "../bootstrap/wiring/export-capture.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { nativeEntrySwitchFixture as entrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 import { render, renderRow } from "../features/rows/render.ts";
@@ -629,7 +634,249 @@ for (const afterSwitch of [false, true]) {
   });
 }
 
-for (const view of ["Split", "Writer"]) {
+test("Split: leaving Visual keys each typed B-roll line and shares the shots in one undo step", async t => {
+  await enter(t, [["r1", "Hello", "Desk<br>Desk"], ["r2", "World"]]);
+  const target = cell("r1", "visualText");
+  target.focus();
+  setCellSelection(target, 5);
+  assert.equal(input(target, "insertText", "B-roll: "), true);
+  window.dispatchEvent(new window.Event("pagehide"));
+  setCellSelection(target, 0);
+  for (const letter of "B-roll: ") assert.equal(input(target, "insertText", letter), true);
+  cell("r2").focus();
+  await new Promise(setImmediate);
+  const { app, peer } = hook.read();
+  assert.deepEqual(app, peer);
+  assert.deepEqual(app.brollShots.map(shot => shot.name), ["Desk", "Desk"]);
+  assert.equal(new Set(app.brollShots.map(shot => shot.id)).size, 2);
+  assert.equal(cell("r1", "visualText").querySelectorAll('.broll-key[contenteditable="false"]').length, 2);
+  written(hook.nativePeer.step("undo"));
+  await Promise.resolve();
+  const undone = hook.read();
+  assert.deepEqual(undone.app, undone.peer);
+  assert.equal(undone.app.rows[0].visualText, "B-roll: Desk<br>B-roll: Desk");
+  assert.deepEqual(undone.app.brollShots, []);
+  written(hook.nativePeer.step("redo"));
+  await Promise.resolve();
+  assert.deepEqual(hook.read().app, hook.read().peer);
+  assert.equal(hook.read().app.rows[0].visualText, app.rows[0].visualText);
+  assert.deepEqual(hook.read().app.brollShots, app.brollShots);
+});
+
+async function holdTwoBrollCloses(t, beforeClose = () => {}) {
+  await enter(t, [["r1", "Hello", "Desk"], ["r2", "World"]]);
+  const target = cell("r1", "visualText"), peer = hook.nativePeer;
+  target.focus();
+  setCellSelection(target, 0);
+  assert.equal(input(target, "insertText", "B-roll: "), true);
+  window.dispatchEvent(new window.Event("pagehide"));
+  await new Promise(setImmediate);
+  peer.hold("updates");
+  beforeClose(peer);
+  written(peer.closeBroll("r1"));
+  const remote = hook.read().peer;
+  cell("r2").focus();
+  await new Promise(setImmediate);
+  return { peer, remote };
+}
+
+test("an offline list shot and concurrent Visual closes keep the list shot and one keyed script shot", async t => {
+  const { peer } = await holdTwoBrollCloses(t, p => written(p.registry({
+    kind: "create", collection: "shots", fields: { name: "Desk" }
+  })));
+  peer.release("reverse");
+  await new Promise(setImmediate);
+  const { app, peer: replica } = hook.read();
+  assert.deepEqual(app, replica);
+  assert.deepEqual(app.brollShots.map(({ origin }) => origin).sort(), ["list", "script"]);
+  assert.equal(cell("r1", "visualText").querySelectorAll(".broll-key").length, 1);
+});
+
+for (const id of ["S1", "bs-visual-1-2-3-4-0"]) test(`entering sharing preserves repeated imported B-roll labels with ${id}`, async t => {
+  const key = `<span class="broll-key" data-broll-id="${id}" contenteditable="false">B-roll:</span>`;
+  const visualText = `${key} Desk<br>${key} Wide`, rows = [["r1", "Hello", visualText]];
+  const migrated = docOf(rows);
+  const doc = { ...migrated, rows: [{ ...migrated.rows[0], visualText }],
+    brollShots: [{ ...migrated.brollShots[0], id }] };
+  const seed = openNativeSession({ kind: "document", document: doc, conversion: {
+    cells: scriptCellOf, creation: doc.docId, at: "2026-11-20", by: "Writer"
+  } }, { actor: "Writer", sanitize: sanitizeHtml });
+  t.after(seed.close);
+  await enter(t, rows, seed.encodeState());
+  assert.equal(cell("r1", "visualText").querySelectorAll(`.broll-key[data-broll-id="${id}"]`).length, 2);
+  assert.deepEqual(hook.read().app, hook.read().peer);
+  assert.equal(hook.read().app.rows[0].visualText, visualText);
+});
+
+test("Split: naming a previously empty B-roll key on the following line makes an editable shared shot", async t => {
+  await enter(t, [["r1", "Hello", ""], ["r2", "World"]]);
+  const visual = () => cell("r1", "visualText");
+  visual().focus();
+  setCellSelection(visual(), 0);
+  assert.equal(input(visual(), "insertText", "B-roll: "), true);
+  cell("r2").focus();
+  await new Promise(setImmediate);
+  assert.deepEqual(hook.read().app.brollShots, []);
+  const id = visual().querySelector(".broll-key").dataset.brollId;
+  visual().focus();
+  setCellSelection(visual(), 2);
+  assert.equal(input(visual(), "insertLineBreak"), true);
+  assert.equal(input(visual(), "insertText", "Desk"), true);
+  cell("r2").focus();
+  await new Promise(setImmediate);
+  assert.deepEqual(hook.read().app.brollShots.map(shot => [shot.id, shot.name]), [[id, "Desk"]]);
+  written(hook.nativePeer.registry({ kind: "set", collection: "shots", ids: [id], fields: { notes: "Wide angle" } }));
+  await new Promise(setImmediate);
+  assert.deepEqual(hook.read().app, hook.read().peer);
+  assert.equal(JSON.parse(buildSplitpageCopy(captureExportDocument())).brollShots[0].notes, "Wide angle");
+});
+
+test("ordinary edits beside a B-roll chip do not rescan the rendered cell for folds", () => {
+  const label = { insert: { k: "bs-visual-1-2-3-4-0", label: "B-roll:" } };
+  for (const text of [" Desk", " Desks", " Desk"]) {
+    const delta = [label, { insert: text }];
+    delta.map = function (callback) {
+      const views = Array.prototype.map.call(this, callback);
+      views.map = () => assert.fail("an unchanged marker must not trigger a second full-cell pass");
+      return views;
+    };
+    assert.equal(nativeCellView(delta).runs[1].text, text);
+  }
+});
+
+for (const [suffix, marker] of [["Desk", "B-roll:"], ["", "B-roll: "]]) {
+  test(`Split: closing ${suffix ? "a joined marker and name" : "a nameless marker"} matches standalone`, async t => {
+    await enter(t, [["r1", "Hello", suffix], ["r2", "World"]]);
+    const target = cell("r1", "visualText");
+    target.focus();
+    setCellSelection(target, 0);
+    assert.equal(input(target, "insertText", marker), true);
+    cell("r2").focus();
+    await new Promise(setImmediate);
+    assert.equal(cell("r1", "visualText").querySelectorAll(".broll-key").length, 1);
+    assert.match(hook.read().app.rows[0].visualText, new RegExp(`</span> ${suffix}$`));
+    assert.deepEqual(hook.read().app.brollShots.map(({ name }) => name), suffix ? [suffix] : []);
+    assert.deepEqual(hook.read().app, hook.read().peer);
+  });
+}
+
+for (const note of ["Use the wide angle", "None"]) {
+  test(`folded shot displays the ${note === "None" ? "literal None" : "alternate"} note and saves the ordinary shot shape`, async t => {
+    const { peer, remote } = await holdTwoBrollCloses(t);
+    written(peer.registry({ kind: "set", collection: "shots", ids: [remote.brollShots[0].id], fields: { notes: note } }));
+    peer.release("duplicate");
+    await new Promise(setImmediate);
+    openBrollPanel();
+    document.querySelector('#broll-panel [data-action="broll-expand"]').click();
+    assert.match(document.getElementById("broll-panel").textContent, /Unmerged edit · Note/);
+    const saved = JSON.parse(buildSplitpageCopy(captureExportDocument())).brollShots;
+    const ordinary = docOf([["r1", "Hello", "B-roll: Desk"]]).brollShots[0];
+    assert.equal(saved.length, 1);
+    assert.deepEqual(Object.keys(saved[0]).sort(), Object.keys(ordinary).sort());
+    const primary = hook.read().app.brollShots[0];
+    assert.deepEqual(nativeEditorRecords().registry.shotUnmergedEdits(primary.id), [{ field: "notes", value: primary.notes ? "Blank" : note }]);
+  });
+}
+
+for (const order of ["forward", "reverse", "duplicate"]) {
+  test(`Split: concurrent B-roll closes fold the same marker on both copies (${order})`, async t => {
+    await enter(t, [["r1", "Hello", "Desk"], ["r2", "World"]]);
+    const target = cell("r1", "visualText"), peer = hook.nativePeer;
+    target.focus();
+    setCellSelection(target, 0);
+    assert.equal(input(target, "insertText", "B-roll: "), true);
+    window.dispatchEvent(new window.Event("pagehide"));
+    await new Promise(setImmediate);
+    peer.hold("updates");
+    written(peer.closeBroll("r1"));
+    const peerId = hook.read().peer.brollShots[0].id;
+    written(peer.registry({ kind: "set", collection: "shots", ids: [peerId], fields: { notes: "Use the wide angle" } }));
+    cell("r2").focus();
+    await new Promise(setImmediate);
+    const appId = hook.read().app.brollShots[0].id;
+    assert.notEqual(appId, peerId);
+    peer.release(order);
+    await new Promise(setImmediate);
+    const agreedShot = (afterUndo = false) => {
+      const { app, peer: remote } = hook.read();
+      assert.deepEqual(app, remote);
+      assert.deepEqual(app.brollShots.map(shot => shot.name), ["Desk"]);
+      const entries = currentBrollRecords().brollEntries();
+      assert.equal(entries.length, 1);
+      assert.equal(entries[0].id, app.brollShots[0].id);
+      if (afterUndo) assert.equal(cell("r1", "visualText").textContent.replace(/\u200b/g, ""), "B-roll:B-roll: Desk");
+      else assert.equal(entries[0].name, "Desk");
+      assert.equal(cell("r1", "visualText").querySelectorAll(".broll-key").length, 1);
+      return app.brollShots[0];
+    };
+    const shot = agreedShot();
+    assert.equal(shot.id, [appId, peerId].sort()[0]);
+    assert.deepEqual(nativeEditorRecords().registry.shotUnmergedEdits(shot.id), [{ field: "notes", value: shot.id === peerId ? "Blank" : "Use the wide angle" }]);
+    openBrollPanel();
+    const card = document.querySelector('#broll-panel [data-action="broll-expand"]');
+    assert.ok(card);
+    card.click();
+    assert.match(document.getElementById("broll-panel").textContent, /Unmerged edit · Note/);
+    written(peer.registry({ kind: "set", collection: "shots", ids: [peerId], fields: { notes: "Keep this angle" } }));
+    await new Promise(setImmediate);
+    assert.equal(agreedShot().notes, "Keep this angle");
+    assert.deepEqual(nativeEditorRecords().registry.shotUnmergedEdits(agreedShot().id), []);
+    written(peer.undoPeer());
+    await new Promise(setImmediate);
+    assert.deepEqual(agreedShot(), shot);
+    written(peer.step("undo"));
+    await new Promise(setImmediate);
+    assert.equal(agreedShot(true).id, peerId);
+    written(peer.step("redo"));
+    await new Promise(setImmediate);
+    assert.equal(agreedShot().id, shot.id);
+    written(peer.undoPeer());
+    written(peer.undoPeer());
+    await new Promise(setImmediate);
+    assert.equal(agreedShot(true).id, appId);
+    written(peer.redoPeer());
+    written(peer.redoPeer());
+    await new Promise(setImmediate);
+    assert.deepEqual(agreedShot(), shot);
+  });
+}
+
+for (const remove of [false, true]) {
+  test(`Split: B-roll close racing a peer ${remove ? "beat deletion" : "line edit"}`, async t => {
+    await enter(t, [["r1", "Hello", "Desk"], ["r2", "World"]]);
+    const target = cell("r1", "visualText"), peer = hook.nativePeer;
+    target.focus();
+    setCellSelection(target, 0);
+    assert.equal(input(target, "insertText", "B-roll: "), true);
+    window.dispatchEvent(new window.Event("pagehide"));
+    await new Promise(setImmediate);
+    peer.hold("updates");
+    if (remove) written(peer.removeBeat("r1"));
+    else written(peer.type("r1", 12, " lamp", "visualText"));
+    cell("r2").focus();
+    await new Promise(setImmediate);
+    peer.release("reverse");
+    await new Promise(setImmediate);
+    const { app, peer: remote } = hook.read();
+    assert.deepEqual(app, remote);
+    if (remove) {
+      assert.ok(!app.rows.some(row => row.id === "r1"));
+      written(peer.undoPeer());
+      await new Promise(setImmediate);
+      assert.deepEqual(hook.read().app, hook.read().peer);
+      assert.match(hook.read().app.rows[0].visualText, /broll-key.*Desk/);
+    } else {
+      assert.match(app.rows[0].visualText, /broll-key.*Desk lamp/);
+      assert.deepEqual(currentBrollRecords().brollEntries().map(({ name }) => name), ["Desk lamp"]);
+      written(peer.step("undo"));
+      await new Promise(setImmediate);
+      assert.equal(hook.read().app.rows[0].visualText, "B-roll: Desk lamp");
+      assert.deepEqual(hook.read().app, hook.read().peer);
+    }
+  });
+}
+
+for (const view of ["Writer"]) {
   test(`${view}: leaving a Visual edit keeps the typed B-roll line unkeyed`, async t => {
     await enter(t, [["r1", "Hello", "Close up"], ["r2", "World"]]);
     if (view === "Writer") {

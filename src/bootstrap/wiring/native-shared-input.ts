@@ -8,6 +8,7 @@ import type { SharedDocumentSession } from "../../application/session/shared-ses
 import { addBeatCommand, isBlankBeat, swapBeatsCommand } from "../../application/commands/rows.ts";
 import { sceneBeforeBeat, sceneForBeat, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
 import type { SceneDocument } from "../../core/document/scenes.ts";
+import { brollMarkerLines } from "../../core/production/broll.ts";
 import { beatPos, enterAt, HEADING_MARKER, headingPos, startsParagraph } from "../../core/flow/flow.ts";
 import type { FlowDoc, FlowPos, FlowRange } from "../../core/flow/flow.ts";
 import { cueShortcutRange } from "../../core/text/cues.ts";
@@ -37,7 +38,7 @@ import { repaintWriterAfterPublish, writerControls, writerFlowPorts } from "./wr
 import { currentWhoList } from "./who-list.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "trackVisualPeerSelection" | "titleOffset" | "trackTitlePaint" | "resolveTextSelection" | "captureTextIdentity" | "captureCompositionCaret" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "trackVisualPeerSelection" | "titleOffset" | "trackTitlePaint" | "resolveTextSelection" | "captureTextIdentity" | "captureCompositionCaret" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker" | "brollClaimState">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -2065,19 +2066,37 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const sameCell = (target: EventTarget | null) => target instanceof Node && (cell.contains(target)
       || !!beat && target instanceof Element && target.matches(selector) && target.getAttribute("data-id") === beat
       && target.getAttribute("data-field") === field);
+    const wrap = cell.closest(".field-wrap");
+    const closeBroll = !!beat && field === "visualText" && !!cell.closest("#rows") &&
+      brollMarkerLines(scriptCellOf(cell.innerHTML)).some(({ marker }) => !marker.key || native.brollClaimState(marker.id) === "unnamed");
+    function finishBroll(): void {
+      if (!closeBroll || !beat || stopped || draft?.cell === cell || admissionRefusal()) return;
+      try {
+        const result = native.commands.closeBroll(beat, editAttribution());
+        if (result.kind === "refused") refuseCommand(result.reason);
+        if (result.kind === "written") publish();
+      } catch (error) { report(error); }
+    }
     if (next && next !== document.body) {
-      if (!sameCell(next)) {
+      const departed = !sameCell(next);
+      if (departed) {
         if (buffered?.deletion) buffered.endsGroup = true;
         else native.endDeletionGroup();
       }
-      if (buffered) queueMicrotask(settle);
+      if (buffered || closeBroll && departed) queueMicrotask(() => {
+        settle();
+        if (departed && !(next instanceof Node && wrap?.contains(next))) finishBroll();
+      });
       return;
     }
     // why: replacing a focused cell can blur it before the publication restores focus to its successor
     queueMicrotask(() => {
       const departed = !sameCell(document.activeElement);
       settle();
-      if (departed) native.endDeletionGroup();
+      if (departed) {
+        native.endDeletionGroup();
+        finishBroll();
+      }
     });
   }
 

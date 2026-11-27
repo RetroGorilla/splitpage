@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 
-function nativeClock(doc: Y.Doc): number {
+export function nativeClock(doc: Y.Doc): number {
   return Y.decodeStateVector(Y.encodeStateVector(doc)).get(doc.clientID) ?? 0;
 }
 

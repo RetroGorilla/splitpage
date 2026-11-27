@@ -11,6 +11,26 @@ export interface NativeDeltaItem {
   readonly attributes?: Readonly<Record<string, unknown>>;
 }
 
+export const NATIVE_BROLL_GAP = "brollGap";
+
+export interface NativeBrollHidden {
+  readonly embeds: ReadonlySet<Readonly<Record<string, unknown>>>;
+  readonly gaps: ReadonlySet<string>;
+}
+
+const HIDDEN_BROLL = new WeakMap<readonly NativeDeltaItem[], NativeBrollHidden>();
+
+export function setNativeBrollHidden(items: readonly NativeDeltaItem[], hidden: NativeBrollHidden): void {
+  HIDDEN_BROLL.set(items, hidden);
+}
+
+export function joinNativeBrollHidden(into: readonly NativeDeltaItem[], part: readonly NativeDeltaItem[]): void {
+  const added = HIDDEN_BROLL.get(part);
+  if (!added) return;
+  const prior = HIDDEN_BROLL.get(into);
+  setNativeBrollHidden(into, prior ? { embeds: new Set([...prior.embeds, ...added.embeds]), gaps: new Set([...prior.gaps, ...added.gaps]) } : added);
+}
+
 export interface NativePreparedRun {
   readonly insert: string | Readonly<Record<string, string>>;
   readonly length: number;
@@ -35,6 +55,7 @@ export interface NativeCellView {
   readonly unknown: number;
   readonly ends: readonly number[];
   readonly lefts: readonly NativeLeft[];
+  readonly foldedBroll?: readonly number[] | undefined;
 }
 
 const PLAIN_MARKS = ["b", "i", "u", "s", "hl", "dir", "cue"] as const;
@@ -264,10 +285,12 @@ interface ItemView {
   readonly shown: readonly number[] | null;
   readonly unknown: boolean;
   readonly unshown: boolean;
+  readonly folded?: true;
 }
 
 const NO_KEYS: readonly string[] = Object.freeze([]);
 const NO_STRETCHES: ReadonlyMap<string, Stretch> = new Map();
+
 
 // why: an application is judged by its whole extent in the cell, so plain letters typed inside it do not change
 // how it nests or crosses another
@@ -291,11 +314,17 @@ function tagStretches(items: readonly NativeDeltaItem[]): ReadonlyMap<string, St
 
 // why: rendering needs only the kept text; the per-unit positions are built for command lookup alone
 function itemViews(items: readonly NativeDeltaItem[], positions: boolean): ItemView[] {
-  const perItem = tagStretches(items);
+  const perItem = tagStretches(items), hidden = HIDDEN_BROLL.get(items);
   let offset = 0;
   return items.map((item, index) => {
     const stretches = perItem[index] ?? NO_STRETCHES, keys = stretches.size ? orderKeys(stretches) : NO_KEYS, start = offset;
     offset += nativeItemLength(item);
+    if (hidden) {
+      const gap = item.attributes?.[NATIVE_BROLL_GAP];
+      if (typeof item.insert === "string" ? typeof gap === "string" && hidden.gaps.has(gap) : hidden.embeds.has(item.insert)) {
+        return { run: null, keys: NO_KEYS, start, shownCount: 0, shown: null, unknown: false, unshown: false, folded: true };
+      }
+    }
     if (typeof item.insert === "string") {
       const value = item.insert;
       let kept = value, shown: number[] | null = null;
@@ -334,16 +363,18 @@ export function nativeRunsOf(items: readonly NativeDeltaItem[], visitWidth?: (in
 export function nativeCellView(items: readonly NativeDeltaItem[]): NativeCellView {
   const views = itemViews(items, true), ends: number[] = [], lefts: NativeLeft[] = [];
   let text = "", hidden = 0, unknown = 0;
+  let foldedBroll: number[] | undefined;
   for (const [index, view] of views.entries()) {
     const stored = items[index], length = stored ? nativeItemLength(stored) : 0;
     hidden += length - view.shownCount;
     if (view.unknown) unknown++;
+    if (view.folded) for (let at = 0; at < length; at++) (foldedBroll ??= []).push(view.start + at);
     if (!view.run) continue;
     const left: NativeLeft = { marks: view.run.marks, keys: view.keys, atom: !!view.run.atom };
     for (const at of view.shown ?? []) { ends.push(view.start + at + 1); lefts.push(left); }
     text += view.run.atom ? OBJ : view.run.text;
   }
-  return { runs: merged(views), text, length: ends.length, hidden, unknown, ends, lefts };
+  return { runs: merged(views), text, length: ends.length, hidden, unknown, ends, lefts, foldedBroll };
 }
 
 export function nativeStoredOffset(view: NativeCellView, shown: number): number {
@@ -362,7 +393,7 @@ export function nativeUnitCounts(items: readonly NativeDeltaItem[]): { readonly 
     const item = items[index];
     if (view.unknown) unknown++;
     if (view.unshown) unshown++;
-    hidden += (item ? nativeItemLength(item) : 0) - view.shownCount;
+    if (!view.folded) hidden += (item ? nativeItemLength(item) : 0) - view.shownCount;
   });
   return { hidden, unknown, unshown };
 }

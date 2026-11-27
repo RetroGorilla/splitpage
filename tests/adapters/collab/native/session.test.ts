@@ -55,6 +55,219 @@ function written(result: { kind: string }): void {
   assert.equal(result.kind, "written");
 }
 
+test("editing beside a folded B-roll label keeps the other creator's embed for undo", t => {
+  const seed = fromDocument();
+  t.after(seed.close);
+  type(seed, 0, "B-roll: Desk", visual);
+  const state = seed.encodeState();
+  const left = open({ kind: "state", state }), right = open({ kind: "state", state }, "Bob");
+  t.after(left.close);
+  t.after(right.close);
+  left.ydoc.clientID = 20;
+  right.ydoc.clientID = 30;
+  written(left.commands.closeBroll("A"));
+  written(right.commands.closeBroll("A"));
+  const first = left.document().brollShots[0]?.id, second = right.document().brollShots[0]?.id;
+  assert.ok(first && second && first < second);
+  Y.applyUpdate(left.ydoc, right.encodeState(), "peer");
+  Y.applyUpdate(right.ydoc, left.encodeState(), "peer");
+  assert.equal(left.document().brollShots[0]?.id, first);
+  written(right.commands.deleteText(anchor(right, 1, 2, visual)));
+  Y.applyUpdate(left.ydoc, right.encodeState(), "peer");
+  written(left.commands.undo());
+  Y.applyUpdate(right.ydoc, left.encodeState(), "peer");
+  assert.deepEqual(left.document(), right.document());
+  assert.equal(left.document().brollShots[0]?.id, second);
+  assert.match(left.document().rows[0]?.visualText ?? "", new RegExp(`data-broll-id="${second}"`));
+  assert.match(left.document().rows[0]?.visualText ?? "", /Desk$/);
+});
+
+test("undoing a folded close keeps hand-added props on the surviving claim", t => {
+  const seed = fromDocument();
+  t.after(seed.close);
+  type(seed, 0, "B-roll: Desk", visual);
+  const state = seed.encodeState();
+  const left = open({ kind: "state", state }), right = open({ kind: "state", state }, "Bob");
+  t.after(left.close);
+  t.after(right.close);
+  left.ydoc.clientID = 20;
+  right.ydoc.clientID = 30;
+  written(left.commands.closeBroll("A"));
+  written(right.commands.closeBroll("A"));
+  const second = right.document().brollShots[0]?.id;
+  Y.applyUpdate(left.ydoc, right.encodeState(), "peer");
+  Y.applyUpdate(right.ydoc, left.encodeState(), "peer");
+  const shown = right.document().brollShots[0]?.id;
+  assert.ok(shown && shown !== second);
+  written(right.commands.changeRegistry({ kind: "addProp", id: shown, prop: "Lamp" }));
+  const props = right.document().brollShots[0]?.props;
+  assert.deepEqual(props?.map(prop => prop?.name?.toLowerCase()), ["lamp"]);
+  Y.applyUpdate(left.ydoc, right.encodeState(), "peer");
+  written(left.commands.undo());
+  Y.applyUpdate(right.ydoc, left.encodeState(), "peer");
+  assert.deepEqual(left.document(), right.document());
+  assert.equal(left.document().brollShots[0]?.id, second);
+  assert.deepEqual(left.document().brollShots[0]?.props, props);
+});
+
+function offlineBroll(t: TestContext, line: string) {
+  const seed = fromDocument();
+  t.after(seed.close);
+  type(seed, 0, line, visual);
+  const state = seed.encodeState();
+  const first = open({ kind: "state", state }), second = open({ kind: "state", state }, "Bob");
+  t.after(first.close);
+  t.after(second.close);
+  first.ydoc.clientID = 20;
+  second.ydoc.clientID = 30;
+  const sync = () => {
+    Y.applyUpdate(first.ydoc, second.encodeState(), "peer");
+    Y.applyUpdate(second.ydoc, first.encodeState(), "peer");
+    assert.deepEqual(first.document(), second.document());
+  };
+  return { first, second, sync };
+}
+
+test("closing shared B-roll publishes the marker, label and shot in one update", t => {
+  const { first, second } = offlineBroll(t, "B-roll:Desk\nB-roll: ");
+  const updates: Uint8Array[] = [];
+  let transactions = 0;
+  first.ydoc.on("update", update => updates.push(update));
+  first.ydoc.on("afterTransaction", () => { transactions++; });
+  written(first.commands.closeBroll("A"));
+  assert.equal(updates.length, 1);
+  assert.equal(transactions, 1);
+  const update = updates[0];
+  assert.ok(update);
+  Y.applyUpdate(second.ydoc, update, "peer");
+  assert.deepEqual(second.document(), first.document());
+  assert.deepEqual(second.document().brollShots.map(shot => shot.name), ["Desk"]);
+  assert.equal(second.document().rows[0]?.visualText?.match(/class="broll-key"/g)?.length, 2);
+  const closed = first.document();
+  written(first.commands.undo());
+  assert.equal(first.document().rows[0]?.visualText, "B-roll:Desk<br>B-roll: ");
+  written(first.commands.redo());
+  assert.deepEqual(first.document(), closed);
+});
+
+test("a deleted shared close cannot hide a stored surviving shot behind a derived shot", t => {
+  const { first, second, sync } = offlineBroll(t, "B-roll: Desk");
+  for (const replica of [first, second]) written(replica.commands.closeBroll("A"));
+  const deleted = first.document().brollShots[0]?.id, id = second.document().brollShots[0]?.id;
+  assert.ok(deleted && id);
+  written(first.commands.changeRegistry({ kind: "remove", collection: "shots", ids: [deleted] }));
+  written(second.commands.typeText(anchor(second, 2, 6, visual), "Lamp", {}));
+  sync();
+  assert.deepEqual(first.document().brollShots.map(shot => shot.id), [id]);
+  assert.match(first.document().rows[0]?.visualText ?? "", new RegExp(`data-broll-id="${id}"`));
+  written(first.commands.changeRegistry({ kind: "set", collection: "shots", ids: [id], fields: { notes: "Keep this note" } }));
+  sync();
+  assert.equal(second.document().brollShots[0]?.notes, "Keep this note");
+});
+
+test("a named close wins over an empty close and keeps a same-name list shot separate", t => {
+  const { first, second, sync } = offlineBroll(t, "B-roll: ");
+  const list = first.commands.changeRegistry({ kind: "create", collection: "shots", fields: { name: "Desk" } });
+  assert.ok("created" in list);
+  written(first.commands.closeBroll("A"));
+  type(second, 8, "Desk", visual);
+  written(second.commands.closeBroll("A"));
+  const id = second.document().brollShots[0]?.id;
+  assert.ok(id);
+  sync();
+  assert.match(first.document().rows[0]?.visualText ?? "", new RegExp(`data-broll-id="${id}"`));
+  assert.deepEqual(first.document().brollShots.map(shot => shot.id).sort(), [list.created, id].sort());
+});
+
+test("concurrent B-roll closes project one separator before the shot name", t => {
+  const { first, second, sync } = offlineBroll(t, "B-roll:Desk");
+  for (const replica of [first, second]) written(replica.commands.closeBroll("A"));
+  sync();
+  assert.match(first.document().rows[0]?.visualText ?? "", /<\/span> Desk$/);
+});
+
+test("undoing and reclosing an offline B-roll line reuses its shared marker", t => {
+  const { first, second, sync } = offlineBroll(t, "B-roll: Desk");
+  for (const replica of [first, second]) written(replica.commands.closeBroll("A"));
+  const id = second.document().brollShots[0]?.id;
+  assert.ok(id);
+  written(second.commands.changeRegistry({ kind: "set", collection: "shots", ids: [id], fields: { notes: "Keep the note" } }));
+  written(first.commands.undo());
+  assert.equal(first.document().rows[0]?.visualText, "B-roll: Desk");
+  written(first.commands.closeBroll("A"));
+  sync();
+  assert.equal(first.document().brollShots.length, 1);
+  assert.equal(first.document().rows[0]?.visualText?.match(/class="broll-key"/g)?.length, 1);
+  const shot = first.document().brollShots[0];
+  assert.ok(shot && (shot.notes === "Keep the note" || first.shotAlternatives()?.get(shot.id)?.some(edit => edit.value === "Keep the note")));
+});
+
+test("a fresh replica can reclose an undone marker while a third copy changes the shot name", t => {
+  const { first, second, sync } = offlineBroll(t, "B-roll: Desk");
+  for (const replica of [first, second]) written(replica.commands.closeBroll("A"));
+  const editor = open({ kind: "state", state: second.encodeState() }, "Editor");
+  t.after(editor.close);
+  written(editor.commands.typeText(anchor(editor, 2, 6, visual), "Lamp", {}));
+  written(first.commands.undo());
+  const reopened = open({ kind: "state", state: first.encodeState() }, "Reopened");
+  t.after(reopened.close);
+  written(reopened.commands.closeBroll("A"));
+  Y.applyUpdate(first.ydoc, reopened.encodeState(), "peer");
+  Y.applyUpdate(second.ydoc, editor.encodeState(), "peer");
+  sync();
+  assert.equal(first.document().brollShots.length, 1);
+  assert.match(first.document().rows[0]?.visualText ?? "", /Lamp$/);
+  assert.equal(first.document().rows[0]?.visualText?.match(/class="broll-key"/g)?.length, 1);
+});
+
+test("repairing an unkeyed line reserves stored claims and gives fresh readers the same alternatives", t => {
+  const { first, second, sync } = offlineBroll(t, "B-roll: Desk\nOriginal description");
+  for (const replica of [first, second]) written(replica.commands.closeBroll("A"));
+  const id = second.document().brollShots[0]?.id;
+  assert.ok(id);
+  written(second.commands.changeRegistry({ kind: "set", collection: "shots", ids: [id], fields: { notes: "Wide" } }));
+  const unrelated = first.commands.changeRegistry({ kind: "create", collection: "shots", fields: { name: "Unrelated" } });
+  assert.ok("created" in unrelated);
+  written(first.commands.changeRegistry({ kind: "remove", collection: "shots", ids: [unrelated.created] }));
+  sync();
+  type(first, 0, "B-roll: Desk\nDifferent description", { beat: "B", cell: "visual" });
+  sync();
+  const fresh = open({ kind: "state", state: first.encodeState() });
+  t.after(fresh.close);
+  assert.deepEqual(first.shotAlternatives(), fresh.shotAlternatives());
+  assert.deepEqual(first.document(), fresh.document());
+  assert.equal(first.document().brollShots[0]?.desc, "Original description");
+  assert.equal(first.shotAlternatives()?.size, 1);
+});
+
+test("ordinary prose edits reuse close topology and alternatives after an unrelated shot deletion", t => {
+  const { first, second, sync } = offlineBroll(t, "B-roll: Desk");
+  for (const replica of [first, second]) written(replica.commands.closeBroll("A"));
+  const id = second.document().brollShots[0]?.id;
+  assert.ok(id);
+  written(second.commands.changeRegistry({ kind: "set", collection: "shots", ids: [id], fields: { notes: "Wide" } }));
+  const unrelated = first.commands.changeRegistry({ kind: "create", collection: "shots", fields: { name: "Unrelated" } });
+  assert.ok("created" in unrelated);
+  written(first.commands.changeRegistry({ kind: "remove", collection: "shots", ids: [unrelated.created] }));
+  sync();
+  const alternatives = first.shotAlternatives();
+  assert.equal(alternatives?.size, 1);
+  const cell = first.ydoc.getMap<Y.Text>("visuals").get("A");
+  assert.ok(cell);
+  let reads = 0;
+  for (const { insert } of cell.toDelta() as { insert: unknown }[]) {
+    if (!insert || typeof insert !== "object" || !("brollSource" in insert)) continue;
+    const source = insert.brollSource;
+    Object.defineProperty(insert, "brollSource", { enumerable: true, get: () => { reads++; return source; } });
+  }
+  const delta = t.mock.method(cell, "toDelta");
+  type(first, 6, "s", visual);
+  assert.match(first.document().rows[0]?.visualText ?? "", /Desks$/);
+  assert.equal(first.shotAlternatives(), alternatives);
+  assert.equal(delta.mock.callCount(), 1);
+  assert.equal(reads, 0);
+});
+
 function closedState(changes: NativeSessionChange[], reason: "requested" | "failed"): Uint8Array {
   const final = changes.at(-1);
   assert(final?.kind === "closed");

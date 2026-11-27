@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { nativeBrollUndoFilter } from "./broll-claims.ts";
 import { observeNativePress, withNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability, resolveNativeUndoSelection, snapshotNativeUndoAnchor } from "./text-commands.ts";
@@ -32,7 +33,8 @@ export function openNativeUndo(script: NativeScript) {
   const { meta, order, segments, beats, visuals, headings, names, comments, replies, people, tags, shots } = script.roots;
   const manager = new Y.UndoManager([meta, order, segments, beats, visuals, headings, names, comments, replies, people, tags, shots], {
     trackedOrigins: new Set([script.origin]),
-    captureTimeout: Infinity
+    captureTimeout: Infinity,
+    deleteFilter: nativeBrollUndoFilter(script.doc)
   });
   const entries = new WeakMap<NativeUndoItem, number>();
   const selectionKey = Symbol();

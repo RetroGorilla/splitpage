@@ -1,19 +1,23 @@
 import * as Y from "yjs";
-import { BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_PROP_NAME_MAX, BROLL_TEXT_MAX, brollStatusId, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
+import { BROLL_MARKER_RE, BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_PROP_NAME_MAX, BROLL_TEXT_MAX, brollStatusId, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
 import type { BrollProp } from "../../../core/document/broll.ts";
 import { isTagId, nextTagStatus, normalizeTagName, registryKey, TAG_STATUS_IDS, tagCategoryId, tagStatusId } from "../../../core/document/tags.ts";
 import { cappedLongText, cappedText, plainText } from "../../../core/document/text-policy.ts";
 import type { DocumentShape, DocumentTag } from "../../../core/document/validated.ts";
 import { PERSON_NAME_MAX } from "../../../core/production/records.ts";
+import { brollInCell, brollMarkerLines, brollSeedLocation, brollSeedRef } from "../../../core/production/broll.ts";
+import { NATIVE_BROLL_GAP, nativeCellView, nativeStoredOffset } from "./inline.ts";
+import { NATIVE_BROLL_SOURCE, nativeBrollMarkerAt, writeNativeBrollMarker } from "./broll-claims.ts";
 import { compareNativeRankedIds, isValidNativeRank, nativeRankBetween } from "./rank.ts";
 import { copyArgument, copyRecordValue, nativeRecordId, RECORD_UNCHANGED, RECORD_WRITTEN, refuseRecord } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
-import { nativeShotLinePlan, nativeTagNamesInRows } from "./registry-projection.ts";
+import { nativeRegistryProduction, nativeShotLinePlan, nativeTagNamesInRows } from "./registry-projection.ts";
 import { withNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { prepareNativeShotProps } from "./shot-prop-commands.ts";
 import { NATIVE_SHOT_PROPS, OBSOLETE_SHOT_PROPS, newNativeShotProps } from "./shot-props.ts";
-import { nativeWriteAvailability } from "./text-commands.ts";
+import { encodeNativeEditStamp, nativeWriteAvailability } from "./text-commands.ts";
+import type { NativeEditStamp } from "./text-commands.ts";
 import { decodeNativeValue, encodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey, recordBag, sameNativeValue } from "./values.ts";
 import { nativeTagAlternativesKey, nativeTagCounter, nativeTagCounterKey, nativeTagFields, storedNativeTagAlternatives } from "./tag-fields.ts";
 
@@ -122,16 +126,83 @@ function append(writes: Write[], root: Root, id: string, fields: Fields, rank: s
   });
 }
 
+function appendShot(writes: Write[], root: Root, id: string, fields: Fields, rank: string): void {
+  const { props = [], ...ordinary } = fields;
+  append(writes, root, id, ordinary, rank, props as BrollProp[]);
+}
+
+export function closeNativeBroll(script: NativeScript, beat: string, stamp?: NativeEditStamp): NativeRecordOutcome {
+  const unavailable = nativeWriteAvailability(script);
+  if (unavailable) return refuseRecord(unavailable);
+  return withNativeCommand(script, () => {
+    const encoded = encodeNativeEditStamp(stamp);
+    if (script.closed() || script.reader.isClosed()) return refuseRecord("closed");
+    if (encoded === null || !nativeRecordId(beat)) return refuseRecord("value");
+    const text = script.roots.visuals.get(beat);
+    if (!(text instanceof Y.Text) || !script.reader.beatBoundary(beat)) return RECORD_UNCHANGED;
+    const items = script.reader.visualItems(beat), view = nativeCellView(items), lines = brollMarkerLines(view.runs), claims = script.reader.brollClaims();
+    if (!lines.some(({ marker }) => !marker.key || claims.get(marker.id)?.state === "unnamed")) return RECORD_UNCHANGED;
+    const found = brollInCell(view.runs), rows = script.reader.rows();
+    const { readers, plainTextOf } = nativeRegistryProduction(rows);
+    const row = rows.find(row => row.id === beat), root = script.roots.shots, order = slots(root, true);
+    if (!order) return refuseRecord("stored");
+    let rank = order.at(-1)?.rank ?? null;
+    const writes: Write[] = [], splices: Write[] = [];
+    const writer = mintNativeId(script.doc, "");
+    for (const [ordinal, { line, marker }] of lines.entries()) {
+      const shot = found[ordinal], source = view.text.slice(line.start, line.end);
+      if (marker.key) {
+        if (claims.get(marker.id)?.state === "unnamed" && shot?.name) {
+          const record = target(root, marker.id);
+          if (!(record instanceof Y.Map)) return record;
+          if (!planFields(writes, record, { name: shot.name, desc: shot.desc })) return refuseRecord("stored");
+        }
+        continue;
+      }
+      const match = BROLL_MARKER_RE.exec(source);
+      if (!match) continue;
+      const from = nativeStoredOffset(view, line.start);
+      const until = nativeStoredOffset(view, line.start + match[0].trimEnd().length);
+      const priorMarker = nativeBrollMarkerAt(items, until - 1);
+      let markerSource = priorMarker;
+      if (!markerSource) {
+        const point = Y.createRelativePositionFromTypeIndex(text, until - 1).item;
+        if (!point) continue;
+        markerSource = `${point.client.toString(36)}-${point.clock.toString(36)}`;
+      }
+      const id = `bs-visual-${markerSource}-${writer}-${ordinal.toString(36)}`;
+      if (root.has(id)) return refuseRecord("taken");
+      rank = nativeRankBetween(rank, null);
+      appendShot(writes, root, id, { ...defaults("shots"), origin: "script", name: shot?.name ?? "", desc: shot?.desc ?? "",
+        audioRef: brollSeedRef(row, plainTextOf), location: brollSeedLocation(row, readers) }, rank);
+      writes.push(() => { root.get(id)?.set(NATIVE_BROLL_SOURCE, markerSource); });
+      splices.push(() => {
+        if (match[0] === match[0].trimEnd()) text.insert(until, " ", { [NATIVE_BROLL_GAP]: id });
+        if (!priorMarker) writeNativeBrollMarker(script.doc, text, until - 1, markerSource);
+        text.insertEmbed(from, { k: id, label: (match[1] ?? "") + (match[2] ?? ""), [NATIVE_BROLL_SOURCE]: markerSource }, {});
+        text.delete(from + 1, until - from);
+      });
+    }
+    if (!splices.length && !writes.length) return RECORD_UNCHANGED;
+    if (encoded) writes.push(() => { script.roots.edited.set(beat, encoded); });
+    script.prepareWrite?.();
+    return script.doc.transact(() => {
+      if (script.closed() || script.reader.isClosed()) return refuseRecord("closed");
+      runWrites(splices.reverse());
+      runWrites(writes);
+      return RECORD_WRITTEN;
+    }, script.origin);
+  });
+}
+
 function planNew(script: NativeScript, writes: Write[], collection: Collection, fields: Fields): string | Refused {
   const root = script.roots[collection], order = slots(root, true);
   if (!order) return refuseRecord("stored");
   const id = collection === "tags" ? mintNativeTagId(script.doc) : mintNativeId(script.doc, collection === "people" ? "p" : "bs");
   if (root.has(id)) return refuseRecord("taken");
   const rank = nativeRankBetween(order.at(-1)?.rank ?? null, null);
-  if (collection === "shots") {
-    const { props = [], ...ordinary } = fields;
-    append(writes, root, id, ordinary, rank, props as BrollProp[]);
-  } else if (collection === "tags") appendTag(script, writes, id, fields, rank);
+  if (collection === "shots") appendShot(writes, root, id, fields, rank);
+  else if (collection === "tags") appendTag(script, writes, id, fields, rank);
   else append(writes, root, id, fields, rank);
   return id;
 }
@@ -159,6 +230,15 @@ function namedTag(document: DocumentShape, cat: unknown, name: unknown): Documen
 
 function tagTargets(script: NativeScript, ids: readonly string[]): readonly string[] {
   return [...new Set(ids.flatMap(id => script.reader.tagGroup(id) ?? [id]))];
+}
+
+function shotTargets(script: NativeScript, ids: readonly string[]): readonly string[] {
+  const claims = script.reader.brollClaims();
+  const sources = new Set(ids.flatMap(id => claims.get(id)?.source ?? []));
+  if (!sources.size) return ids;
+  const living = [...claims].filter(([, claim]) => claim.state === "named" && sources.has(claim.source));
+  const matched = new Set(living.map(([, claim]) => claim.source));
+  return [...ids.filter(id => !matched.has(claims.get(id)?.source ?? "")), ...living.map(([id]) => id).sort()];
 }
 
 function projectedTagIds(script: NativeScript, document: DocumentShape): ReadonlySet<string> {
@@ -294,7 +374,7 @@ function set(script: NativeScript, collection: Collection, ids: readonly string[
     }
     return planWrites(writes);
   }
-  for (const id of ids) {
+  for (const id of collection === "shots" ? shotTargets(script, ids) : ids) {
     const map = target(script.roots[collection], id);
     if (!(map instanceof Y.Map)) return map;
     const rename = checkRename(script, collection, map, id, owned, document);
@@ -365,7 +445,8 @@ function removeOrRestore(script: NativeScript, collection: Collection, ids: read
   const root = script.roots[collection];
   const names = restore && collection === "people" ? new Set([...root.values()].flatMap(map =>
     map instanceof Y.Map && map.get("removed") !== true ? [normalizeTagName(stored(map, "name"))] : [])) : null;
-  for (const id of collection === "tags" && !restore ? tagTargets(script, ids) : ids) {
+  const targets = restore ? ids : collection === "tags" ? tagTargets(script, ids) : collection === "shots" ? shotTargets(script, ids) : ids;
+  for (const id of targets) {
     const map = target(script.roots[collection], id, restore);
     if (!(map instanceof Y.Map)) return map;
     if (names) {
@@ -419,28 +500,35 @@ function move(root: Root, id: string, before: string | null, canonical?: (id: st
 
 function changeProp(script: NativeScript, id: string, prop: string, kind: "addProp" | "removeProp" | "moveProp", before: string | null,
   entries: Write[]): RegistryPlan {
-  const shot = target(script.roots.shots, id);
-  if (!(shot instanceof Y.Map)) return shot;
   const document = script.reader.document(), writes: Write[] = [];
-  const props = prepareNativeShotProps(shot, document.productionTags, ref => script.reader.tagGroup(ref));
-  if (!props) return refuseRecord("stored");
+  const targets = shotTargets(script, [id]), lists: NonNullable<ReturnType<typeof prepareNativeShotProps>>[] = [];
+  for (const member of targets) {
+    const shot = target(script.roots.shots, member);
+    if (!(shot instanceof Y.Map)) return shot;
+    const props = prepareNativeShotProps(shot, document.productionTags, ref => script.reader.tagGroup(ref));
+    if (!props) return refuseRecord("stored");
+    lists.push(props);
+  }
   if (kind === "addProp") {
     const name = normalizeTagName(prop);
-    if (props.hasName(name)) return RECORD_UNCHANGED;
-    if (props.damaged) return refuseRecord("stored");
-    if (props.distinctCount >= BROLL_PROPS_MAX) return refuseRecord("value");
+    const missing = lists.filter(props => !props.hasName(name));
+    if (!missing.length) return RECORD_UNCHANGED;
+    if (missing.some(props => props.damaged)) return refuseRecord("stored");
+    if (missing.some(props => props.distinctCount >= BROLL_PROPS_MAX)) return refuseRecord("value");
     if (prop !== prop.trim()) return refuseRecord("value");
     const projected = projectedTagIds(script, document);
     const tag = document.productionTags.find(entry => entry?.cat === "prop" && entry.id && !projected.has(entry.id) && normalizeTagName(entry.name) === name);
     const tagId = tag?.id ?? planNew(script, entries, "tags", { ...defaults("tags"), cat: "prop", name: prop });
     if (typeof tagId !== "string") return tagId;
     if (!isTagId(tagId)) return refuseRecord("stored");
-    props.add(writes, { id: tagId, name: tag?.name ?? prop });
+    for (const props of missing) props.add(writes, { id: tagId, name: tag?.name ?? prop });
   } else if (kind === "removeProp") {
-    props.remove(writes, prop);
+    for (const props of lists) props.remove(writes, prop);
   } else {
-    const refusal = props.move(writes, prop, before);
-    if (refusal) return refuseRecord(refusal);
+    for (const [index, props] of lists.entries()) {
+      const refusal = props.move(writes, prop, before);
+      if (refusal && (index === 0 || refusal !== "missing")) return refuseRecord(refusal);
+    }
   }
   return planWrites(writes);
 }

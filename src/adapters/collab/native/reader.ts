@@ -5,11 +5,13 @@ import { projectSharedJoinedFields } from "../../../core/collab/projection/joins
 import type { DocumentShape } from "../../../core/document/validated.ts";
 import { toHtml } from "../../../core/text/html.ts";
 import type { Run } from "../../../core/text/runs.ts";
-import { nativeBlockOf, nativeCellView, nativeItemLength, nativeRunsOf, nativeStoredOffset, nativeUnitCounts } from "./inline.ts";
+import { joinNativeBrollHidden, nativeBlockOf, nativeCellView, nativeItemLength, nativeRunsOf, nativeStoredOffset, nativeUnitCounts } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import { compareNativeRankedIds } from "./rank.ts";
-import { nativeRegistryRowChanged, projectNativeRegistries, projectNativeTags } from "./registry-projection.ts";
+import { foldNativeBrollRecords, nativeRegistryRowChanged, projectNativeRegistries, projectNativeTags } from "./registry-projection.ts";
 import type { NativeRegistryRowInputs } from "./registry-projection.ts";
+import { nativeBrollClaims, nativeBrollClaimField, projectNativeBrollCell, readNativeBrollLayout } from "./broll-claims.ts";
+import type { NativeBrollCellLayout } from "./broll-claims.ts";
 import type { NativeRoots } from "./roots.ts";
 import { NATIVE_SHOT_PROPS, OBSOLETE_SHOT_PROPS, nativeShotPropEntries } from "./shot-props.ts";
 import {
@@ -301,8 +303,14 @@ export class NativeScriptReader {
   private pictureRefsByRow?: WeakMap<NativeReadRow, readonly string[]>;
   private readonly seamsByRow = new Map<string, NativeNarrationSeams>();
   private registryCache: { readonly records: Registries; readonly inputs: NativeRegistryRowInputs;
-    readonly groups: ReadonlyMap<string, readonly string[]> } | null = null;
+    readonly groups: ReadonlyMap<string, readonly string[]>;
+    readonly shotAlternatives: ReturnType<typeof projectNativeRegistries>["shotAlternatives"] } | null = null;
   private tagProjection: ReturnType<typeof projectNativeTags> | null = null;
+  private closeClaims: ReturnType<typeof nativeBrollClaims> | undefined;
+  private shotFold?: ReturnType<typeof foldNativeBrollRecords> | undefined;
+  private visualDeltas = new WeakMap<Y.Text, readonly NativeDeltaItem[]>();
+  private readonly visualLayouts = new WeakMap<Y.Text, NativeBrollCellLayout>();
+  private readonly visualClaimRows = new Set<string>();
   private readonly anchorsByRow = new Map<string, Set<string>>();
   private readonly rowsByAnchor = new Map<string, Map<string, CommentCell>>();
   private narration = new Map<string, readonly NativeSpanPlace[]>();
@@ -351,8 +359,17 @@ export class NativeScriptReader {
     observe(roots.visuals, events => {
       for (const event of events) {
         const [beat] = event.path;
-        if (typeof beat === "string") this.dirtyBeats.add(beat);
-        else { this.structural = true; for (const key of event.keys.keys()) this.dirtyBeats.add(key); }
+        if (typeof beat === "string") {
+          this.dirtyBeats.add(beat);
+          const visual = roots.visuals.get(beat);
+          if (visual instanceof Y.Text) this.visualDeltas.delete(visual);
+        } else {
+          this.structural = true;
+          for (const key of event.keys.keys()) {
+            this.dirtyBeats.add(key);
+            this.visualClaimRows.delete(key);
+          }
+        }
       }
     });
     observe(roots.headings, () => { this.structural = true; });
@@ -363,10 +380,17 @@ export class NativeScriptReader {
       }
     });
     observe(roots.edited, events => { for (const event of events) for (const key of event.keys.keys()) this.dirtyBeats.add(key); });
-    const invalidateTags = () => { this.registryCache = null; this.tagProjection = null; };
+    const invalidateTags = () => { this.registryCache = null; this.tagProjection = null; this.shotFold = undefined; };
     for (const root of [roots.people, roots.tags]) observe(root, invalidateTags);
     observe(roots.tagKeys, invalidateTags);
-    observe(roots.shots, () => { this.registryCache = null; });
+    observe(roots.shots, events => {
+      this.registryCache = null;
+      this.shotFold = undefined;
+      if (!events.some(event => event.path.length === 0 || event.path.length === 1 && [...event.keys.keys()].some(nativeBrollClaimField))) return;
+      this.closeClaims = undefined;
+      this.visualDeltas = new WeakMap();
+      for (const beat of this.visualClaimRows) this.dirtyBeats.add(beat);
+    });
   }
 
   close(): void {
@@ -417,7 +441,7 @@ export class NativeScriptReader {
     }
     for (const id of dirtyRows) {
       const previous = this.rowCache.get(id), row = this.buildRow(id);
-      if (this.registryCache && previous && nativeRegistryRowChanged(this.registryCache.inputs, previous, row)) this.registryCache = null;
+      if (this.registryCache && previous && nativeRegistryRowChanged(this.registryCache.inputs, previous, row, this.brollClaims())) this.registryCache = null;
       this.rowCache.set(id, row);
       if (!previous || row.audioText !== previous.audioText || row.visualText !== previous.visualText) this.indexCommentAnchors(row);
       if (!previous || JSON.stringify(previous) !== JSON.stringify(row)) {
@@ -737,8 +761,8 @@ export class NativeScriptReader {
         if (member.glue) audio.push({ insert: member.glue });
       }
       for (const item of items) audio.push(item);
-      const cell = this.roots.visuals.get(member.id);
-      const delta = (cell instanceof Y.Text ? cell.toDelta() : []) as NativeDeltaItem[];
+      const delta = this.visualItems(member.id);
+      joinNativeBrollHidden(visual, delta);
       if (visual.length && delta.length) visual.push({ insert: "\n" });
       for (const item of delta) visual.push(item);
     }
@@ -764,13 +788,13 @@ export class NativeScriptReader {
 
   noticeBeat(id: string): NativeReadBeat | null {
     this.sync();
-    const row = this.groupHeads.get(id), cell = this.roots.visuals.get(id);
+    const row = this.groupHeads.get(id);
     if (row === undefined || id === this.stray) return null;
     const single = this.groups.get(row)?.length === 1 ? this.rowCache.get(row) : undefined;
     return Object.freeze({
       id, row,
       narration: single?.narration ?? frozenRuns(nativeRunsOf(this.narrationItems(this.narration.get(id) ?? EMPTY_SPANS))),
-      visual: single?.visual ?? frozenRuns(nativeRunsOf((cell?.toDelta() ?? []) as NativeDeltaItem[])),
+      visual: single?.visual ?? frozenRuns(nativeRunsOf(this.visualItems(id))),
       fields: single?.fields ?? deepFrozen(this.beatFields(id, null)),
       joined: deepFrozen(joinOf(this.roots.beats.get(id)))
     });
@@ -779,6 +803,23 @@ export class NativeScriptReader {
   outline(): readonly NativeOutlineEntry[] {
     this.sync();
     return this.outlineEntries;
+  }
+
+  brollClaims() { return this.closeClaims ??= nativeBrollClaims(this.roots.shots); }
+
+  visualItems(beat: string): readonly NativeDeltaItem[] {
+    const text = this.roots.visuals.get(beat);
+    if (!(text instanceof Y.Text)) return [];
+    const cached = this.visualDeltas.get(text);
+    if (cached) return cached;
+    const items = text.toDelta() as NativeDeltaItem[];
+    const layout = readNativeBrollLayout(items, this.visualLayouts.get(text));
+    this.visualLayouts.set(text, layout);
+    projectNativeBrollCell(items, this.brollClaims(), layout);
+    this.visualDeltas.set(text, items);
+    if (layout.embeds.length) this.visualClaimRows.add(beat);
+    else this.visualClaimRows.delete(beat);
+    return items;
   }
 
   row(id: string): NativeReadRow | null {
@@ -1122,7 +1163,7 @@ export class NativeScriptReader {
     }
     for (const id of this.places.keys()) {
       const visual = this.roots.visuals.get(id);
-      if (visual instanceof Y.Text) this.cellProblems(visual.toDelta() as NativeDeltaItem[], "visuals/" + id, problems);
+      if (visual instanceof Y.Text) this.cellProblems(this.visualItems(id), "visuals/" + id, problems);
       this.beatFields(id, problems);
     }
     for (const id of this.roots.beats.keys()) if (!this.places.has(id)) this.beatFields(id, problems);
@@ -1196,16 +1237,22 @@ export class NativeScriptReader {
     const document = { ...this.collect(null), rows, ...sections.length ? { sections } : {} };
     if (this.registryCache) return deepFrozen({ ...document, ...this.registryCache.records });
     const snapshot = { ...document, ...this.storedRegistries(null, this.tagProjection?.stored) };
-    const { inputs, groups } = projectNativeRegistries(snapshot, this.roots, () => this.rows(),
-      (tags, people) => this.tagProjection ??= projectNativeTags(tags, this.roots, people));
+    const { inputs, groups, shotAlternatives } = projectNativeRegistries(snapshot, this.roots, () => this.rows(),
+      (tags, people) => this.tagProjection ??= projectNativeTags(tags, this.roots, people), this.brollClaims(),
+      (records, people, claims) => this.shotFold ??= foldNativeBrollRecords(records, people, claims));
     const { people, productionTags, brollShots } = snapshot;
-    this.registryCache = { inputs, groups, records: deepFrozen({ people, productionTags, brollShots }) };
+    this.registryCache = { inputs, groups, shotAlternatives, records: deepFrozen({ people, productionTags, brollShots }) };
     return deepFrozen(snapshot);
   }
 
   tagGroup(id: string): readonly string[] | undefined {
     if (!this.registryCache) this.document();
     return this.registryCache?.groups.get(id);
+  }
+
+  shotAlternatives() {
+    if (!this.registryCache) this.document();
+    return this.registryCache?.shotAlternatives;
   }
 
   pictureReferences() {

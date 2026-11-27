@@ -1,0 +1,31 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.P=S.nativePeer;F.openFile(new File([JSON.stringify({schema:2,title:'Shared Split B-roll',paragraphsDecided:true,rows:[{id:'r1',audioText:'Make coffee',visualText:''},{id:'r2',audioText:'Drink it',visualText:''}],comments:[]})],'split-broll.splitpage'))
+wait F.state().title==='Shared Split B-roll'
+eval S.enter()
+wait S.read().peer!==null
+eval window.visual=()=>document.querySelector('#rows .cell-editable[data-id="r1"][data-field="visualText"]');window.agree=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);window.shot=()=>S.read().app.brollShots[0];true
+click #rows .cell-editable[data-id="r1"][data-field="visualText"]
+type B-roll: Desk
+wait agree()&&S.read().app.rows[0].visualText==='B-roll: Desk'
+expect S.read().app.brollShots.length===0
+eval P.hold('updates');P.closeBroll('r1').kind==='written'
+expect S.read().peer.brollShots.length===1&&S.read().app.brollShots.length===0
+click #rows .cell-editable[data-id="r2"][data-field="audioText"]
+wait S.read().app.brollShots.length===1
+expect S.read().app.brollShots[0].id!==S.read().peer.brollShots[0].id
+eval P.release('reverse');true
+wait agree()&&S.read().app.brollShots.length===1&&visual().querySelectorAll('.broll-key').length===1
+expect shot().name==='Desk'&&visual().querySelector('.broll-key').dataset.brollId===shot().id
+expect JSON.stringify(P.freshSnapshot('peer'))===JSON.stringify(S.read().app)
+eval P.undoPeer().kind==='written'
+wait agree()&&visual().textContent.replace(/\u200b/g,'')==='B-roll:B-roll: Desk'
+expect S.read().app.brollShots.length===1&&visual().querySelectorAll('.broll-key').length===1
+eval P.redoPeer().kind==='written'
+wait agree()&&visual().textContent.replace(/\u200b/g,'')==='B-roll: Desk'
+expect S.read().app.brollShots.length===1&&visual().querySelectorAll('.broll-key').length===1
+eval P.step('undo').kind==='written'
+wait agree()&&visual().textContent.replace(/\u200b/g,'')==='B-roll:B-roll: Desk'
+eval P.step('redo').kind==='written'
+wait agree()&&visual().textContent.replace(/\u200b/g,'')==='B-roll: Desk'
+expect S.read().app.brollShots.length===1&&visual().querySelectorAll('.broll-key').length===1
