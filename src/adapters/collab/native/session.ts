@@ -132,7 +132,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   let caretObservers: Set<(transaction: Y.Transaction) => void> | undefined;
   const body = { sanitize };
   let active = false, runningCommand = false, scheduled = false, publishing = false, changed = false, holds = 0;
-  let closing: CloseReason | null = null, revision = 0;
+  let closing: CloseReason | null = null, revision = 0, peerRevision = 0;
   let group: CaptureGroup | null = null;
   function notifySet(subscribers: ReadonlySet<() => void>): void {
     for (const listener of [...subscribers]) {
@@ -158,7 +158,10 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   function updated(update: Uint8Array, transaction: Y.Transaction): void {
     // why: successive peer updates can remove and restore a caret before publication's microtask
     caretObservers?.forEach(observe => script.guardSharedCallback(() => observe(transaction)));
-    if (!transaction.local) journal?.peer();
+    if (!transaction.local) {
+      peerRevision = revision + 1;
+      journal?.peer();
+    }
     revision++;
     changed = true;
     size.recordUpdate(update.byteLength, transaction.deleteSet.clients.size > 0);
@@ -434,6 +437,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     tagGroup: (id: string) => script.reader.tagGroup(id),
     pictureReferences: () => script.reader.pictureReferences(),
     revision: () => revision,
+    peerRevision: () => peerRevision,
     captureTextIdentity: (range: NativeTextRange) => {
       if (refusal()) return null;
       const intact = captureNativeTextIdentity(script, range);

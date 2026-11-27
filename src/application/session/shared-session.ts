@@ -20,6 +20,7 @@ export type ReplicaExecution = { readonly ok: true } | { readonly ok: false; rea
 
 export interface ReplicaPort {
   readonly revision: () => number;
+  readonly isPeerProjection?: () => boolean;
   readonly project: () => unknown;
   readonly changes: () => SharedProjectionChanges;
   readonly recovery: () => readonly SharedRecoveryEntry[];
@@ -52,6 +53,7 @@ export type SharedAdmissionAnswer = boolean | typeof SHARED_ADMISSION_ANNOUNCED;
 export interface SharedDocumentSession extends CommonDocumentSession {
   refuse: (reason: string) => CommandOutcome;
   revision: () => number;
+  isPeerProjection: () => boolean;
   admit: () => SharedAdmissionRefusal | null;
   hold: (reason: string) => () => void;
   readAt: <T>(select: (doc: DocumentView | null, revision: number) => T) => T;
@@ -283,6 +285,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     epoch: function () { return epoch; },
     generation: function () { return generation; },
     revision: function () { return revision; },
+    isPeerProjection: () => ports.replica.isPeerProjection?.() ?? true,
     admit: admit,
     hold: function (reason: string) {
       holds.push(reason);

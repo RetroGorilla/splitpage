@@ -125,9 +125,18 @@ expect !mark() && spans().length===0
 eval Q(P,'r1','audioText').dispatchEvent(new P.KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true,cancelable:true}));true
 wait P.document.querySelectorAll('#rows .row').length===2 && P.document.activeElement?.dataset.id!=='r1'
 wait dot(rd(P.document.activeElement.dataset.id)) && !!mark() && spans().length===0
+eval window.joinedBeat=P.document.activeElement.dataset.id;Q(P,joinedBeat,'audioText').dispatchEvent(new P.InputEvent('beforeinput',{inputType:'insertText',data:'Joined',bubbles:true,cancelable:true}));true
+wait Q(window,joinedBeat,'audioText')?.textContent==='Joined'
 eval pclick(Q(P,'r1','audioText'),1,4)
 wait near(Q(window,'r1','audioText'),4) && spans().length===1
 expect spans()[0].style.getPropertyValue('--presence-caret-color')==='#EF958E' && dot(rd('r1'))
+eval P.document.querySelector('#btn-write').click();true
+wait P.__writerFlowTest.on()
+eval P.document.querySelector('#writer-doc').focus();pmove(wbeat(P,joinedBeat),0,0);window.joinAt=Q(window,'r1','audioText').textContent.length+1;true
+wait near(Q(window,joinedBeat,'audioText'),0)
+eval P.document.querySelector('#writer-doc').dispatchEvent(new P.KeyboardEvent('keydown',{key:'Backspace',bubbles:true,cancelable:true}));true
+wait !Q(window,joinedBeat,'audioText') && Q(window,'r1','audioText').textContent.endsWith(' Joined')
+wait near(Q(window,'r1','audioText'),joinAt) && spans().length===0
 eval P.__sharedTest.leave().then(result=>result.ok)
 wait !document.querySelector('#shared-pill .person-avatar') && !dot(rd('r1'))
 wait !mark()

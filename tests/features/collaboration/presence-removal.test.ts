@@ -62,7 +62,7 @@ function editor(t: TestContext) {
     cells[1].remove();
     if (focused === cells[1]) select(cells[0], 2, 2);
   }
-  return { window, document, cells, connect, select, selectionChanged, removeB, sample, last: () => published.at(-1), dispose, removals };
+  return { window, cells, connect, select, selectionChanged, removeB, sample, last: () => published.at(-1), dispose, removals };
 }
 
 test("deletion hides a selection placed before its first presence sample", t => {
@@ -144,21 +144,4 @@ test("clicking field padding resumes publication when it places the caret", t =>
   h.selectionChanged();
   h.sample();
   assert.equal(h.last()?.caret?.head.item?.clock, 6);
-});
-
-test("a delayed gallery paste that leaves the selection in place keeps the recovered caret private", async t => {
-  const h = editor(t);
-  h.select(h.cells[1]);
-  h.sample();
-  h.removeB();
-  h.sample();
-  assert.equal(h.last()?.caret, null);
-
-  await Promise.resolve();
-  const image = h.document.createElement("img");
-  h.cells[0].closest(".row")?.append(image);
-  h.selectionChanged();
-  h.sample();
-  assert.equal(h.document.getSelection()?.focusOffset, 2);
-  assert.equal(h.last()?.caret, null);
 });

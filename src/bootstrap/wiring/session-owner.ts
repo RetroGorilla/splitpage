@@ -374,10 +374,10 @@ export function adoptShared(build: (ports: SharedOwnerPorts) => SharedDocumentSe
     made.dispose();
     throw new Error("A shared owner is adopted before it is hydrated, so the app hears its first document");
   }
-  made.subscribe(({ changes }) => {
+  made.subscribe(({ kind, changes }) => {
     now.numbering.changed(changes);
     // why: the presence publisher must see the old selection before view listeners restore focus.
-    if (changes.rowsRemoved.length) {
+    if (changes.rowsRemoved.length && kind === "remote" && made.isPeerProjection()) {
       for (const listener of beatRemovalListeners) listener(changes.rowsRemoved);
     }
   });
