@@ -24,11 +24,13 @@ const edit = (s, change) => { const next = structuredClone(s); change(next); ret
 const selectOnly = key => { openProductionPanel(); clearProductionSelection(); toggleCardSelection(key); assert.deepEqual(selectedKeys(), [key]); };
 
 const served = [
-  { name: "registering a production tag", act: () => { assert.equal(registerProductionTag("location", "Park"), true); },
+  { name: "registering a production tag", tagOnly: true, retainedTag: ["location", "Park", "", "needed"],
+    act: () => { assert.equal(registerProductionTag("location", "Park"), true); },
     after: s => edit(s, n => { n.tags.push(["location", "Park", "", "needed"]); }) },
   { name: "finding or adding a person", act: () => { assert.notEqual(findOrAddPerson("Cy"), ""); },
     after: s => edit(s, n => { n.people.push("Cy"); }) },
-  { name: "adding a prop to a shot", act: () => { assert.deepEqual(currentBrollRecords()?.addBrollProp("b1", "Lamp"), { changed: true, held: false }); },
+  { name: "adding a prop to a shot", retainedTag: ["prop", "Lamp", "", "needed"],
+    act: () => { assert.deepEqual(currentBrollRecords()?.addBrollProp("b1", "Lamp"), { changed: true, held: false }); },
     after: s => edit(s, n => { n.tags.push(["prop", "Lamp", "", "needed"]); n.shots[0][4].push("Lamp"); }) },
   { name: "the b-roll status toggle", act: () => { openBrollPanel(); brollButton("broll-status-toggle", "b1").click(); },
     after: s => edit(s, n => { n.shots[0][1] = "shot"; }) },
@@ -44,7 +46,7 @@ const served = [
     const save = document.querySelector('#broll-panel [data-action="broll-bulk-input-save"]'); assert.ok(save); save.click();
     assert.equal(document.getElementById("broll-bulk-input"), null, "the bulk box closes");
   }, after: s => edit(s, n => { n.people.push("Cy"); n.shots[0][2] = "Cy"; }) },
-  { name: "the b-roll prop box", act: () => {
+  { name: "the b-roll prop box", retainedTag: ["prop", "Lamp", "", "needed"], act: () => {
     brollOpen("b1"); typeIn(`#broll-panel .broll-prop-input${B1}`, "Lamp", [4, 4]); FIRE.enter($(`#broll-panel .broll-prop-input${B1}`));
     const box = $(`#broll-panel .broll-prop-input${B1}`); assert.equal(box.value, "", "the prop box empties"); assert.equal(document.activeElement, box);
     box.blur();
@@ -71,7 +73,7 @@ const served = [
   }, after: s => edit(s, n => { n.shots.push(["Park", "unshot", "", false, []]); }) },
   { name: "removing a prop from a shot", act: () => { brollOpen("b1"); brollButton("broll-prop-remove", "b1", `[data-ref="${M}"]`).click(); },
     after: s => edit(s, n => { n.shots[0][4] = []; }) },
-  { name: "the gear quick add", act: () => {
+  { name: "the gear quick add", tagOnly: true, retainedTag: ["gear", "Crane", "", "needed"], act: () => {
     openGearPanel();
     const box = $("#gear-quickadd-input");
     box.value = "Drone\nCrane";
@@ -115,10 +117,12 @@ for (const literal of served) for (const order of ["forward", "reverse"]) {
       assert.deepEqual(hook.nativePeer.freshSnapshot("app"), copies.app);
       assert.deepEqual(warnings(), []);
       assert.deepEqual(undoOwner().sizes(), standalone);
-      assert.equal(hook.nativePeer.step("undo").kind, "written");
+      assert.equal(hook.nativePeer.step("undo").kind, literal.tagOnly ? "unchanged" : "written");
       await Promise.resolve();
       copies = hook.read();
-      assert.deepEqual(shape(copies.app), withZ(start));
+      const undone = withZ(start);
+      if (literal.retainedTag) undone.tags.push(literal.retainedTag);
+      assert.deepEqual(shape(copies.app), undone);
       assert.deepEqual(copies.app, copies.peer);
       assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
       assert.deepEqual(warnings(), []);

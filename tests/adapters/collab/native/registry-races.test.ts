@@ -366,7 +366,7 @@ test("a late lower ID changes the tag identity and preserves the explicit edit o
   }
 });
 
-test("undo of the canonical tag keeps its references and stale commands attached after reload", () => {
+test("a canonical tag retired by an older client keeps its references and stale commands attached after reload", () => {
   registryUndoCopies((left, right, settle) => {
     const create = { kind: "create", collection: "tags", fields: { cat: "prop", name: "Kettle" } } as const;
     const undo = openNativeUndo(left);
@@ -377,7 +377,9 @@ test("undo of the canonical tag keeps its references and stale commands attached
       write(right, { kind: "addProp", id: "bs2", prop: "Kettle" });
       settle();
       assert.deepEqual(record(right, "shots", "bs2")?.props, [{ id: first.created, name: "Kettle" }]);
-      assert.equal(undo.undo().kind, "written");
+      assert.equal(undo.undo().kind, "unchanged");
+      assert.equal(record(left, "tags", first.created)?.name, "Kettle");
+      left.roots.tags.delete(first.created);
       settle();
       const reopened = joinedScript(right, 15);
       try {

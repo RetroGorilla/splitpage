@@ -202,7 +202,8 @@ const crew = [["Crew"], "Crew"];
 const unassigned = [["Crew"], ""];
 const shotPerson = { open: () => editShot("person-new"), box: shotBox("person"), text: "Camera", read: person(shot), before: crew, after: newPerson };
 const shotProp = { open: openShot, box: shotBox("prop"), text: "Lamp", read: shotPropsAndRegistry,
-  before: [["Mug"], ["Mug"], true], after: [["Mug", "Lamp"], ["Lamp", "Mug"], true] };
+  before: [["Mug"], ["Mug"], true], after: [["Mug", "Lamp"], ["Lamp", "Mug"], true],
+  createsProp: true, afterUndo: [["Mug"], ["Lamp", "Mug"], true] };
 const shotLocation = { open: () => editShot("loc-edit"), box: shotBox("loc"), text: "Quay", read: location };
 const shotNotes = { open: openShot, box: shotBox("notes"), text: "Wide", read: notes, submit: blur };
 const mugPerson = { open: () => { openMug(); click(tagAction("person-new")); }, box: tagBox("person"), text: "Camera",
@@ -237,7 +238,7 @@ const routes = [
     submit: input, retry: blur, redraw: renderProduction },
   { name: "Gear quick add", open: openGearPanel, box: "#gear-quickadd-input", text: "Drone\nCrane",
     read: doc => doc.productionTags.filter(entry => entry?.cat === "gear").map(entry => entry.name).sort(),
-    before: ["Drone"], after: ["Crane", "Drone"], submit: () => click("#gear-quickadd-save"), redraw: renderProduction }
+    before: ["Drone"], after: ["Crane", "Drone"], createsTagOnly: true, submit: () => click("#gear-quickadd-save"), redraw: renderProduction }
 ];
 
 async function retryDraft(t, { native, warnings }, route, order) {
@@ -271,7 +272,7 @@ async function retryDraft(t, { native, warnings }, route, order) {
   kept("after release and redraw");
   (route.retry ?? submit)(need(route.box));
   await Promise.resolve();
-  assert.equal(native.revision(), revision + 1, "one accepted write");
+  assert.equal(native.revision(), revision + (route.createsProp ? 2 : 1), "only the accepted submission writes");
   assert.deepEqual(route.read(currentDocument()), saved);
   assert.deepEqual(route.read(peer.document()), before, "local write still held for the peer");
   assert.equal(currentDocument().rows[1].audioText, "Two", "remote write still held for the app");
@@ -279,8 +280,8 @@ async function retryDraft(t, { native, warnings }, route, order) {
   await Promise.resolve();
   assertCopies(t, native, peer, order, route.read, saved);
   assert.deepEqual(warnings(), [refused]);
-  assert.equal(native.commands.undo().kind, "written");
-  assert.deepEqual(route.read(native.document()), before);
+  assert.equal(native.commands.undo().kind, route.createsTagOnly ? "unchanged" : "written");
+  assert.deepEqual(route.read(native.document()), route.createsTagOnly ? saved : route.afterUndo ?? before);
   assert.equal(native.commands.undo().kind, "unchanged");
 }
 

@@ -7,7 +7,7 @@ import { tagCategoryId } from "../../../core/document/tags.ts";
 import type { TagCategoryId } from "../../../core/document/tags.ts";
 import { nativeCellView, nativeMarkName, nativeRangeUnits, nativeTagKey, prepareNativeRuns, writeNativeRuns } from "./inline.ts";
 import type { NativeRangeUnits } from "./inline.ts";
-import { planNativeProductionTag } from "./registry-commands.ts";
+import { planNativeProductionTag, writeNativeTagEntries } from "./registry-commands.ts";
 import { copyArgument, RECORD_WRITTEN, refuseRecord } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
 import { transactPreparedNativeCommand, withNativeCommand } from "./script.ts";
@@ -54,7 +54,6 @@ interface Writes {
 
 const PLAIN: readonly string[] = ["b", "i", "u", "s", "hl", "dir", "cue"];
 const APPLICATION = "\u001f";
-const TAG_ENTRY_ORIGIN = Symbol();
 const WRITTEN: NativeFormatOutcome = Object.freeze({ kind: "written" });
 const UNCHANGED: NativeFormatOutcome = Object.freeze({ kind: "unchanged" });
 
@@ -203,8 +202,7 @@ export function labelNativeVisual(script: NativeScript, range: NativeTextRange, 
     const record = planNativeProductionTag(script, cat, name);
     if (record && typeof record !== "function") return record;
     script.prepareWrite?.();
-    // why: creating the list entry outside the tracked origin lets chip undo leave the entry and its fields intact
-    if (record) script.doc.transact(record, TAG_ENTRY_ORIGIN);
+    if (record) writeNativeTagEntries(script, record);
     script.doc.transact(() => {
       if (replacement) {
         const end = writeNativeRuns(script.doc, live.text, start, replacement, null);

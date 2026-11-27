@@ -13,6 +13,7 @@ import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { posToDom, readSelection } from "../features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
+import { applyGearQuickAdd, openGearPanel } from "../features/tags/panels.ts";
 import { nativeEntrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 
 window.Element.prototype.scrollIntoView = () => {};
@@ -75,6 +76,65 @@ function tab() {
 function keydown(key) {
   return visual().dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, key }));
 }
+
+function quickAddLamp() {
+  openGearPanel();
+  document.getElementById("gear-quickadd-input").value = "Lamp";
+  applyGearQuickAdd();
+  document.getElementById("gear-close").click();
+}
+
+test("shared Gear Quick Add undo keeps a peer's label and edited entry through reload", async t => {
+  const { native, peer } = await start(t, "Lamp");
+  quickAddLamp();
+  await exchange(native, peer);
+  const [{ id }] = peer.document().productionTags;
+  const third = openNativeSession({ kind: "state", state: native.encodeState() }, { actor: "Third" });
+  t.after(() => third.close());
+  const label = peer.commands.anchorText(target, 0, 4);
+  assert.equal(label.kind, "anchored");
+  assert.equal(peer.commands.labelVisual(label.range, { cat: "gear", name: "Lamp", words: "Lamp" }).kind, "written");
+  assert.equal(third.commands.changeRegistry({ kind: "set", collection: "tags", ids: [id],
+    fields: { notes: "Bring a spare bulb", status: "have" } }).kind, "written");
+  assert.equal(applyNativePeerUpdate(native, third.encodeState()), true);
+  await exchange(native, peer);
+  const undo = native.commands.undo();
+  await exchange(native, peer);
+  assert.equal(applyNativePeerUpdate(third, native.encodeState()), true);
+  assert.deepEqual(third.document(), native.document());
+  assert.deepEqual(tags(), [["gear", "Lamp", "Lamp"]]);
+  assert.deepEqual(currentDocument().productionTags.map(tag => [tag.id, tag.notes, tag.status]), [[id, "Bring a spare bulb", "have"]]);
+  assert.equal(undo.kind, "unchanged");
+  const reopened = openNativeSession({ kind: "state", state: native.encodeState() }, { actor: "Reopened" });
+  t.after(() => reopened.close());
+  assert.deepEqual(reopened.document(), native.document());
+});
+
+test("standalone Gear Quick Add undo removes the added record", () => {
+  adoptReplacement(migrateRows({ schema: 2, title: "Standalone gear", paragraphsDecided: true,
+    rows: [{ id: "r1", audioText: "Narration", visualText: "Lamp" }] }));
+  undoOwner().flush();
+  quickAddLamp();
+  assert.deepEqual(currentDocument().productionTags.map(tag => tag.name), ["Lamp"]);
+  select(0);
+  visual().dispatchEvent(new window.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true }));
+  assert.deepEqual(currentDocument().productionTags, []);
+});
+
+test("redo restores the original label name when a peer renamed its orphaned entry", async t => {
+  const { native, peer } = await start(t, "Lamp");
+  toolbar(0, 4, "prop");
+  await exchange(native, peer);
+  const [{ id }] = peer.document().productionTags;
+  assert.equal(native.commands.undo().kind, "written");
+  await exchange(native, peer);
+  assert.equal(peer.commands.changeRegistry({ kind: "set", collection: "tags", ids: [id], fields: { name: "New lamp" } }).kind, "written");
+  await exchange(native, peer);
+  assert.equal(native.commands.redo().kind, "written");
+  await exchange(native, peer);
+  assert.deepEqual(tags(), [["prop", "Lamp", "Lamp"]]);
+  assert.deepEqual(currentDocument().productionTags.map(tag => [tag.id, tag.name]), [[id, "New lamp"]]);
+});
 
 async function exchange(native, peer) {
   assert.equal(applyNativePeerUpdate(native, peer.encodeState()), true);

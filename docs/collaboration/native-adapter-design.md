@@ -1029,10 +1029,10 @@ folded even if every field agrees. The file merge retains displaced primary valu
 For two saved versions of the same ID it retains displaced edits that differ from the common ancestor.
 Script exports with a comments section show these entries there.
 
-Tag creations record their category and normalized name in `tagKeys` outside Undo. The Split Visual tagging
-command creates a missing record outside the tracked origin, then writes the inline mark through the tracked origin.
+Tag creations record their category and normalized name in `tagKeys` outside Undo. Shared tag creation, including
+Gear Quick Add, creates the list entry outside the tracked origin; inline marks and later field edits are tracked.
 Applications of an existing label reuse its record, and concurrent creations still fold by category and normalized name.
-If Undo of a list creation removes its record, its ID still resolves to a live member of that group. That member
+If older Undo history removed a creating record, its ID still resolves to a live member of that group. That member
 can be renamed while the old reference continues to resolve through the recorded key. Explicit removal keeps the
 record tombstoned.
 
@@ -1075,6 +1075,7 @@ If one writer applies a tag while a peer deletes its words, undoing and redoing 
 the deletion can leave the Production entry without its inline mark. Both copies restore the original words
 when the peer undoes. Their restored text has no tag mark because the tag redo ran while the original text was
 absent. The shared production tag app test pins this sequence.
+If a peer renames the orphaned entry before Redo, the restored mark shows its original name and the entry keeps the peer's new name.
 
 **5b. A mark lost with a deleted letter.** A marks `pqr` and types a plain `X` inside it. B deletes `X`, and at the same time C removes the mark from `p`. Every copy then reads `opqr`, with the mark gone from `q` and `r` too. The test runs this with three copies, for a tag and for bold ([format-generated.test.ts](../../tests/adapters/collab/native/format-generated.test.ts), "found by the generated histories"). On raw Yjs with no observer, every copy reads `opqr` when it opened the text before the first updates arrived, and `op[qr|b]` when it opened the text after them (same test). Accepted with no repair writes (Owner). Generated counts: [appendix M](#m-accepted-losses-counted).
 
