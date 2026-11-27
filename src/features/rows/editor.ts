@@ -79,11 +79,22 @@ export function mountRowsEditor(mount: RowsEditorMount): RowsEditor {
   }
 
   function onClick(e: Event): void {
-    if (open) ports.click(e as MouseEvent);
+    if (!open) return;
+    const click = e as MouseEvent;
+    const trigger = click.detail > 0 ? targetOf(click)?.closest<HTMLButtonElement>("button.row-more") : null;
+    ports.click(click);
+    if (trigger?.isConnected && !trigger.disabled) trigger.focus({ preventScroll: true });
   }
 
   function onMouseDown(e: Event): void {
-    if (open) ports.mousedown(e as MouseEvent);
+    if (!open) return;
+    const press = e as MouseEvent;
+    ports.mousedown(press);
+    if (press.defaultPrevented || press.button !== 0) return;
+    const trigger = targetOf(press)?.closest<HTMLButtonElement>("button.row-more");
+    if (!trigger || trigger.disabled) return;
+    // why: Leaving the cell can shift the menu trigger before the pointer is released.
+    press.preventDefault();
   }
 
   function onInput(e: Event): void {
