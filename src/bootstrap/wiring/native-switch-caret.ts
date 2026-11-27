@@ -6,7 +6,7 @@ const UNPLACED = "data-native-caret-unplaced";
 let stopWaiting: (() => void) | null = null;
 
 export function stopNativeCaretWait(scope?: "writer"): void {
-  if (!scope || document.body.getAttribute(UNPLACED) === scope) stopWaiting?.();
+  if (stopWaiting && (!scope || document.body.getAttribute(UNPLACED) === scope)) stopWaiting();
 }
 
 export function waitForNativeCaret(scope?: "writer"): void {
@@ -40,8 +40,8 @@ export function waitForNativeCaret(scope?: "writer"): void {
     clear();
   };
   document.addEventListener("focusin", event => {
-    if (scope && event.target instanceof Element && event.target.matches(".empty-script-input")) stopNativeCaretWait(scope);
-    else clear();
+    clear();
+    if (scope && !inScript(event.target)) stopNativeCaretWait(scope);
   }, options);
   document.addEventListener("selectionchange", clear, options);
   document.addEventListener("pointerdown", event => { if (inScript(event.target)) stopNativeCaretWait(); }, options);

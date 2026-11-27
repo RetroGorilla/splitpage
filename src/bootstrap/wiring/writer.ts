@@ -31,6 +31,7 @@ import { breakUndoGroup, undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
 import { sharedSession, standaloneSession } from "./session-owner.ts";
 import { bindNativeWriterPaint, hasNativeWriterPreview, nativeEditorActive } from "./shared-session.ts";
+import { stopNativeCaretWait } from "./native-switch-caret.ts";
 import type { WholeFieldTextCommit } from "../../application/editing/ports.ts";
 import type { CommandOutcome } from "../../application/session/document-session.ts";
 import { toHtml } from "../../core/text/html.ts";
@@ -121,6 +122,7 @@ export function mountWriterRuntimeFeature() {
           const nativePaint: { binding?: ReturnType<typeof bindNativeWriterPaint> } = {};
           const flow = createFlowWriter({
             ...(nativeEditorActive() ? { nativeHeadingCandidate: (beat: string) => nativePaint.binding?.headingCandidate(beat) ?? false } : {}),
+            selectionPlaced: () => stopNativeCaretWait("writer"),
             openFind: () => { actions.invoke("find", "shortcut"); },
             closeFind: () => { actions.invoke("find", "button", "close"); },
             pictures,
@@ -234,16 +236,18 @@ export function mountWriterRuntimeFeature() {
             openComment: at => { actions.invoke("comment-on-selection", "button", at); }
           });
           const binding = bindNativeWriterPaint(root);
-          if (!binding) return flow;
+          const dispose = () => {
+            if (flow.dispose() === false) return false;
+            stopNativeCaretWait("writer");
+            binding?.dispose();
+            return true;
+          };
+          if (!binding) return { ...flow, dispose };
           nativePaint.binding = binding;
           return { ...flow, settle: () => binding.settle() && flow.settle?.() !== false, finish: () => {
             binding.finish();
             return flow.finish();
-          }, dispose: () => {
-            if (flow.dispose() === false) return false;
-            binding.dispose();
-            return true;
-          } };
+          }, dispose };
         }
       },
       document: documentReader, edits, text, editing: writerEditing, undo: writerUndo,

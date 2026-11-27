@@ -85,6 +85,7 @@ export interface FlowWriterPorts {
   readonly replayPlacement: (recorded: FlowSelectionPair | null, dir: UndoDirection, steps: readonly unknown[]) => WriterReplayPlacement;
   readonly notice: (text: string, tone: "ok" | "warn") => void;
   readonly changed: () => void;
+  readonly selectionPlaced?: () => void;
   readonly selectionMoved: () => void;
   readonly plainVisual: (row: FlowRow) => string;
   readonly beatInput: (event: InputEvent, beat: HTMLElement) => void;

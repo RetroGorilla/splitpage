@@ -61,7 +61,6 @@ export function nativeUndoRoute({ native, admission, input, publish }: NativeUnd
         const writerFocused = document.activeElement?.id === "writer-doc";
         const { selection, narrationPlacementLost } = press(direction);
         if (selection) {
-          if (writerFocused && selection.head.target.cell === "narration") stopNativeCaretWait("writer");
           input()?.show(selection);
         } else if (writerFocused && narrationPlacementLost) {
           if (documentReader.current()?.rows.length) waitForNativeCaret("writer");

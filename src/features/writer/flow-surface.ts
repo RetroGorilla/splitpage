@@ -44,6 +44,7 @@ export interface SurfacePorts {
   readonly undo: (dir: "undo" | "redo") => void;
   readonly notice: (text: string) => void;
   readonly changed: () => void;
+  readonly selectionPlaced?: () => void;
   readonly selectionMoved: (range: FlowRange | null) => void;
   readonly settings: () => SurfaceSettings;
   readonly openFind: () => void;
@@ -406,18 +407,23 @@ export function createSurface(ports: SurfacePorts): Surface {
     return { node: text, offset: Math.min(pos.offset, text.length) };
   }
 
-  function place(range: FlowRange, scroll?: boolean): void {
+  function applySelection(range: FlowRange, scroll?: boolean, placed?: () => void): void {
     const a = domPoint(range.anchor), h = domPoint(range.head);
     const sel = window.getSelection();
     if (!a || !h || !sel) return;
     ports.heldSelection.rememberFlow(epoch, range);
     root.focus({ preventScroll: true });
     sel.setBaseAndExtent(a.node, a.offset, h.node, h.offset);
+    placed?.();
     noteSelection();
     if (scroll) {
       const target = elementOf(h.node);
       if (target) target.scrollIntoView({ block: "nearest" });
     }
+  }
+
+  function place(range: FlowRange, scroll?: boolean): void {
+    applySelection(range, scroll, ports.selectionPlaced);
   }
 
   // why: the app paints from outside on undo, reloads and merges; a beat whose text changed gets a new DOM, so the
@@ -459,7 +465,8 @@ export function createSurface(ports: SurfacePorts): Surface {
     if (!before || !focused) return;
     const now = selection();
     const doc = ports.doc();
-    if (!now || comparePos(doc, now.anchor, before.anchor) !== 0 || comparePos(doc, now.head, before.head) !== 0) place(before);
+    // why: painting can preserve a browser-generated selection while Writer is still waiting for explicit placement
+    if (!now || comparePos(doc, now.anchor, before.anchor) !== 0 || comparePos(doc, now.head, before.head) !== 0) applySelection(before);
     noteSelection();
   }
 
@@ -1066,7 +1073,7 @@ export function createSurface(ports: SurfacePorts): Surface {
         if (before && document.activeElement === root) {
           const after = selection();
           if (!after || comparePos(ports.doc(), before.anchor, after.anchor) !== 0 ||
-              comparePos(ports.doc(), before.head, after.head) !== 0) place(before);
+              comparePos(ports.doc(), before.head, after.head) !== 0) applySelection(before);
         }
       }
     }
