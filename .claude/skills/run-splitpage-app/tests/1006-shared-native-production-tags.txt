@@ -12,7 +12,13 @@ wait Q('#rows .tag-toolbar-picker[aria-hidden=false]')
 click #rows .tag-toolbar-picker[aria-hidden=false] [data-tag-cat=prop]
 wait same()&&V('r1').querySelector('.tag-anchor[data-tag-name=Lamp]')&&S.read().app.productionTags.some(t=>t.cat==='prop'&&t.name==='Lamp')
 key ctrl KeyZ
-wait same()&&!V('r1').querySelector('.tag-anchor')&&S.read().app.productionTags.length===0
+wait same()&&!V('r1').querySelector('.tag-anchor')&&S.read().app.productionTags.length===1
+eval Q('#btn-production').click();Q('#production-modes [data-group="cat"]').click()
+wait Q('#production-list .tag-entity[data-key="prop lamp"] .tag-orphan-badge')?.textContent==='Not in script'
+eval Q('#production-list .tag-entity[data-key="prop lamp"] [data-action=tag-expand]').click()
+expect Q('#production-list .tag-entity[data-key="prop lamp"] [data-action=tag-delete]')?.textContent==='Delete from list'
+key Escape
+caret #rows .visual-cell .cell-editable[data-id=r1]
 key ctrl+shift KeyZ
 wait same()&&V('r1').querySelector('.tag-anchor[data-tag-name=Lamp]')
 caret #rows .visual-cell .cell-editable[data-id=r2]
@@ -22,7 +28,7 @@ key Tab
 wait same()&&V('r2').querySelector('.tag-anchor[data-tag-name=camera]')&&S.read().app.productionTags.some(t=>t.cat==='gear'&&t.name==='camera')
 expect !Q('#tag-open-hint.is-visible')&&document.activeElement===V('r2')
 key ctrl KeyZ
-wait same()&&V('r2').textContent==='GeAr: camera'&&S.read().app.productionTags.length===1
+wait same()&&V('r2').textContent==='GeAr: camera'&&S.read().app.productionTags.length===2
 key ctrl+shift KeyZ
 wait same()&&V('r2').querySelector('.tag-anchor[data-tag-name=camera]')&&S.read().app.productionTags.length===2
 eval S.leave().ok

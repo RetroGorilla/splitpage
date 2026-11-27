@@ -261,7 +261,7 @@ waits for a new caret. App stop and entry rollback release any active wait.
 | Formatting at a caret | A collapsed format toggle warns once and settles any buffered unformatted text immediately across shortcut (`Ctrl+B/I/U`) and input (`formatBold`/`formatItalic`/`formatUnderline`) forms. Plain inline formatting can be applied to an addressable selection (see [Slice 8 editor decisions](#slice-8-editor-decisions)). | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684), [native Audio refusal matrix](../../src/test/shared-native-split-audio-refusals-app.test.mjs), [native suite 1005](../../.claude/skills/run-splitpage-app/tests/1005-shared-native-split-audio-refusals.txt), [Slice 8 test mapping](slice-8-test-mapping.md#split-audio-refusal-audit) |
 | Concurrent full-beat bold and typing | When one copy bolds a whole beat and another concurrently appends plain text before exchange, standard Yjs ordering decides whether the suffix inherits bold (`<strong>Hello!</strong>`) or stays plain (`<strong>Hello</strong>!`) across the two client ID orders. Every copy converges, peer Undo removes bold while keeping the typed suffix plain, and buffered delivery after the bold arrives keeps the suffix plain. | [Native hook app tests](../../src/test/shared-native-hook-mapped-app.test.mjs), [native formatting tests](../../tests/adapters/collab/native/format-commands.test.ts) |
 | Editing inside a Split cell | Enter and Shift+Enter can insert a line break, a selected range can receive inline formatting, and history shortcuts undo and redo the edits. During composition these gestures leave the draft in place. | [Native caller tests](../../src/test/shared-native-callers-mapped-app.test.mjs), [stale-target tests](../../src/test/shared-native-stale-target-app.test.mjs) |
-| Production tags in Split Visual | Select words and choose a category from **Tag**, or type a category keyword and press Tab. Each application contributes a Production record with its mark in one author-local undo step. Records with the same category and name are folded, so Undo leaves another author's application and its record in place. Undoing a typed tag restores the keyword and the words as typed. Shared drafts show the keyword until Tab. | [Shared production tag tests](../../src/test/shared-native-production-tags-app.test.mjs) |
+| Production tags in Split Visual | Select words and choose a category from **Tag**, or type a category keyword and press Tab. A tag reuses the existing Production record for its category and name. Undo removes the inline mark and keeps the Production record and its fields. Undoing a typed tag also restores the keyword and the words as typed. When the last mark is gone, Production shows **Not in script** and offers **Delete from list**. Shared drafts show the keyword until Tab. | [Shared production tag tests](../../src/test/shared-native-production-tags-app.test.mjs) |
 | Other tag and link tools | Starting a tag with the toolbar at a collapsed caret, bracket shortcuts, the legacy tag composer, link editing and Find bulk tags are unavailable. | [#1681](https://github.com/RetroGorilla/splitpage/pull/1681), [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
 | Text clipboard and drag | Rich, script and multiline paste, cut, and text drag and drop are refused. Plain single-line text paste works in an addressable cell. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
 | Split trailing spaces on copy and drag | Copying `Word` followed by a nonbreaking space yields a normal trailing space in plain text and keeps the nonbreaking space in HTML, during sharing and after Leave. The old shared copy and drag payloads both used a nonbreaking space in plain text. Native supplies no custom text drag payload. | [Native app tests](../../src/test/shared-native-measure-undo-mapped-app.test.mjs) |
@@ -1029,9 +1029,12 @@ folded even if every field agrees. The file merge retains displaced primary valu
 For two saved versions of the same ID it retains displaced edits that differ from the common ancestor.
 Script exports with a comments section show these entries there.
 
-Tag creations record their category and normalized name in `tagKeys` outside Undo. After Undo removes the
-creating record, its ID still resolves to a live member of that group. That member can be renamed while the old
-reference continues to resolve through the recorded key. Explicit removal keeps the record tombstoned.
+Tag creations record their category and normalized name in `tagKeys` outside Undo. The Split Visual tagging
+command creates a missing record outside the tracked origin, then writes the inline mark through the tracked origin.
+Applications of an existing label reuse its record, and concurrent creations still fold by category and normalized name.
+If Undo of a list creation removes its record, its ID still resolves to a live member of that group. That member
+can be renamed while the old reference continues to resolve through the recorded key. Explicit removal keeps the
+record tombstoned.
 
 Removal marks every observed member of the folded tag in one undoable transaction. An unseen concurrent addition
 survives and the tag can appear again with that record's fields. Labelled tag removal and surviving-label healing
@@ -1068,7 +1071,10 @@ kept records (E16). Plain Yjs causes both: an undo the tagger had not seen resto
 (4), and a doubled letter kept the tag on one copy (1). Decision 17 flags such a loss. Outcomes that lose nothing:
 [appendix H](#h-outcomes-that-lose-nothing).
 
-If one writer applies a tag while a peer deletes its words, undoing and redoing the tag before the peer undoes the deletion can restore the Production record alone. Both copies restore the original words when the peer undoes. Their restored text has no tag mark because the tag redo ran while the original text was absent. The shared production tag app test pins this sequence.
+If one writer applies a tag while a peer deletes its words, undoing and redoing the tag before the peer undoes
+the deletion can leave the Production entry without its inline mark. Both copies restore the original words
+when the peer undoes. Their restored text has no tag mark because the tag redo ran while the original text was
+absent. The shared production tag app test pins this sequence.
 
 **5b. A mark lost with a deleted letter.** A marks `pqr` and types a plain `X` inside it. B deletes `X`, and at the same time C removes the mark from `p`. Every copy then reads `opqr`, with the mark gone from `q` and `r` too. The test runs this with three copies, for a tag and for bold ([format-generated.test.ts](../../tests/adapters/collab/native/format-generated.test.ts), "found by the generated histories"). On raw Yjs with no observer, every copy reads `opqr` when it opened the text before the first updates arrived, and `op[qr|b]` when it opened the text after them (same test). Accepted with no repair writes (Owner). Generated counts: [appendix M](#m-accepted-losses-counted).
 

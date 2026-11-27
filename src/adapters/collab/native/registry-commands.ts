@@ -335,24 +335,17 @@ function updateTags(script: NativeScript, tags: unknown, fields: unknown, ownerN
   return finish(writes);
 }
 
-export function claimNativeProductionTag(script: NativeScript, cat: string, name: string): NativeRecordOutcome {
+export function planNativeProductionTag(script: NativeScript, cat: string, name: string): (() => void) | Refused | null {
   if (!tagCategoryId(cat) || !trimmed(name, 80)) return refuseRecord("value");
   const prior = namedTag(script.reader.document(), cat, name);
-  const fields: Fields = prior ? {
-    cat, name, notes: prior.notes ?? "", owner: prior.owner ?? "", status: prior.status ?? TAG_STATUS_IDS[0],
-    ...(prior.unmergedEdits?.length ? { unmergedEdits: prior.unmergedEdits } : {})
-  } : { ...defaults("tags"), cat, name };
-  const writes: Write[] = [];
-  const id = planNew(script, writes, "tags", fields);
-  if (typeof id !== "string") return id;
-  if (prior?.id) {
-    const members = script.reader.tagGroup(prior.id) ?? [prior.id];
-    for (const field of nativeTagFields) {
-      const counter = members.reduce((highest, member) => Math.max(highest, nativeTagCounter(script.roots.tags.get(member), field)), 0);
-      if (counter) writes.push(() => { script.roots.tags.get(id)?.set(nativeTagCounterKey(field), counter); });
-    }
+  const existing = prior?.id ? script.roots.tags.get(prior.id) : undefined;
+  if (existing !== undefined) {
+    if (!(existing instanceof Y.Map)) return refuseRecord("stored");
+    if (existing.get("removed") !== true) return null;
   }
-  return finish(writes);
+  const writes: Write[] = [];
+  const id = planNew(script, writes, "tags", { ...defaults("tags"), cat, name });
+  return typeof id === "string" ? () => { finish(writes); } : id;
 }
 
 function removeOrRestore(script: NativeScript, collection: Collection, ids: readonly string[], restore: boolean): Result {

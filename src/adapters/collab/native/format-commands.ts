@@ -7,10 +7,10 @@ import { tagCategoryId } from "../../../core/document/tags.ts";
 import type { TagCategoryId } from "../../../core/document/tags.ts";
 import { nativeCellView, nativeMarkName, nativeRangeUnits, nativeTagKey, prepareNativeRuns, writeNativeRuns } from "./inline.ts";
 import type { NativeRangeUnits } from "./inline.ts";
-import { claimNativeProductionTag } from "./registry-commands.ts";
+import { planNativeProductionTag } from "./registry-commands.ts";
 import { copyArgument, RECORD_WRITTEN, refuseRecord } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
-import { transactPreparedNativeCommand } from "./script.ts";
+import { transactPreparedNativeCommand, withNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability, nativeLiveRange, nativeRangeSnapshot } from "./text-commands.ts";
 import type { NativeLivePiece, NativeRefusal, NativeTextRange } from "./text-commands.ts";
@@ -54,6 +54,7 @@ interface Writes {
 
 const PLAIN: readonly string[] = ["b", "i", "u", "s", "hl", "dir", "cue"];
 const APPLICATION = "\u001f";
+const TAG_ENTRY_ORIGIN = Symbol();
 const WRITTEN: NativeFormatOutcome = Object.freeze({ kind: "written" });
 const UNCHANGED: NativeFormatOutcome = Object.freeze({ kind: "unchanged" });
 
@@ -172,37 +173,45 @@ export function formatNativeCue(script: NativeScript, beat: string, offset: numb
 export function labelNativeVisual(script: NativeScript, range: NativeTextRange, label: NativeVisualLabel): NativeRecordOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refuseRecord(unavailable);
-  return transactPreparedNativeCommand(script, () => ({ snapshot: nativeRangeSnapshot(range), label: copyArgument(() => ({ ...label })) }),
-    ({ snapshot, label: input }) => {
-      if (!snapshot || snapshot.target.cell !== "visual") return refuseRecord("range");
-      if (!input) return refuseRecord("value");
-      const { cat, name, words, prefix = "", completion = null } = input.value;
-      if (!tagCategoryId(cat) || typeof name !== "string" || typeof words !== "string" || !words || typeof prefix !== "string" ||
-        completion !== null && (typeof completion !== "string" || !completion)) return refuseRecord("value");
-      const checked = tagChange(namedTagId(cat, name), true);
-      if (!checked?.tag) return refuseRecord("value");
-      const live = nativeLiveRange(script, snapshot);
-      if (typeof live === "string") return refuseRecord(live);
-      const view = nativeCellView(live.items);
-      if (view.hidden || view.unknown || view.text.slice(live.from, live.until) !== prefix + words) return refuseRecord("range");
-      const start = live.from + prefix.length;
-      const selected = sliceCell(view.runs, live.from, live.until);
-      if (selected.some(run => run.atom || run.marks.href) || sliceCell(view.runs, live.from, start).some(run => run.marks.tag)) {
-        return refuseRecord("range");
-      }
-      const marked = setMark(view.runs, start, live.until, "tag", checked.tag);
-      if (toHtml(marked) === toHtml(view.runs)) return refuseRecord("range");
-      const plan = !completion && planMark(script, { ...live, from: start, pieces: [{ ...live, from: start }] }, checked);
-      const replacement = completion && !selected.some(run => run.marks.tag)
-        ? prepareNativeRuns([{ text: completion, marks: { ...marksAt(view.runs, start), tag: checked.tag } }]) : null;
-      if (!plan && !replacement) return refuseRecord("range");
-      const record = claimNativeProductionTag(script, cat, name);
-      if (record.kind === "refused") return record;
+  return withNativeCommand(script, () => {
+    const snapshot = nativeRangeSnapshot(range), input = copyArgument(() => ({ ...label }));
+    const size = script.sizeRefusal?.(true);
+    if (size) return refuseRecord(size);
+    if (script.closed() || script.reader.isClosed()) return refuseRecord("closed");
+    if (!snapshot || snapshot.target.cell !== "visual") return refuseRecord("range");
+    if (!input) return refuseRecord("value");
+    const { cat, name, words, prefix = "", completion = null } = input.value;
+    if (!tagCategoryId(cat) || typeof name !== "string" || typeof words !== "string" || !words || typeof prefix !== "string" ||
+      completion !== null && (typeof completion !== "string" || !completion)) return refuseRecord("value");
+    const checked = tagChange(namedTagId(cat, name), true);
+    if (!checked?.tag) return refuseRecord("value");
+    const live = nativeLiveRange(script, snapshot);
+    if (typeof live === "string") return refuseRecord(live);
+    const view = nativeCellView(live.items);
+    if (view.hidden || view.unknown || view.text.slice(live.from, live.until) !== prefix + words) return refuseRecord("range");
+    const start = live.from + prefix.length;
+    const selected = sliceCell(view.runs, live.from, live.until);
+    if (selected.some(run => run.atom || run.marks.href) || sliceCell(view.runs, live.from, start).some(run => run.marks.tag)) {
+      return refuseRecord("range");
+    }
+    const marked = setMark(view.runs, start, live.until, "tag", checked.tag);
+    if (toHtml(marked) === toHtml(view.runs)) return refuseRecord("range");
+    const plan = !completion && planMark(script, [{ ...live, from: start }], checked);
+    const replacement = completion && !selected.some(run => run.marks.tag)
+      ? prepareNativeRuns([{ text: completion, marks: { ...marksAt(view.runs, start), tag: checked.tag } }]) : null;
+    if (!plan && !replacement) return refuseRecord("range");
+    const record = planNativeProductionTag(script, cat, name);
+    if (record && typeof record !== "function") return record;
+    script.prepareWrite?.();
+    // why: creating the list entry outside the tracked origin lets chip undo leave the entry and its fields intact
+    if (record) script.doc.transact(record, TAG_ENTRY_ORIGIN);
+    script.doc.transact(() => {
       if (replacement) {
         const end = writeNativeRuns(script.doc, live.text, start, replacement, null);
         live.text.delete(end, words.length);
       } else if (plan) plan();
       if (prefix) live.text.delete(live.from, prefix.length);
-      return RECORD_WRITTEN;
-    }, refuseRecord);
+    }, script.origin);
+    return RECORD_WRITTEN;
+  });
 }

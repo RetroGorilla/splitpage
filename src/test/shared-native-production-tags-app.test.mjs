@@ -99,8 +99,8 @@ for (const [keyword, cat] of [["prop", "prop"], ["location", "location"], ["cast
       if (route === "typed") assert.equal(tab(), false, "Tab completes the keyword");
       else toolbar(0, 6, cat);
       stop();
-      assert.equal(updates.length, 1);
-      assert.equal(applyNativePeerUpdate(peer, updates[0]), true);
+      assert.equal(updates.length, 2);
+      for (const update of updates) assert.equal(applyNativePeerUpdate(peer, update), true);
       await tick();
       assert.deepEqual(tags(), [[cat, "Lamp", "Lamp"]]);
       assert.deepEqual(currentDocument().productionTags.map(({ cat, name }) => [cat, name]), [[cat, "Lamp"]]);
@@ -110,7 +110,7 @@ for (const [keyword, cat] of [["prop", "prop"], ["location", "location"], ["cast
       assert.equal(native.commands.undo().kind, "written");
       await exchange(native, peer);
       assert.equal(currentDocument().rows[0].visualText, before);
-      assert.deepEqual(currentDocument().productionTags, []);
+      assert.deepEqual(currentDocument().productionTags.map(({ cat, name }) => [cat, name]), [[cat, "Lamp"]]);
       assert.equal(native.commands.redo().kind, "written");
       await exchange(native, peer);
       assert.equal(currentDocument().rows[0].visualText, after);
@@ -213,10 +213,10 @@ test("another author's tag keeps the Production record after the first author un
   assert.equal(peer.commands.undo().kind, "written");
   await exchange(native, peer);
   assert.deepEqual(tags(), []);
-  assert.deepEqual(currentDocument().productionTags, []);
+  assert.deepEqual(currentDocument().productionTags.map(tag => tag.name), ["Lamp"]);
 });
 
-test("a surviving production tag claim carries the peer's notes and field history", async t => {
+test("reusing a production tag preserves its field history across chip undo and redo", async t => {
   const { native, peer } = await start(t, "Lamp Lamp");
   toolbar(0, 4, "prop");
   await exchange(native, peer);
@@ -241,6 +241,70 @@ test("a surviving production tag claim carries the peer's notes and field histor
   assert.deepEqual(currentDocument().productionTags.map(({ name, notes, status }) => [name, notes, status]),
     [["Lamp", "Packed the bulb", "returned"]]);
 });
+
+test("undoing chips keeps Production fields, and undoing the field edit restores the prior values", async t => {
+  const { native, peer } = await start(t, "Lamp Lamp");
+  toolbar(0, 4, "prop");
+  await exchange(native, peer);
+  const [{ id }] = peer.document().productionTags;
+  const set = fields => peer.commands.changeRegistry({ kind: "set", collection: "tags", ids: [id], fields });
+  assert.equal(set({ notes: "Bring a bulb", status: "have" }).kind, "written");
+  const second = peer.commands.anchorText(target, 5, 9);
+  assert.equal(second.kind, "anchored");
+  assert.equal(peer.commands.labelVisual(second.range, { cat: "prop", name: "Lamp", words: "Lamp" }).kind, "written");
+  await exchange(native, peer);
+  assert.equal(native.commands.undo().kind, "written");
+  await exchange(native, peer);
+  assert.equal(peer.commands.undo().kind, "written");
+  await exchange(native, peer);
+  assert.deepEqual(tags(), []);
+  const fields = () => currentDocument().productionTags.map(tag => [tag.id, tag.notes, tag.status]);
+  assert.deepEqual(fields(), [[id, "Bring a bulb", "have"]]);
+  assert.equal(peer.commands.undo().kind, "written");
+  await exchange(native, peer);
+  assert.deepEqual(fields(), [[id, "", "needed"]]);
+});
+
+test("a peer field edit stays undoable after another author reuses the tag", async t => {
+  const { native, peer } = await start(t, "Lamp Lamp");
+  toolbar(0, 4, "prop");
+  await exchange(native, peer);
+  const [{ id }] = peer.document().productionTags;
+  assert.equal(peer.commands.changeRegistry({ kind: "set", collection: "tags", ids: [id],
+    fields: { notes: "Bring a bulb", status: "have" } }).kind, "written");
+  await exchange(native, peer);
+  toolbar(5, 9, "prop");
+  await exchange(native, peer);
+  assert.equal(peer.commands.undo().kind, "written");
+  await exchange(native, peer);
+  assert.equal(tags().length, 2);
+  assert.deepEqual(currentDocument().productionTags.map(tag => [tag.id, tag.notes, tag.status]), [[id, "", "needed"]]);
+});
+
+for (const [notes, reverse] of [["Bulb packed", false], ["Bulb packed", true], ["", false], ["", true]]) {
+  test(`a ${notes ? "notes edit survives chip undo and a concurrent label" : "notes clear survives a concurrent label"} (${reverse ? "reverse" : "forward"})`, async t => {
+    const { native, peer } = await start(t, "Lamp Lamp");
+    toolbar(0, 4, "prop");
+    await exchange(native, peer);
+    const [{ id }] = native.document().productionTags;
+    const set = (session, value) => session.commands.changeRegistry({ kind: "set", collection: "tags", ids: [id], fields: { notes: value } });
+    assert.equal(set(peer, "Bring a bulb").kind, "written");
+    await exchange(native, peer);
+    const third = openNativeSession({ kind: "state", state: native.encodeState() }, { actor: "Third" });
+    t.after(() => third.close());
+    const second = peer.commands.anchorText(target, 5, 9);
+    assert.equal(second.kind, "anchored");
+    assert.equal(peer.commands.labelVisual(second.range, { cat: "prop", name: "Lamp", words: "Lamp" }).kind, "written");
+    assert.equal(set(third, notes).kind, "written");
+    if (notes) assert.equal(native.commands.undo().kind, "written");
+    for (const source of reverse ? [third, peer] : [peer, third]) assert.equal(applyNativePeerUpdate(native, source.encodeState()), true);
+    await exchange(native, peer);
+    assert.equal(applyNativePeerUpdate(third, native.encodeState()), true);
+    assert.deepEqual(third.document(), native.document());
+    assert.equal(tags().length, notes ? 1 : 2);
+    assert.deepEqual(currentDocument().productionTags.map(tag => [tag.id, tag.notes, tag.unmergedEdits]), [[id, notes, undefined]]);
+  });
+}
 
 test("the tag picker follows its untouched selection when peer typing repaints the cell", async t => {
   const { native, peer } = await start(t, "Lamp on desk");
