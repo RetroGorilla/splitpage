@@ -2,7 +2,9 @@ const HOOK_NAME = /__(?:[A-Za-z]+Test|splitpageFormats)\b/g;
 
 export function helpMarkdown(markdown, collabUi) {
   if (collabUi) return markdown;
-  return markdown.split(/(?=^## )/m).filter(section => !/^## Collaboration\r?\n/.test(section)).join("");
+  return markdown.split(/(?=^## )/m)
+    .filter(section => !/^## (?:Collaboration|What's new in 0\.5\.0)\r?\n/.test(section))
+    .join("");
 }
 
 export const STILL_IN_RELEASE = Object.freeze([]);

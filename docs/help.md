@@ -20,13 +20,14 @@ The instructions below describe this release.
   their beat. In Split and Writer, see co-writers' carets and selections in
   their colours.
 - **Keep writing offline.** Your edits stay on this device and sync when
-  you reconnect. **Review changes** shows overlapping edits and lets you
-  put back your beat.
-- **Shared version history.** See who edited each version. Open an earlier
-  version to read it, save it as a separate script, or put one beat back.
-- **Pick up where you left off.** Shared scripts can reopen after a restart
-  or from Recent. The desktop that shared a saved script keeps its file up
-  to date.
+  you reconnect. **Review changes** shows edits that may have overlapped, and
+  **Put it back** adds your offline version as a new beat.
+- **Shared version history.** See the versions the relay keeps and, where
+  recorded, who edited them. Open an earlier version to read it, save it as
+  a separate script, or put one beat back.
+- **Pick up where you left off.** Shared scripts reopen after a restart: from
+  Recent in the desktop app, or from **Shared scripts on this device** in the
+  browser. The desktop that shared a saved script keeps its file up to date.
 
 ## What's new in 0.4.3
 

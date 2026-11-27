@@ -24,13 +24,19 @@ This release lets you write a script together.
 - See where other people's carets and selections are in Split and Writer, with
   their name and colour.
 - Keep writing when the relay can't be reached. Your changes stay on this
-  device and sync when you reconnect. If edits overlapped, **Review changes**
-  shows them, and **Put it back** restores your beat.
+  device and sync when you reconnect. If edits may have overlapped, **Review
+  changes** shows them, and **Put it back** adds your offline version as a
+  new beat.
 - **Version history** for a shared script lists the versions the relay keeps
-  and who edited each one. Open a version to read it, save it as a separate
-  script, or put one beat back.
-- Shared scripts come back after a restart and appear in Recent with a
-  `Shared` badge.
+  and, where recorded, who edited each one. Open a version to read it, save it
+  as a separate script, or put one beat back.
+- Shared scripts come back after a restart: in the desktop app they appear in
+  Recent with a `Shared` badge, and in the browser under **Shared scripts on
+  this device**. If the desktop app closes unexpectedly, reopen a shared
+  script from Recent or from its original file.
+- **Manage sharing on this computer** gives the owner controls on a second
+  desktop that has the relay set up.
+- Typing stays responsive in Split and Writer while co-writers are working.
 - Pictures in a shared script travel through the relay. If an export has to
   leave out pictures that are still unavailable, it tells you.
 - The sharing and offline review screens fit on phones. Their controls work
@@ -39,15 +45,18 @@ This release lets you write a script together.
 ### Fixed
 - Click buttons through the empty space beside and between notifications.
 - Keep every tag picker choice clickable while editing a tag, with Done available when the picker closes.
-- The Production panel stays open while you use **Edit tag**.
-- Find and Replace keeps an inline picture in place when replacing the text
-  around it.
+- The Production panel stays open beside the script while you use **Edit tag**.
+- Find and Replace no longer deletes an inline picture or video. A match next
+  to one is replaced; a word interrupted by one is skipped.
 - In Writer, Undo steps back through Markdown shortcuts in reverse order. In
-  a shared script, Redo puts the caret back inside the restored text after a
-  beat join.
-- In Writer, Tab accepts the tag suggestion shown in a Visual box, even when the narration's selection changes just before.
+  a shared script, Redo after a co-writer joins beats puts the caret at the
+  nearest edge of the restored text; if that text is gone, Writer waits for
+  you to place the caret before typing.
+- In Writer, Tab accepts the tag suggestion shown in a Visual box, even when
+  a selection event arrives late.
 - When two people create the same tag at the same time, Production shows one
-  tag with all its uses.
+  tag with all its uses. Differing notes, assignments or statuses appear as
+  **Unmerged edit** entries.
 - Delete or cut a selection of beats in Split in one step in a shared script.
 - If the owner changes a link password, returning guests can enter the new
   password from their shared copy and resume syncing.
