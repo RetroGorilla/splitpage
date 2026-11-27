@@ -182,8 +182,10 @@ test("a replacement click starts from the current position and the cancelled cal
   env.frame(100);
   cancel();
   env.row.scrollIntoView = () => { env.scroll(2100); };
-  env.start(100);
+  animateRundownClick(env.row, env.view, env.document);
   stale?.(1200);
+  assert.deepEqual(env.position(), [45, 975]);
+  env.frame(100);
   assert.deepEqual(env.position(), [45, 975]);
   env.frame(300);
   assert.deepEqual(env.position(), [45, 2100]);
