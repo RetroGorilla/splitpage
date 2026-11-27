@@ -3,6 +3,7 @@ viewport 1400 900
 wait document.querySelectorAll('#rows .row').length > 0
 eval (function(){window.F=window.__splitpageFormats;window.U=window.__undoTest;window.old=F.state();F.openFile(new File([JSON.stringify({paragraphsDecided:true,title:'Header editor lifetime',rows:['r1','r2','r3'].map(function(id){return {id:id,audioText:id+' narration.',visualText:''};}),sections:[{id:'s1',name:'Opening',firstSceneId:'r1'},{id:'s2',name:'Ending',firstSceneId:'r3'}]})],'lifetime.splitpage'));return true;})()
 wait F.state() !== old && F.state().title === 'Header editor lifetime'
+eval window.rowsSettled = function(){ return Array.from(document.querySelectorAll('#rows > *, #rows .section-rename')).every(function(el){ return el.getAnimations().every(function(a){ return !a.pending && a.playState !== 'running'; }); }); }; true
 click #rows [data-section-id="s1"] .section-name
 press Renamed opening
 click #rows [data-section-id="s1"] .section-more summary
@@ -15,6 +16,7 @@ click #rows .row[data-id="r2"] .row-more
 wait document.querySelector('#rows .row[data-id="r2"] [data-action="add-section"]').getBoundingClientRect().width > 0
 click #rows .row[data-id="r2"] [data-action="add-section"]
 press Middle
+wait rowsSettled()
 click #rows [data-section-id="s2"] .section-name
 wait F.state().sections.length === 3
 expect F.state().sections[1].name === 'Middle'
@@ -25,6 +27,7 @@ expect document.activeElement === document.querySelector('#rows [data-section-id
 focus #rows .row[data-id="r2"] .audio-cell .cell-editable
 key ctrl KeyZ
 wait F.state().sections.length === 2
+wait rowsSettled()
 eval U.flush();window.before=JSON.stringify(F.state());window.steps=U.sizes().undo;true
 click #rows .row[data-id="r2"] .row-more
 wait document.querySelector('#rows .row[data-id="r2"] [data-action="add-section"]').getBoundingClientRect().width > 0
