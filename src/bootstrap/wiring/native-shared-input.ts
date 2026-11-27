@@ -10,6 +10,7 @@ import { sceneBeforeBeat, sceneForBeat, scenesInOrder, storedSceneName } from ".
 import type { SceneDocument } from "../../core/document/scenes.ts";
 import { beatPos, enterAt, HEADING_MARKER, headingPos, startsParagraph } from "../../core/flow/flow.ts";
 import type { FlowDoc, FlowPos, FlowRange } from "../../core/flow/flow.ts";
+import { cueShortcutRange } from "../../core/text/cues.ts";
 import { breakLine, deleteRange, markThroughout, replaceText, sliceCell, typingMarks } from "../../core/text/edits.ts";
 import { cellLength, cleanText, projection } from "../../core/text/runs.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
@@ -717,6 +718,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     live.innerHTML = html;
     const caretPoint = posToDom(live, offset);
     if (!cueShortcutHint(caretPoint.node, caretPoint.offset)) return;
+    if (!cueShortcutRange(scriptCellOf(html), offset)) return;
     const at = native.narrationCaret(beat, offset);
     const caret = at && caretAnchor(at.beat, at.offset);
     if (!caret) return;

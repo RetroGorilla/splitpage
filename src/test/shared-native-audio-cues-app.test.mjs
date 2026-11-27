@@ -214,3 +214,30 @@ test("a formatting boundary inside the prefix keeps the colon literal", async t 
   type(audio(), ":");
   await check(audio, "<strong>SF</strong>X: tone");
 });
+
+test("a literal mid-line colon stays in the typing undo group", async t => {
+  await enter(t, "Add ");
+  audio().focus();
+  setCellSelection(audio(), 4);
+  type(audio(), "SFX");
+  type(audio(), ":");
+  type(audio(), "tail");
+  await check(audio, "Add SFX:tail");
+  history(audio());
+  await check(audio, "Add ");
+});
+
+test("first Undo restores the break when the next line carries a dormant cue mark", async t => {
+  await enter(t, "SFX<br>Music tone");
+  audio().focus();
+  setCellSelection(audio(), 9);
+  type(audio(), ":");
+  await check(audio, "SFX<br>" + cue("Music: tone"));
+  deleteSelection(audio(), 4, 11);
+  await check(audio, "SFX<br>tone");
+  setCellSelection(audio(), 3, 4);
+  type(audio(), ":");
+  await check(audio, cue("SFX:tone"));
+  history(audio());
+  await check(audio, "SFX<br>tone");
+});
