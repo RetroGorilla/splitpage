@@ -126,6 +126,8 @@ test("gallery folding visits each of 10000 incoming links once", () => {
   Map.prototype.get = function (key: unknown) { if (typeof key === "string" && key.startsWith("u:")) visits++; return original.call(this, key) as unknown; };
   try {
     const result = projectSharedGroupGallery(root, [root], records);
+    // why: A failed fold can leave thousands of overflow slots, making the full object diff expensive.
+    assert.equal(result.overflow.length, 0);
     assert.deepEqual(result, { row: { id: "R1", imageRef, imageLinks: Array.from({ length: 10000 }, (_, index) => ({ href: "https://example.test/" + index })) }, overflow: [] });
     assert.equal(visits, 10000);
   } finally { Map.prototype.get = original; }
