@@ -214,7 +214,12 @@ export function mountWriterRuntimeFeature() {
               return false;
             },
             beatSelection: beat => {
-              if (!beat) { dismissedGhost = null; hideTagGhost(); return; }
+              if (!beat) {
+                dismissedGhost = null;
+                const cell = tagGhost?.cellEl;
+                if (!cell || cell !== document.activeElement || !cell.classList.contains("wr-flow-visual-text")) hideTagGhost();
+                return;
+              }
               updateTagGhost(beat);
               if (tagGhost && dismissedGhost &&
                   tagGhost.cellEl.getAttribute("data-id") === dismissedGhost.cellEl.getAttribute("data-id") &&
