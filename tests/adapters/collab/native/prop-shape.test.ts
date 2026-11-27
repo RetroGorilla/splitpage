@@ -284,10 +284,17 @@ test("same-name prop additions keep both IDs and show one through undo, redo and
       assert.ok(propsOf(left).has(one.id) && propsOf(left).has(two.id));
       assert.deepEqual(read(left), [...initial, winner]);
       assert.equal(undo.undo().kind, "written");
-      assert.deepEqual(read(actor), [...initial, other]);
+      assert.equal(propsOf(actor).has(winner.id), false);
+      assert.deepEqual(read(actor), [...initial, winner]);
       settle();
-      assert.deepEqual(read(left), [...initial, other]);
+      for (const copy of [left, right]) {
+        assert.equal(propsOf(copy).has(winner.id), false);
+        assert.equal(propsOf(copy).has(other.id), true);
+        assert.deepEqual(copy.reader.tagGroup(other.id), [winner.id, other.id]);
+        assert.deepEqual(read(copy), [...initial, winner]);
+      }
       assert.equal(undo.redo().kind, "written");
+      assert.equal(propsOf(actor).has(winner.id), true);
       assert.deepEqual(read(actor), [...initial, winner]);
       settle();
       assert.deepEqual(read(left), [...initial, winner]);
