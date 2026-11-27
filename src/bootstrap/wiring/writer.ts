@@ -216,8 +216,12 @@ export function mountWriterRuntimeFeature() {
             beatSelection: beat => {
               if (!beat) {
                 dismissedGhost = null;
-                const cell = tagGhost?.cellEl;
-                if (!cell || cell !== document.activeElement || !cell.classList.contains("wr-flow-visual-text")) hideTagGhost();
+                const ghost = tagGhost;
+                if (ghost && ghost.cellEl === document.activeElement && ghost.cellEl.classList.contains("wr-flow-visual-text")) {
+                  const caret = document.getSelection();
+                  if (caret?.isCollapsed && caret.anchorNode === ghost.node && caret.anchorOffset === ghost.offset) return;
+                }
+                hideTagGhost();
                 return;
               }
               updateTagGhost(beat);

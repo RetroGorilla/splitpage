@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval window.F=window.__splitpageFormats; window.U=window.__undoTest; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:5,title:'Nested typing',paragraphsDecided:true,productionTags:[{id:'t_umbrella',cat:'prop',name:'umbrella',owner:'',notes:'Red one',status:'have'},{id:'t_rain',cat:'sound',name:'rain on umbrella roof',owner:'',notes:'Outdoor',status:'have'}],rows:Array.from({length:9},function(_,i){return {id:'r'+i,audioText:'Beat '+i,visualText:''};}),comments:[]})],'nested.splitpage'))
+eval window.F=window.__splitpageFormats; window.U=window.__undoTest; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:5,title:'Nested typing',paragraphsDecided:true,productionTags:[{id:'t_umbrella',cat:'prop',name:'umbrella',owner:'',notes:'Red one',status:'have'},{id:'t_rain',cat:'sound',name:'rain on umbrella roof',owner:'',notes:'Outdoor',status:'have'}],rows:Array.from({length:10},function(_,i){return {id:'r'+i,audioText:'Beat '+i,visualText:''};}),comments:[]})],'nested.splitpage'))
 wait F.state().title === 'Nested typing'
 eval window.c=function(i){return document.querySelectorAll('#rows .row')[i].querySelector('.visual-cell .cell-editable');}; window.go=function(i){var el=c(i);el.focus();var r=document.createRange();r.selectNodeContents(el);r.collapse(false);getSelection().removeAllRanges();getSelection().addRange(r);}; window.kw=function(el){return !!el.querySelector('.plain-tag-keyword');}; window.clean=function(el){return el.textContent.replace(/\u200b/g,'');}; go(0)
 press sfx: rain on [umbrella]
@@ -85,4 +85,11 @@ press r
 wait ghost().classList.contains('is-visible') && ghost().textContent === 'ella'
 click .wr-flow-visual-close
 expect document.activeElement !== v() && !ghost().classList.contains('is-visible')
+eval W.openVisual('r9')
+press [umb
+wait ghost().classList.contains('is-visible') && ghost().textContent === 'rella'
+key ArrowLeft
+wait document.activeElement === v() && getSelection().isCollapsed && getSelection().anchorOffset === 3
+wait !ghost().classList.contains('is-visible')
+expect clean(v()) === '[umb'
 quit
