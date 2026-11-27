@@ -23,7 +23,7 @@ import { changes } from "./ports/preferences.ts";
 import { hashedPersonColor } from "../../core/document/person-colors.ts";
 import { presenceName } from "../../../shared/collaboration-presence.ts";
 import { mountPresenceView } from "../../features/collaboration/presence.ts";
-import { onBeatsRemoving, sharedPresence } from "./ports/presence.ts";
+import { sharedPresence } from "./ports/presence.ts";
 import { mountPresenceCarets } from "../../features/collaboration/presence-carets.ts";
 import { nativePresenceCarets } from "./shared-session.ts";
 import { cssAttr } from "../../features/common/dom.ts";
@@ -172,8 +172,7 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
   }));
   const presence = sharedPresence();
   const stopPresence = mountPresenceView({
-    collaboration, presence, onBeatsRemoving,
-    onLocalEdit: listener => nativePresenceCarets()?.onLocalEdit(listener) ?? (() => {}),
+    collaboration, document: documentReader, presence,
     identity() {
       const name = presenceName(getEditorName());
       return { name, color: preferences().myColor() || hashedPersonColor(name) };

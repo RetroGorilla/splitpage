@@ -1,12 +1,13 @@
 import type { DocumentReader } from "../../../application/session/document-reader.ts";
 import type { CommonDocumentSession, StandaloneDocumentSession } from "../../../application/session/document-session.ts";
-import { cancelRefresh, currentDocument, documentNumbering, liveSession, noteSessionEdit, onDocumentReplaced, onRefresh, onSessionChange, readSession, requestRefresh, stampDocument } from "../session-owner.ts";
+import { cancelRefresh, currentDocument, documentNumbering, liveSession, noteSessionEdit, onBeatsRemoving, onDocumentReplaced, onRefresh, onSessionChange, readSession, requestRefresh, stampDocument } from "../session-owner.ts";
 
 export const documentReader: DocumentReader = {
   numbering: documentNumbering,
   current: currentDocument,
   read: readSession,
   onChange: onSessionChange,
+  onBeatsRemoving,
   onReplaced: onDocumentReplaced,
   onRefresh: onRefresh
 };

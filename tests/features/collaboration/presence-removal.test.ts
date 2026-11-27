@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { mountPresenceView } from "../../../src/features/collaboration/presence.ts";
 import { cssAttr } from "../../../src/features/common/dom.ts";
+import { mountCellReach } from "../../../src/features/editing/cell-reach.ts";
 import { fakePresenceView } from "../fakes.ts";
 import { viewHarness } from "../view-harness.ts";
 
@@ -32,15 +33,14 @@ function editor(t: TestContext) {
   });
   t.mock.timers.enable({ apis: ["setTimeout"] });
   el("rows").innerHTML = ["A", "B", "C"].map(beat =>
-    `<div class="cell-editable" tabindex="0" data-id="${beat}" data-field="audioText">Beat ${beat}</div>`).join("");
+    `<div class="row"><div class="cell"><div class="field-wrap"><div class="cell-editable" tabindex="0" data-id="${beat}" data-field="audioText">Beat ${beat}</div></div></div></div>`).join("");
   const [first, removed, survivor] = document.querySelectorAll<HTMLElement>("#rows .cell-editable");
   assert.ok(first && removed && survivor);
   const cells = [first, removed, survivor] as const;
-  const removals = subscribers<readonly string[]>(), localEdits = subscribers<undefined>();
+  const removals = subscribers<readonly string[]>();
   const point = { type: { client: 1, clock: 0 }, item: null, assoc: 0 } as const;
   const { collaboration, ports, published } = fakePresenceView({
-    onBeatsRemoving: removals.listen,
-    onLocalEdit: localEdits.listen,
+    document: { onBeatsRemoving: removals.listen },
     caret: (_location, _cell, ends) => ({ anchor: point, head: { ...point, item: { client: 1, clock: ends.head } } })
   });
   const dispose = mountPresenceView(ports);
@@ -49,11 +49,12 @@ function editor(t: TestContext) {
   const sample = () => t.mock.timers.tick(100);
   collaboration.enter();
   connect(true);
+  const selectionChanged = () => document.dispatchEvent(new window.Event("selectionchange"));
   function select(cell: HTMLElement, anchor = 1, head = 4) {
     const text = cell.firstChild as Text;
     cell.focus();
     document.getSelection()?.setBaseAndExtent(text, anchor, text, head);
-    document.dispatchEvent(new window.Event("selectionchange"));
+    selectionChanged();
   }
   function removeB() {
     removals.emit(["B"]);
@@ -61,7 +62,7 @@ function editor(t: TestContext) {
     cells[1].remove();
     if (focused === cells[1]) select(cells[0], 2, 2);
   }
-  return { window, cells, connect, select, removeB, sample, last: () => published.at(-1), localEdits, dispose, removals };
+  return { window, document, cells, connect, select, selectionChanged, removeB, sample, last: () => published.at(-1), dispose, removals };
 }
 
 test("deletion hides a selection placed before its first presence sample", t => {
@@ -95,14 +96,12 @@ test("a local edit resumes publication when the editor consumes its input", t =>
   assert.equal(h.last()?.caret, null);
   h.window.addEventListener("keydown", event => {
     event.stopImmediatePropagation();
-    h.localEdits.emit(undefined);
     h.select(h.cells[2], 1, 1);
   }, { capture: true, once: true });
   h.cells[0].dispatchEvent(new h.window.KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true }));
   h.sample();
   assert.equal(h.last()?.beat, "C");
   assert.equal(h.last()?.caret?.head.item?.clock, 1);
-  assert.equal(h.localEdits.count(), 0);
 });
 
 test("relay reconnect keeps a recovered caret private until deliberate placement", t => {
@@ -118,9 +117,48 @@ test("relay reconnect keeps a recovered caret private until deliberate placement
   assert.equal(h.last()?.beat, "A");
   assert.equal(h.last()?.caret, null);
   h.cells[0].dispatchEvent(new h.window.Event("pointerdown", { bubbles: true }));
+  h.select(h.cells[0], 2, 2);
+  h.sample();
+  assert.equal(h.last()?.caret, null);
   h.select(h.cells[0], 3, 3);
   h.sample();
   assert.equal(h.last()?.caret?.head.item?.clock, 3);
   h.dispose();
   assert.equal(h.removals.count(), 0);
+});
+
+test("clicking field padding resumes publication when it places the caret", t => {
+  const h = editor(t);
+  const reach = mountCellReach({ window: h.window });
+  t.after(reach.dispose);
+  h.select(h.cells[1]);
+  h.sample();
+  h.removeB();
+  h.sample();
+  assert.equal(h.last()?.caret, null);
+
+  const padding = h.cells[0].parentElement;
+  assert.ok(padding);
+  padding.dispatchEvent(new h.window.Event("pointerdown", { bubbles: true }));
+  padding.dispatchEvent(new h.window.MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+  h.selectionChanged();
+  h.sample();
+  assert.equal(h.last()?.caret?.head.item?.clock, 6);
+});
+
+test("a delayed gallery paste that leaves the selection in place keeps the recovered caret private", async t => {
+  const h = editor(t);
+  h.select(h.cells[1]);
+  h.sample();
+  h.removeB();
+  h.sample();
+  assert.equal(h.last()?.caret, null);
+
+  await Promise.resolve();
+  const image = h.document.createElement("img");
+  h.cells[0].closest(".row")?.append(image);
+  h.selectionChanged();
+  h.sample();
+  assert.equal(h.document.getSelection()?.focusOffset, 2);
+  assert.equal(h.last()?.caret, null);
 });

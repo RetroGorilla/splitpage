@@ -106,10 +106,10 @@ test("the presence view sends the focused cell's selection as a caret, clamping 
   const removalListeners = new Set<(ids: readonly string[]) => void>();
   const caret = { anchor: { type: { client: 1, clock: 0 }, item: null, assoc: 0 }, head: { type: { client: 1, clock: 0 }, item: null, assoc: 0 } } as const;
   const { collaboration, ports, published } = fakePresenceView({
-    onBeatsRemoving: listener => {
+    document: { onBeatsRemoving: listener => {
       removalListeners.add(listener);
       return () => { removalListeners.delete(listener); };
-    },
+    } },
     caret: (where, cell, ends) => { asked.push([where.beat, where.side, (cell as HTMLElement).dataset.id, ends]); return caret; }
   });
   const dispose = mountPresenceView(ports);
@@ -155,6 +155,7 @@ test("the presence view sends the focused cell's selection as a caret, clamping 
   assert.equal(h.document.getSelection()?.focusOffset, 1, "local focus recovery can keep its caret");
   writer.dispatchEvent(new h.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
   h.document.getSelection()?.collapse(first?.firstChild ?? null, 2);
+  h.document.dispatchEvent(new h.window.Event("selectionchange"));
   t.mock.timers.tick(100);
   assert.deepEqual(asked.at(-1), ["r2", "audioText", "r2", { anchor: 2, head: 2 }]);
   assert.deepEqual(published.at(-1)?.caret, caret);

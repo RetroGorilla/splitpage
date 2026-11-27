@@ -5,6 +5,7 @@ export interface DocumentReader<Current extends DocumentView = DocumentView> ext
   readonly numbering: () => DocumentNumbering;
   readonly current: () => Current | null;
   readonly onChange: CommonDocumentSession["subscribe"];
+  readonly onBeatsRemoving: (listener: (ids: readonly string[]) => void) => () => void;
   readonly onReplaced: (listener: () => void) => () => void;
   readonly onRefresh: (listener: (jobs: ReadonlySet<string>) => void) => () => void;
 }

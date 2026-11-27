@@ -4,11 +4,12 @@ import { domKeys, domToPos } from "../common/cell-dom.ts";
 import type { PresenceViewPorts } from "./ports.ts";
 
 const EDITABLE = "#rows .cell-editable, #writer-doc, .wr-flow-visual-text";
-const PLACEMENT_KEYS = /^(Arrow(Left|Right|Up|Down)|Home|End|PageUp|PageDown|Tab)$/;
 interface Located {
   readonly location: PresenceLocation;
   readonly cell: HTMLElement | null;
 }
+
+type RecoveredPosition = Pick<PresenceLocation, "beat" | "side"> & CellEnds;
 
 function cellLocation(view: PresenceLocation["view"], cell: HTMLElement | null): Located {
   const beat = cell?.dataset.id;
@@ -48,11 +49,6 @@ export function selectionEnds(document: Document, cell: Element): CellEnds | nul
     return { anchor: before ? 0 : domKeys(cell).length, head };
   }
   return { anchor: domToPos(cell, anchorNode, selection.anchorOffset) ?? head, head };
-}
-
-function localCaret(document: Document, ports: Pick<PresenceViewPorts, "caret">, { location, cell }: Located): PresenceCaret | null {
-  const ends = cell && selectionEnds(document, cell);
-  return cell && ends ? ports.caret(location, cell, ends) : null;
 }
 
 type MarkerRule =
@@ -115,50 +111,39 @@ export function mountPresenceView(ports: PresenceViewPorts): () => void {
   let markerObserver: MutationObserver | undefined;
   let stopIdentity: (() => void) | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let awaitPlacement: AbortController | undefined;
-  let stopLocalEdits: (() => void) | undefined;
+  let paused: { recovered?: RecoveredPosition | null } | undefined;
   let showing = false;
+
+  function sampledCaret({ location, cell }: Located): PresenceCaret | null {
+    const ends = cell && selectionEnds(document, cell);
+    if (paused) {
+      const { recovered } = paused;
+      if (recovered === undefined) {
+        paused.recovered = ends ? { beat: location.beat, side: location.side, ...ends } : null;
+        return null;
+      }
+      if (!ends || (recovered && recovered.beat === location.beat && recovered.side === location.side &&
+          recovered.anchor === ends.anchor && recovered.head === ends.head)) return null;
+      paused = undefined;
+    }
+    return cell && ends ? ports.caret(location, cell, ends) : null;
+  }
 
   function sample(): void {
     timer ??= setTimeout(() => {
       timer = undefined;
       const located = locate(document);
-      ports.setLocal({ ...ports.identity(), ...located.location, caret: awaitPlacement ? null : localCaret(document, ports, located) });
+      ports.setLocal({ ...ports.identity(), ...located.location, caret: sampledCaret(located) });
     }, 100);
   }
 
-  function endPlacementWait(): void {
-    awaitPlacement?.abort();
-    awaitPlacement = undefined;
-    stopLocalEdits?.();
-    stopLocalEdits = undefined;
-  }
-
-  function placed(): void {
-    endPlacementWait();
-    if (showing) sample();
-  }
-
-  function navigation(event: Event): void {
-    if (event instanceof window.KeyboardEvent && !PLACEMENT_KEYS.test(event.key) &&
-        !((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a")) return;
-    if (!(event instanceof window.KeyboardEvent && event.key === "Tab") &&
-        !(event.target instanceof window.Element && event.target.closest(EDITABLE))) return;
-    placed();
-  }
-
   function clearRemovedCaret(removed: readonly string[]): void {
-    if (awaitPlacement || !ports.collaboration.snapshot().active) return;
+    if (!ports.collaboration.snapshot().active) return;
     const at = location(document);
     if (!at.beat || !removed.includes(at.beat)) return;
     ports.setLocal({ ...ports.identity(), ...at, caret: null });
     // why: repaint can restore local focus in another beat without the user placing a new caret.
-    awaitPlacement = new window.AbortController();
-    const { signal } = awaitPlacement;
-    for (const type of ["pointerdown", "keydown"]) {
-      document.addEventListener(type, navigation, { signal, capture: true });
-    }
-    stopLocalEdits = ports.onLocalEdit(placed);
+    paused = {};
     if (showing) sample();
   }
 
@@ -234,7 +219,7 @@ export function mountPresenceView(ports: PresenceViewPorts): () => void {
 
   function sync(): void {
     const { active, relay, refusal, mergeTooLarge } = ports.collaboration.snapshot();
-    if (!active && awaitPlacement) endPlacementWait();
+    if (!active) paused = undefined;
     const online = active && relay.connected && relay.firstSyncDone && !refusal && !mergeTooLarge;
     if (showing === online) return;
     showing = online;
@@ -247,7 +232,7 @@ export function mountPresenceView(ports: PresenceViewPorts): () => void {
 
   const unlisten = ports.collaboration.onChange(sync);
   const unpaint = ports.presence.onChange(updateMarks);
-  const unremove = ports.onBeatsRemoving(clearRemovedCaret);
+  const unremove = ports.document.onBeatsRemoving(clearRemovedCaret);
   sync();
-  return () => { unlisten(); unpaint(); unremove(); stop(); endPlacementWait(); };
+  return () => { unlisten(); unpaint(); unremove(); stop(); };
 }

@@ -57,9 +57,8 @@ export function fakePresenceView(overrides: Partial<PresenceViewPorts> = {}) {
   const published: PresenceProfile[] = [];
   const ports: PresenceViewPorts = {
     collaboration,
+    document: { onBeatsRemoving: () => () => {} },
     presence,
-    onBeatsRemoving: () => () => {},
-    onLocalEdit: () => () => {},
     identity: () => ({ name: "Ada", color: "#80BDFB" }),
     onIdentityChange: () => () => {},
     setLocal: profile => { published.push(profile); },
@@ -514,6 +513,7 @@ export function fakeDocument<Current extends DocumentView = DocumentView>(initia
     current: () => held,
     read: (select) => select(held),
     onChange: changes.add,
+    onBeatsRemoving: () => () => {},
     onReplaced: replaced.add,
     onRefresh: refreshes.add
   };
