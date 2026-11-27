@@ -172,7 +172,7 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
   }));
   const presence = sharedPresence();
   const stopPresence = mountPresenceView({
-    collaboration, presence,
+    collaboration, document: documentReader, presence,
     identity() {
       const name = presenceName(getEditorName());
       return { name, color: preferences().myColor() || hashedPersonColor(name) };

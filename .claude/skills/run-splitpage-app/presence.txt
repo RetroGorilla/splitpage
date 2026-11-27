@@ -98,9 +98,36 @@ click #shared-pill
 wait document.querySelector('[data-here-now] button')?.textContent.includes('Renamed Peer')
 click [data-here-now] button
 expect document.activeElement === Q(window,'r2','visualText') && !document.querySelector('#shared-popover').matches(':popover-open')
+eval window.highlight=()=>Q(window,'r1','audioText').querySelector('mark');window.savedHighlight=highlight()?.textContent;window.pclick=(el,a,h)=>{el.dispatchEvent(new P.PointerEvent('pointerdown',{bubbles:true}));return pplace(el,a,h)};true
+eval pplace(Q(P,'r2','audioText'),1,6)
+wait near(Q(window,'r2','audioText'),6) && spans().length===1
+expect spans()[0].style.getPropertyValue('--presence-caret-color')==='#EF958E'
+expect savedHighlight.endsWith('First beat')
+jsclick #rows [data-action="delete-row"][data-id="r2"]
+jsclick #rows [data-action="delete-row"][data-id="r2"]
+wait !Q(window,'r2','audioText') && !Q(P,'r2','audioText')
+wait dot(rd(P.document.activeElement.dataset.id))
+eval new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))
+eval JSON.stringify({recoveredBeat:P.document.activeElement.dataset.id,caretColor:mark()?.style.getPropertyValue('--presence-caret-color')??null,selectionColors:spans().map(span=>span.style.getPropertyValue('--presence-caret-color')),highlight:highlight()?.textContent})
+expect !mark() && spans().length===0 && highlight()?.textContent===savedHighlight
+expect P.document.activeElement===Q(P,'r1','audioText') && P.getSelection().isCollapsed && Q(P,'r1','audioText').contains(P.getSelection().focusNode)
+click #shared-pill
+expect document.querySelector('[data-here-now] button')?.textContent.includes('Renamed Peer')
+click [data-sharing="close"]
+eval pclick(Q(P,'r3','audioText'),3,3)
+wait near(Q(window,'r3','audioText'),3) && spans().length===0
+jsclick #rows [data-action="delete-row"][data-id="r3"]
+jsclick #rows [data-action="delete-row"][data-id="r3"]
+wait !Q(window,'r3','audioText') && !Q(P,'r3','audioText')
+wait dot(rd('r1'))
+eval new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))
+expect !mark() && spans().length===0
+eval pclick(Q(P,'r1','audioText'),1,4)
+wait near(Q(window,'r1','audioText'),4) && spans().length===1
+expect spans()[0].style.getPropertyValue('--presence-caret-color')==='#EF958E' && dot(rd('r1'))
 eval P.__sharedTest.leave().then(result=>result.ok)
-wait !document.querySelector('#shared-pill .person-avatar') && !dot(rd('r2'))
+wait !document.querySelector('#shared-pill .person-avatar') && !dot(rd('r1'))
 wait !mark()
 expect !P.document.querySelector('#shared-pill')
 eval __sharedTest.leave().then(result=>result.ok)
-expect !document.querySelector('#shared-pill') && !dot(rd('r2'))
+expect !document.querySelector('#shared-pill') && !dot(rd('r1'))
