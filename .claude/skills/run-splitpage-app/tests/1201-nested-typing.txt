@@ -1,6 +1,6 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval window.F=window.__splitpageFormats; window.U=window.__undoTest; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:5,title:'Nested typing',paragraphsDecided:true,productionTags:[{id:'t_umbrella',cat:'prop',name:'umbrella',owner:'',notes:'Red one',status:'have'},{id:'t_rain',cat:'sound',name:'rain on umbrella roof',owner:'',notes:'Outdoor',status:'have'}],rows:Array.from({length:8},function(_,i){return {id:'r'+i,audioText:'Beat '+i,visualText:''};}),comments:[]})],'nested.splitpage'))
+eval window.F=window.__splitpageFormats; window.U=window.__undoTest; window.W=window.__writerFlowTest; F.openFile(new File([JSON.stringify({schema:5,title:'Nested typing',paragraphsDecided:true,productionTags:[{id:'t_umbrella',cat:'prop',name:'umbrella',owner:'',notes:'Red one',status:'have'},{id:'t_rain',cat:'sound',name:'rain on umbrella roof',owner:'',notes:'Outdoor',status:'have'}],rows:Array.from({length:10},function(_,i){return {id:'r'+i,audioText:'Beat '+i,visualText:''};}),comments:[]})],'nested.splitpage'))
 wait F.state().title === 'Nested typing'
 eval window.c=function(i){return document.querySelectorAll('#rows .row')[i].querySelector('.visual-cell .cell-editable');}; window.go=function(i){var el=c(i);el.focus();var r=document.createRange();r.selectNodeContents(el);r.collapse(false);getSelection().removeAllRanges();getSelection().addRange(r);}; window.kw=function(el){return !!el.querySelector('.plain-tag-keyword');}; window.clean=function(el){return el.textContent.replace(/\u200b/g,'');}; go(0)
 press sfx: rain on [umbrella]
@@ -56,8 +56,15 @@ expect F.state().productionTags.find(function(t){return t.id==='t_rain';}).notes
 expect F.state().productionTags.find(function(t){return t.id==='t_umbrella';}).status === 'have'
 click #btn-write
 wait W.on()
+eval window.ghost=()=>document.getElementById('tag-ghost'); var p={kind:'beat',rowId:'r6',offset:6}; W.place({anchor:p,head:p})
+press [umb
+wait ghost().classList.contains('is-visible') && ghost().textContent === 'rella'
 eval W.openVisual('r6'); window.v=function(){return document.querySelector('.wr-flow-visual-text');}; window.__tabDiag=null; window.__onTab=function(e){ if(e.key!=='Tab') return; window.removeEventListener('keydown',window.__onTab,true); var g=document.getElementById('tag-ghost'), og=document.getElementById('tag-open-ghost'), oh=document.getElementById('tag-open-hint'), a=document.activeElement, s=getSelection(), n=s&&s.anchorNode, el=v(); window.__tabDiag={ ghost:!!(g&&g.classList.contains('is-visible')), ghostText:g?g.textContent:'', openGhost:!!(og&&og.classList.contains('is-visible')), openHint:!!(oh&&oh.classList.contains('is-visible')), focus:a?(a.id||a.className||a.tagName):null, focusInV:!!(el&&a&&el.contains(a)), caret:s&&s.rangeCount?{offset:s.anchorOffset,collapsed:s.isCollapsed,node:n?n.nodeName:null,inV:!!(el&&n&&el.contains(n)),text:n&&n.nodeType===3?n.nodeValue:null}:null, kw:el?kw(el):false, vText:el?clean(el):null }; }; window.addEventListener('keydown',window.__onTab,true); true
+wait document.activeElement === v() && !ghost().classList.contains('is-visible')
 press sfx: rain on [umb
+wait document.getElementById('tag-ghost').classList.contains('is-visible') && document.getElementById('tag-ghost').textContent === 'rella'
+eval document.dispatchEvent(new Event('selectionchange'))
+expect document.activeElement === v() && ghost().classList.contains('is-visible') && ghost().textContent === 'rella'
 key Tab
 eval 'tab1 ' + JSON.stringify(window.__tabDiag)
 expect kw(v()) && v().querySelector('[data-tag-cat="prop"]').textContent === 'umbrella'
@@ -69,4 +76,20 @@ press sfx: rain on [umbrella]
 key Escape
 expect v().querySelector('[data-tag-cat="prop"]') !== null && !kw(v())
 expect clean(v()) === 'sfx: rain on umbrella'
+eval document.querySelector('.wr-flow-visual-close').click(); W.openVisual('r8')
+press [umb
+wait ghost().classList.contains('is-visible') && ghost().textContent === 'rella'
+key Escape
+expect document.activeElement === v() && !ghost().classList.contains('is-visible')
+press r
+wait ghost().classList.contains('is-visible') && ghost().textContent === 'ella'
+click .wr-flow-visual-close
+expect document.activeElement !== v() && !ghost().classList.contains('is-visible')
+eval W.openVisual('r9')
+press [umb
+wait ghost().classList.contains('is-visible') && ghost().textContent === 'rella'
+key ArrowLeft
+wait document.activeElement === v() && getSelection().isCollapsed && getSelection().anchorOffset === 3
+wait !ghost().classList.contains('is-visible')
+expect clean(v()) === '[umb'
 quit

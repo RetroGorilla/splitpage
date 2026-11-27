@@ -214,7 +214,16 @@ export function mountWriterRuntimeFeature() {
               return false;
             },
             beatSelection: beat => {
-              if (!beat) { dismissedGhost = null; hideTagGhost(); return; }
+              if (!beat) {
+                dismissedGhost = null;
+                const ghost = tagGhost;
+                if (ghost && ghost.cellEl === document.activeElement && ghost.cellEl.classList.contains("wr-flow-visual-text")) {
+                  const caret = document.getSelection();
+                  if (caret?.isCollapsed && caret.anchorNode === ghost.node && caret.anchorOffset === ghost.offset) return;
+                }
+                hideTagGhost();
+                return;
+              }
               updateTagGhost(beat);
               if (tagGhost && dismissedGhost &&
                   tagGhost.cellEl.getAttribute("data-id") === dismissedGhost.cellEl.getAttribute("data-id") &&
