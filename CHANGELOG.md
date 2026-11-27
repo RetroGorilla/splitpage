@@ -45,6 +45,7 @@ This release lets you write a script together.
 - In Writer, Undo steps back through Markdown shortcuts in reverse order. In
   a shared script, Redo puts the caret back inside the restored text after a
   beat join.
+- In Writer, Tab accepts the tag suggestion shown in a Visual box, even when the narration's selection changes just before.
 - When two people create the same tag at the same time, Production shows one
   tag with all its uses.
 - Delete or cut a selection of beats in Split in one step in a shared script.

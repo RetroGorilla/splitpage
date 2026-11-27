@@ -28,9 +28,6 @@ The instructions below describe this release.
   or from Recent. The desktop that shared a saved script keeps its file up
   to date.
 
-- **Leaving a shared edit.** If a co-writer restores a beat that was removed during your
-  composition, Leave retries the pending text when its original edit range is still valid.
-
 ## What's new in 0.4.3
 
 The instructions below describe this release.
