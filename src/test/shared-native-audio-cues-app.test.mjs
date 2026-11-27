@@ -19,9 +19,9 @@ const audio = () => document.querySelector('#rows .cell-editable[data-id="r1"][d
 const writer = () => document.querySelector('#writer-doc .wr-beat[data-id="r1"]');
 const cue = text => `<span class="audio-cue">${text}</span>`;
 
-async function enter(t, audioText) {
+async function enter(t, audioText, next = "Next beat") {
   adoptReplacement(migrateRows({ title: "Sound cues", paragraphsDecided: true,
-    rows: [{ id: "r1", audioText }, { id: "r2", audioText: "Next beat" }] }));
+    rows: [{ id: "r1", audioText }, { id: "r2", audioText: next }] }));
   assert.deepEqual(await shared.enter(), { ok: true });
   t.after(() => {
     writerControls().closeWriter();
@@ -112,4 +112,57 @@ test("shared Writer narration creates and replays the same cue as Split Audio", 
   await check(writer, "Music: theme<br>Next");
   history(writer(), true);
   await check(writer, cue("Music: theme") + "<br>Next");
+});
+
+test("a cue in a joined beat formats and replays on its own line", async t => {
+  await enter(t, "Lead", "Words<br>SFX tone");
+  assert.equal(peer.join("r2", "r1").kind, "written");
+  await check(audio, "Lead Words<br>SFX tone");
+  audio().focus();
+  setCellSelection(audio(), 14);
+  type(audio(), ":");
+  await check(audio, "Lead Words<br>" + cue("SFX: tone"));
+  history(audio());
+  await check(audio, "Lead Words<br>SFX: tone");
+  history(audio(), true);
+  await check(audio, "Lead Words<br>" + cue("SFX: tone"));
+});
+
+test("a peer can uncover the cue prefix while the preceding letter is buffered", async t => {
+  await enter(t, "A sf click");
+  audio().focus();
+  setCellSelection(audio(), 4);
+  type(audio(), "x");
+  assert.equal(peer.delete("r1", 0, 2).kind, "written");
+  await Promise.resolve();
+  type(audio(), ":");
+  await check(audio, cue("sfx: click"));
+  assert.deepEqual(cellSelection(audio()), { from: 4, to: 4 });
+});
+
+test("retyping a cue colon records a formatting step even when the line used to be a cue", async t => {
+  await enter(t, "SFX tone");
+  audio().focus();
+  setCellSelection(audio(), 3);
+  type(audio(), ":");
+  await check(audio, cue("SFX: tone"));
+  setCellSelection(audio(), 3, 4);
+  assert.equal(audio().dispatchEvent(new window.InputEvent("beforeinput", {
+    bubbles: true, cancelable: true, inputType: "deleteContentBackward"
+  })), false);
+  await check(audio, "SFX tone");
+  type(audio(), ":");
+  await check(audio, cue("SFX: tone"));
+  history(audio());
+  await check(audio, "SFX: tone");
+  history(audio(), true);
+  await check(audio, cue("SFX: tone"));
+});
+
+test("a formatting boundary inside the prefix keeps the colon literal", async t => {
+  await enter(t, "<strong>SF</strong>X tone");
+  audio().focus();
+  setCellSelection(audio(), 3);
+  type(audio(), ":");
+  await check(audio, "<strong>SF</strong>X: tone");
 });

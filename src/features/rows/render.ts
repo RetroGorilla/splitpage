@@ -1091,6 +1091,10 @@ export function maybeDirectionShortcut(e: InputEvent, cellEl: Element): void {
 
 const CUE_HINT_RE = /(sfx|music)[ \t\u00a0]*:$/i;
 
+export function cueShortcutHint(node: Node, offset: number): boolean {
+  return node.nodeType === 3 && CUE_HINT_RE.test((node as Text).data.slice(0, offset).replace(/\u200B/g, ""));
+}
+
 export function maybeCueShortcut(e: InputEvent, cellEl: Element): void {
   if (e.inputType !== "insertText" || !e.data || e.data.charAt(e.data.length - 1) !== ":") return;
   if (!isDirectionCell(cellEl)) return;
@@ -1098,7 +1102,7 @@ export function maybeCueShortcut(e: InputEvent, cellEl: Element): void {
   if (!s || !s.rangeCount || !s.isCollapsed) return;
   const r = s.getRangeAt(0);
   const node = r.startContainer, offset = r.startOffset;
-  if (node.nodeType !== 3 || !CUE_HINT_RE.test((node as Text).data.slice(0, offset).replace(/\u200B/g, ""))) return;
+  if (!cueShortcutHint(node, offset)) return;
   ports.editing.cells().edit(cellEl, function (cell, sel) {
     if (!sel || sel.from !== sel.to) return null;
     const next = cueShortcut(cell, sel.from);

@@ -17,7 +17,7 @@ import type { Marks, Run } from "../../core/text/runs.ts";
 import type { NativePlainMark } from "../../adapters/collab/native/format-commands.ts";
 import { domToPos, posToDom, readSelection } from "../../features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
-import { noteFieldPainted, renderRow } from "../../features/rows/render.ts";
+import { cueShortcutHint, noteFieldPainted, renderRow } from "../../features/rows/render.ts";
 import { undoGesture } from "../../features/undo/routes.ts";
 import { scriptCellOf } from "../richtext.ts";
 import { guardUnload } from "../startup/page-lifetime.ts";
@@ -64,7 +64,6 @@ type TrackedPaint = ReturnType<NativeInputPorts["native"]["trackNarrationPaint"]
 
 interface SelectionCapture {
   readonly indices: NativeTextPlacement;
-  readonly cue?: true;
   inserted?: readonly [RelativePoint | null, RelativePoint | null];
   removed?: "written" | "discarded";
 }
@@ -715,11 +714,18 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   function markTypedCue(beat: string, point: RelativePoint): void {
     const offset = native.narrationOffset(beat, { from: point }, -1), html = native.narrationHtml(beat);
     if (offset === null || html == null) return;
+    const live = document.createElement("div");
+    live.innerHTML = html;
+    const caretPoint = posToDom(live, offset);
+    if (!cueShortcutHint(caretPoint.node, caretPoint.offset)) return;
     const span = cueShortcutRange(scriptCellOf(html), offset);
     if (!span) return;
-    const target = { beat, cell: "narration" } as const;
-    const cue = native.commands.anchorText(target, span.from, span.to);
-    const caret = native.commands.anchorText(target, offset);
+    const from = native.narrationCaret(beat, span.from, true), to = native.narrationCaret(beat, span.to);
+    const at = native.narrationCaret(beat, offset);
+    if (!from || !to || !at || from.beat !== to.beat || from.beat !== at.beat) return;
+    const target = { beat: from.beat, cell: "narration" } as const;
+    const cue = native.commands.anchorText(target, from.offset, to.offset);
+    const caret = native.commands.anchorText(target, at.offset);
     if (cue.kind !== "anchored" || caret.kind !== "anchored") return;
     // why: the first Undo takes off the cue mark and leaves the typed colon in place
     const step = native.commands.formatText.withSelection(caret.range, cue.range, { kind: "plain", mark: "cue", on: true });
@@ -786,7 +792,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (result.kind === "written") {
         lastWrite = at;
         if (buffered.surface === writerNarration) refusedJoinedHeadings.delete(buffered.beat);
-        const cuePoint = selection?.cue ? result.selection?.[1] : null;
+        const cuePoint = selection?.indices[2] ? result.selection?.[1] : null;
         if (cuePoint) markTypedCue(buffered.beat, cuePoint);
         const caret = cuePoint ?? result.caret;
         if (moveCaret && caret) placement = { buffered, caret: visualCaret ?? caret };
@@ -953,11 +959,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return buffered.units >= BATCH_UNITS || /\s$/.test(buffered.text);
   }
 
-  function finishTypedCue(buffered: Draft): boolean {
-    const { cell, previewCaret, selection } = buffered;
-    if (!cueShortcutRange(scriptCellOf(cell.innerHTML), previewCaret)) return false;
-    finish({ cue: true, indices: [null, previewCaret - selection.from] });
-    return true;
+  function finishTypedCue(buffered: Draft): void {
+    finish({ indices: [null, buffered.previewCaret - buffered.selection.from, true] });
   }
 
   function caretAnchor(beat: string, offset: number) {
@@ -1408,8 +1411,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (buffered && !buffered.deletion && insideDraft(buffered, cell, selection)) {
       reviseDraft(buffered, selection, text);
       preview(cell, selection, text);
-      if (text.endsWith(":") && buffered.field === "audioText" && finishTypedCue(buffered)) return;
-      if (atBatchBoundary(buffered)) finish();
+      if (text.endsWith(":") && buffered.field === "audioText") finishTypedCue(buffered);
+      else if (atBatchBoundary(buffered)) finish();
       return;
     }
     if (!isTitle && touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return; }
@@ -1429,7 +1432,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     draft = typeof anchored === "string" ? next : anchored;
     preview(current.cell, current.selection, text);
     if (typeof anchored === "string") { stop(anchored); return; }
-    if (text.endsWith(":") && anchored.field === "audioText" && finishTypedCue(anchored)) return;
+    if (text.endsWith(":") && anchored.field === "audioText") { finishTypedCue(anchored); return; }
     if (anchored.field === "visualText" || atBatchBoundary(anchored)) {
       const reason = finish();
       if (!reason && anchored.field === "visualText" && anchored.cell.closest("#rows")) {
