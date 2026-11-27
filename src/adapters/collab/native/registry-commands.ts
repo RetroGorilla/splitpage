@@ -335,6 +335,10 @@ function updateTags(script: NativeScript, tags: unknown, fields: unknown, ownerN
   return finish(writes);
 }
 
+export function ensureNativeProductionTag(script: NativeScript, cat: string, name: string): NativeRecordOutcome {
+  return updateTags(script, [{ cat, name }], {}, undefined, undefined);
+}
+
 function removeOrRestore(script: NativeScript, collection: Collection, ids: readonly string[], restore: boolean): Result {
   const writes: Write[] = [];
   const root = script.roots[collection];

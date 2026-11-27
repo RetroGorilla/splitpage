@@ -4,6 +4,11 @@ What changed for a person using Splitpage, newest first. The same entries
 appear in the app under **Help**. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions are in `VERSION`.
 
+## Unreleased
+
+### Added
+- Add production tags in the Visual column of a shared script. Select words and choose **Tag**, or type `Prop: lamp` and press **Tab**.
+
 ## 0.5.0 — 2026-11-27
 
 This release lets you write a script together.

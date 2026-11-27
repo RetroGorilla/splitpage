@@ -9,7 +9,7 @@ import {
 import type { NativeCommentTarget, NativeNewComment, NativeNewReply } from "./comment-commands.ts";
 import { convertToNativeScript } from "./convert.ts";
 import type { NativeConversionPorts } from "./convert.ts";
-import { formatNativeCue, formatNativeText } from "./format-commands.ts";
+import { formatNativeCue, formatNativeText, labelNativeVisual } from "./format-commands.ts";
 import { createNativeHeading, removeNativeHeading, renameNativeHeading, restoreNativeHeading } from "./heading-commands.ts";
 import { createFirstNativeBeat, insertNativeBeatAdjacent, putBackNativeBeat } from "./insert-commands.ts";
 import { compareNativeOfflineNotice } from "./offline-notice.ts";
@@ -394,6 +394,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
       editNativeTitle(script, range, "", (target, live) => beforeDeletion(target, live, direction, at), false, undefined, placement), writing, false),
     formatText: bind(formatNativeText, adding),
     formatCue: bind(formatNativeCue, adding),
+    labelVisual: bind(labelNativeVisual, adding),
     splitRow: bind(splitNativeRow, adding, true, "split"),
     deleteAndSplit: bindCompound(deleteAndSplitNativeRow, "split"),
     putBack: bind(putBackNativeBeat, adding),

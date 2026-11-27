@@ -466,13 +466,32 @@ function writeHint(el: HTMLElement, catId: TagCategoryId, name: string) {
   el.classList.add("is-visible");
 }
 
+export function showPlainTagHint(cell: Element, start: number, cat: TagCategoryId, name: string): void {
+  const el = hintEl();
+  if (!el) return;
+  writeHint(el, cat, name);
+  const point = posToDom(cell, start), at = document.createRange();
+  at.setStart(point.node, point.offset);
+  const place = hintPlaceAt(cell, el, at);
+  el.style.left = place.left + "px";
+  el.style.top = place.top + "px";
+}
+
+export function hidePlainTagHint(): void {
+  hintEl()?.classList.remove("is-visible");
+}
+
 function hintPlace(o: OpenPlainTag, el: HTMLElement) {
-  const w = el.offsetWidth, h = el.offsetHeight;
   const at = document.createRange();
   at.setStartAfter(o.span);
   at.collapse(true);
-  const rect = at.getClientRects()[0] || o.cellEl.getBoundingClientRect();
-  const cellRect = o.cellEl.getBoundingClientRect();
+  return hintPlaceAt(o.cellEl, el, at);
+}
+
+function hintPlaceAt(cell: Element, el: HTMLElement, at: Range) {
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const cellRect = cell.getBoundingClientRect();
+  const rect = at.getClientRects()[0] || cellRect;
   let top = cellRect.bottom + 6;
   if (top + h > window.innerHeight - 8) top = Math.max(8, cellRect.top - h - 6);
   return { left: Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - w - 8)), top: top };
@@ -593,7 +612,7 @@ function plainTagBoundaryMarks(marks: Marks, nested = false) {
     .map(name => [name, marks[name as keyof Marks]]));
 }
 
-function existingPlainTagEnd(cell: readonly Run[], from: number, nested = false) {
+export function existingPlainTagEnd(cell: readonly Run[], from: number, nested = false) {
   const boundary = plainTagBoundaryMarks(marksAt(cell, from), nested);
   let pos = 0;
   for (const run of cell) {
