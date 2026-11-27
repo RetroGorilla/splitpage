@@ -378,12 +378,17 @@ function openTagTyping(fixture, writer) {
   const lines = writer
     ? ["click #btn-write", "wait window.__writerFlowTest.on()", "eval window.__writerFlowTest.openVisual(window.__splitpageFormats.state().rows[1].id)"]
     : ["caret #rows .row:nth-of-type(2) .visual-cell .cell-editable", "key end"];
-  lines.push("key Space", "press prop:", "expect document.querySelector('.plain-tag-keyword') !== null", "eval window.__perf.reset()");
-  for (let i = 0; i < 20; i++) lines.push("key Space", `sleep ${KEY_GAP_MS}`);
-  lines.push("sleep 200", `eval window.__perf.take('${fixture} ${surface} open tag spaces')`, "eval window.__perf.reset()");
-  for (const token of "abcdefghijabcdefghij") lines.push(`press ${token}`, `sleep ${KEY_GAP_MS}`);
-  lines.push("sleep 200", `eval window.__perf.take('${fixture} ${surface} open tag name')`, "key Escape");
+  lines.push("key Space", "press prop:", "expect document.querySelector('.plain-tag-keyword') !== null", ...openTagTypingSamples(`${fixture} ${surface}`));
   if (writer) lines.push("eval document.querySelector('.wr-flow-visual-close').click()", "key Escape");
+  return lines;
+}
+
+export function openTagTypingSamples(label) {
+  const lines = ["eval window.__perf.reset()"];
+  for (let i = 0; i < 20; i++) lines.push("key Space", `sleep ${KEY_GAP_MS}`);
+  lines.push("sleep 200", `eval window.__perf.take('${label} open tag spaces')`, "eval window.__perf.reset()");
+  for (const token of "abcdefghijabcdefghij") lines.push(`press ${token}`, `sleep ${KEY_GAP_MS}`);
+  lines.push("sleep 200", `eval window.__perf.take('${label} open tag name')`, "key Escape");
   return lines;
 }
 

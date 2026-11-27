@@ -6,7 +6,7 @@ import { Server } from "@hocuspocus/server";
 import { openNativeSession } from "../src/adapters/collab/native/session.ts";
 import { cells } from "../tests/adapters/collab/native/helpers.ts";
 import { structureScript } from "../tests/adapters/collab/native/structure-harness.ts";
-import { PROBE } from "./perf-record.mjs";
+import { openTagTypingSamples, PROBE } from "./perf-record.mjs";
 import { REPO } from "./source-scan.mjs";
 
 const driver = ".claude/skills/run-splitpage-app/driver.mjs";
@@ -75,6 +75,7 @@ function benchmark() {
     ...long ? [] : ["eval Q(P,'r2','visualText').focus();true"],
     ...splitTyping("audio", "audioText", "Split typing"),
     ...long ? [] : splitTyping("visual", "visualText", "Split Visual typing"),
+    ...long ? [] : ["key Space", "press prop:", ...openTagTypingSamples("shared Split Visual")],
     "click #btn-write",
     "wait window.__writerFlowTest.on()",
     "eval window.w=document.querySelector('#writer-doc');w.focus();const beat=w.querySelector('.wr-beat[data-id=r2]');getSelection().collapse(beat,beat.childNodes.length);true",

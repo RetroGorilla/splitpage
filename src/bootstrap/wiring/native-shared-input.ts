@@ -20,7 +20,7 @@ import type { NativePlainMark, NativeVisualLabel } from "../../adapters/collab/n
 import { domToPos, posToDom, readSelection } from "../../features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
 import { cueShortcutHint, noteFieldPainted, renderRow } from "../../features/rows/render.ts";
-import { existingPlainTagEnd, hidePlainTagHint, matchPlainTagKeyword, plainTagPhrase, showPlainTagHint } from "../../features/tags/plain-tags.ts";
+import { existingPlainTagEnd, hidePlainTagHint, plainTagKeywordAtCaret, plainTagPhrase, showPlainTagHint, updatePlainTagHint } from "../../features/tags/plain-tags.ts";
 import { showToolbarTagPicker } from "../../features/tags/toolbar-picker.ts";
 import { undoGesture } from "../../features/undo/routes.ts";
 import { scriptCellOf } from "../richtext.ts";
@@ -276,10 +276,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   let placement: { readonly buffered: Draft; readonly caret: RelativePoint | number } | null = null;
   let lastWrite: number | null = null;
   let stopWriterPaint: (() => void) | null = null;
-  let tagPicker: (() => void) | null = null;
+  let tagPicker: { readonly cell: HTMLElement; readonly close: () => void; readonly reopen: () => void } | null = null;
   let typedTag: {
-    readonly keyword: NonNullable<ReturnType<typeof matchPlainTagKeyword>>;
+    readonly keyword: NonNullable<ReturnType<typeof plainTagKeywordAtCaret>>["kw"];
     readonly range: NativeTextRange;
+    readonly cell: Element;
+    readonly start: number;
+    readonly candidates: Parameters<typeof registryCompletion>[0];
+    typed: string;
     suggestion: string | null;
     dismissed: string | null;
   } | null = null;
@@ -310,6 +314,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (event.kind === "size" && event.state !== "full") fullRefused = false;
   });
   const stopPaint = session.subscribe(() => {
+    if (tagPicker) {
+      const picker = tagPicker;
+      queueMicrotask(() => { if (tagPicker === picker && !picker.cell.isConnected) picker.reopen(); });
+    }
     repaintWriterAfterPublish();
     const title = documentReader.current()?.title ?? "";
     for (const id of ["doc-title", "writer-title"]) {
@@ -1237,12 +1245,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
 
   function closeTagPicker(): void {
-    tagPicker?.();
+    tagPicker?.close();
     tagPicker = null;
   }
 
   function pickVisualTag(cell: HTMLElement): void {
-    if (tagPicker) { closeTagPicker(); return; }
+    const prior = tagPicker;
+    closeTagPicker();
+    if (prior?.cell === cell) return;
     closeTypedTag();
     if (stopped || draft?.composing) { beforePress(); return; }
     const selected = structureCaret(cell, true, true);
@@ -1255,39 +1265,58 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       session.refuse(UNSUPPORTED);
       return;
     }
-    const cancel = (restore: boolean) => {
-      closeTagPicker();
-      if (restore && cell.isConnected && native.document().rows.find(row => row.id === beat)?.visualText === html) {
-        visualTextSurface.place(cell, beat, backward ? endOffset : offset, backward ? offset : endOffset, false);
-      }
+    const unchanged = native.captureTextIdentity(range);
+    const liveSelection = () => unchanged?.() ? native.resolveTextSelection(range) : null;
+    const place = (fresh: HTMLElement, selection: NonNullable<ReturnType<typeof liveSelection>>) => {
+      const { anchor, head } = selection;
+      visualTextSurface.place(fresh, beat, (backward ? head : anchor).offset, (backward ? anchor : head).offset, false);
     };
-    tagPicker = showToolbarTagPicker(cell, category => {
-      cancel(false);
-      const cat = tagCategoryId(category);
-      if (!cat) return;
-      const refusal = admissionRefusal();
-      if (refusal) { refuseCommand(refusal); return; }
-      if (!cell.isConnected || native.document().rows.find(row => row.id === beat)?.visualText !== html) {
-        session.refuse(STALE);
-        return;
-      }
-      const name = registryEntryOf(native.document(), cat, phrase.name)?.name || phrase.name;
-      labelVisual(beat, offset + phrase.lead, endOffset - phrase.trail, { cat, name, words: phrase.text }, endOffset, backward ?? range);
-    }, cancel);
+    const open = (shown: HTMLElement): void => {
+      const cancel = (restore: boolean) => {
+        closeTagPicker();
+        const selection = restore && liveSelection();
+        if (selection && shown.isConnected) place(shown, selection);
+      };
+      const close = showToolbarTagPicker(shown, category => {
+        cancel(false);
+        const cat = tagCategoryId(category);
+        if (!cat) return;
+        const refusal = admissionRefusal();
+        if (refusal) { refuseCommand(refusal); return; }
+        const selection = liveSelection();
+        const doc = native.document();
+        if (!selection || !shown.isConnected || !visualIsAddressable(beat, doc.rows.find(row => row.id === beat)?.visualText)) {
+          session.refuse(STALE);
+          return;
+        }
+        const from = selection.anchor.offset, to = selection.head.offset;
+        const name = registryEntryOf(doc, cat, phrase.name)?.name || phrase.name;
+        labelVisual(beat, from + phrase.lead, to - phrase.trail, { cat, name, words: phrase.text }, to, backward ?? range);
+      }, cancel);
+      if (close) tagPicker = { cell: shown, close, reopen: () => {
+        closeTagPicker();
+        const fresh = visualTextSurface.cell(beat), selection = liveSelection();
+        if (fresh?.closest("#rows") && selection && document.activeElement === document.body) {
+          place(fresh, selection);
+          open(fresh);
+        }
+      } };
+    };
+    open(cell);
   }
 
   function noteVisualTagKeyword(beat: string): void {
-    if (typedTag?.range.target.beat === beat) return;
-    const cell = visualTextSurface.cell(beat), selection = cell && cellSelection(cell);
-    if (!selection || selection.from !== selection.to) return;
-    const model = scriptCellOf(native.document().rows.find(row => row.id === beat)?.visualText ?? "");
-    const end = selection.to;
-    const keyword = matchPlainTagKeyword(projection(model).slice(0, end));
-    if (!keyword) return;
-    const from = end - keyword.length;
-    if (sliceCell(model, from, end).some(run => run.marks.href || run.marks.tag)) return;
-    const anchor = native.commands.anchorText({ beat, cell: "visual" }, from, end);
-    if (anchor.kind === "anchored") typedTag = { keyword, range: anchor.range, suggestion: null, dismissed: null };
+    if (typedTag) return;
+    const cell = visualTextSurface.cell(beat), at = cell && plainTagKeywordAtCaret(cell);
+    if (!cell || !at) return;
+    const from = domToPos(cell, at.node, at.kwStart);
+    if (from === null) return;
+    const keyword = at.kw, start = from + keyword.length;
+    const anchor = native.commands.anchorText({ beat, cell: "visual" }, from, start);
+    if (anchor.kind !== "anchored") return;
+    const candidates = { productionTags: native.document().productionTags.filter(tag => tag?.cat === keyword.cat) };
+    typedTag = { keyword, range: anchor.range, cell, start, candidates, typed: "", suggestion: null, dismissed: null };
+    showPlainTagHint(cell, from, keyword.cat, "");
   }
 
   function closeTypedTag(): void {
@@ -1311,15 +1340,21 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
 
   function refreshVisualTag(beat: string): void {
-    if (!typedTag) return;
-    const cell = visualTextSurface.cell(beat), selection = cell && cellSelection(cell);
-    const doc = native.document();
-    const proposal = cell && selection && selection.from === selection.to
-      ? visualTagDraft(cell, selection.to, doc.rows.find(row => row.id === beat)?.visualText ?? "") : null;
-    if (!proposal || !cell) { closeTypedTag(); return; }
-    const { opened, from, typed } = proposal;
-    opened.suggestion = typed === opened.dismissed ? null : registryCompletion(doc, opened.keyword.cat, typed)?.name ?? null;
-    showPlainTagHint(cell, from, opened.keyword.cat, opened.suggestion ?? "");
+    const opened = typedTag, caret = document.getSelection();
+    if (!opened || opened.range.target.beat !== beat) return;
+    const { cell, start, keyword, candidates } = opened;
+    const node = caret?.anchorNode;
+    if (!cell.isConnected || !caret || !node || !caret.rangeCount || !caret.isCollapsed || !cell.contains(node)) { closeTypedTag(); return; }
+    const at = domToPos(cell, node, caret.anchorOffset);
+    if (at === null || at < start) { closeTypedTag(); return; }
+    const point = posToDom(cell, start), range = caret.getRangeAt(0).cloneRange();
+    range.setStart(point.node, point.offset);
+    const typed = range.toString().replace(/\u200b/g, "");
+    opened.typed = typed;
+    const suggestion = typed === opened.dismissed ? null : registryCompletion(candidates, keyword.cat, typed)?.name ?? null;
+    if (opened.suggestion === suggestion) return;
+    opened.suggestion = suggestion;
+    updatePlainTagHint(keyword.cat, suggestion ?? "");
   }
 
   function completeVisualTag(cell: Element): boolean {
@@ -1336,7 +1371,11 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (!phrase) { closeTypedTag(); return true; }
     const doc = native.document(), { cat } = opened.keyword;
     const completion = opened.suggestion && registryCompletionOf(doc, cat, typed, opened.suggestion);
-    if (opened.suggestion && !completion) { refreshVisualTag(beat); return true; }
+    if (opened.suggestion && !completion) {
+      opened.suggestion = registryCompletion(doc, cat, opened.typed)?.name ?? null;
+      updatePlainTagHint(cat, opened.suggestion ?? "");
+      return true;
+    }
     closeTypedTag();
     const name = completion ?? registryEntryOf(doc, cat, phrase.name)?.name ?? phrase.name;
     const wordStart = start + phrase.lead;
@@ -1810,9 +1849,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         }
         if (key.key === "Escape") {
           if (typedTag.suggestion) {
-            const offset = cellSelection(visual)?.to;
-            const html = native.document().rows.find(row => row.id === typedTag?.range.target.beat)?.visualText ?? "";
-            typedTag.dismissed = offset === undefined ? null : visualTagDraft(visual, offset, html)?.typed ?? null;
+            typedTag.dismissed = typedTag.typed;
             refreshVisualTag(typedTag.range.target.beat);
           } else closeTypedTag();
           event.preventDefault();

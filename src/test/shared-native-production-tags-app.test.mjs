@@ -196,6 +196,65 @@ test("the toolbar still refuses collapsed and linked selections without a write"
   assert.equal(native.commands.undo().kind, "unchanged");
 });
 
+test("another author's tag keeps the Production record after the first author undoes", async t => {
+  const { native, peer } = await start(t, "Lamp Lamp");
+  toolbar(0, 4, "prop");
+  await exchange(native, peer);
+  const second = peer.commands.anchorText(target, 5, 9);
+  assert.equal(second.kind, "anchored");
+  assert.equal(peer.commands.labelVisual(second.range, { cat: "prop", name: "Lamp", words: "Lamp" }).kind, "written");
+  await exchange(native, peer);
+  assert.equal(tags().length, 2);
+  assert.equal(native.commands.undo().kind, "written");
+  await exchange(native, peer);
+  assert.deepEqual(tags(), [["prop", "Lamp", "Lamp"]]);
+  assert.deepEqual(currentDocument().productionTags.map(tag => tag.name), ["Lamp"]);
+  assert.equal(peer.commands.undo().kind, "written");
+  await exchange(native, peer);
+  assert.deepEqual(tags(), []);
+  assert.deepEqual(currentDocument().productionTags, []);
+});
+
+test("the tag picker follows its untouched selection when peer typing repaints the cell", async t => {
+  const { native, peer } = await start(t, "Lamp on desk");
+  select(0, 4);
+  visual().closest(".field-wrap").querySelector('[data-cmd="tag"]').click();
+  assert.ok(document.querySelector('.tag-toolbar-picker[aria-hidden="false"]'));
+  const at = peer.commands.anchorText(target, 12);
+  assert.equal(at.kind, "anchored");
+  assert.equal(peer.commands.typeText(at.range, "!", {}).kind, "written");
+  await exchange(native, peer);
+  const picker = visual().closest(".field-wrap").querySelector('.tag-toolbar-picker[aria-hidden="false"]');
+  assert.ok(picker, "peer repaint keeps the live picker open");
+  picker.querySelector('[data-tag-cat="prop"]').click();
+  await exchange(native, peer);
+  assert.deepEqual(tags(), [["prop", "Lamp", "Lamp"]]);
+  assert.match(currentDocument().rows[0].visualText, /on desk!$/);
+  toolbar(8, 12, "gear");
+  await exchange(native, peer);
+  assert.deepEqual(tags(), [["prop", "Lamp", "Lamp"], ["gear", "desk", "desk"]]);
+});
+
+test("Tab labels an existing suffix as written even when it matches a longer name", async t => {
+  const { native, peer } = await start(t, "Camera ca");
+  toolbar(0, 6, "gear");
+  select(7);
+  type("gear:");
+  assert.equal(tab(), false);
+  await exchange(native, peer);
+  assert.deepEqual(tags(), [["gear", "Camera", "Camera"], ["gear", "ca", "ca"]]);
+});
+
+test("a keyword across a formatting boundary stays literal", async t => {
+  const { native, peer } = await start(t, "<strong>pr</strong>op");
+  select(4);
+  type(": lamp");
+  assert.equal(tab(), true);
+  await exchange(native, peer);
+  assert.equal(currentDocument().rows[0].visualText, "<strong>pr</strong>op: lamp");
+  assert.deepEqual(tags(), []);
+});
+
 for (const change of ["type", "delete"]) {
   test(`shared tag converges with simultaneous peer ${change} and both histories`, async t => {
     const { native, peer } = await start(t, "red lamp");
@@ -221,6 +280,10 @@ for (const change of ["type", "delete"]) {
     assert.equal(peer.commands.undo().kind, "written");
     await exchange(native, peer);
     assert.equal(text(), "red lamp");
+    if (change === "delete") {
+      assert.deepEqual(tags(), []);
+      assert.deepEqual(currentDocument().productionTags.map(tag => tag.name), ["lamp"]);
+    }
     assert.equal(peer.commands.redo().kind, "written");
     await exchange(native, peer);
     assert.equal(text(), finalText);

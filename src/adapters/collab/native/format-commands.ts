@@ -7,7 +7,7 @@ import { tagCategoryId } from "../../../core/document/tags.ts";
 import type { TagCategoryId } from "../../../core/document/tags.ts";
 import { nativeCellView, nativeMarkName, nativeRangeUnits, nativeTagKey, prepareNativeRuns, writeNativeRuns } from "./inline.ts";
 import type { NativeRangeUnits } from "./inline.ts";
-import { ensureNativeProductionTag } from "./registry-commands.ts";
+import { claimNativeProductionTag } from "./registry-commands.ts";
 import { copyArgument, RECORD_WRITTEN, refuseRecord } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
 import { transactPreparedNativeCommand } from "./script.ts";
@@ -196,7 +196,7 @@ export function labelNativeVisual(script: NativeScript, range: NativeTextRange, 
       const replacement = completion && !selected.some(run => run.marks.tag)
         ? prepareNativeRuns([{ text: completion, marks: { ...marksAt(view.runs, start), tag: checked.tag } }]) : null;
       if (!plan && !replacement) return refuseRecord("range");
-      const record = ensureNativeProductionTag(script, cat, name);
+      const record = claimNativeProductionTag(script, cat, name);
       if (record.kind === "refused") return record;
       if (replacement) {
         const end = writeNativeRuns(script.doc, live.text, start, replacement, null);

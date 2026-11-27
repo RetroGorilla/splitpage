@@ -157,8 +157,10 @@ export async function main(argv, repo = REPO) {
         for (const fixture of fixtures.filter(name => name.startsWith("shared"))) {
           const flag = fixture === "shared-long" ? "--perf-long" : "--perf";
           const shared = parsePerf(await run(process.execPath, ["tools/run-presence-browser.mjs", flag], dirs[side]));
-          const expectedCases = fixture === "shared-long" ? 2 : 3;
-          if (shared.length !== expectedCases || shared.some(row => row.keys < 40)) throw new Error("missing " + fixture + " typing samples");
+          const expectedCases = fixture === "shared-long" ? 2 : 5;
+          if (shared.length !== expectedCases || shared.some(row => row.keys < (row.label.includes("open tag") ? 20 : 40))) {
+            throw new Error("missing " + fixture + " typing samples");
+          }
           rows.push(...shared.map(row => ({ ...row, rects: row.rangeRects })));
         }
         runs[side].push(rows);

@@ -335,8 +335,11 @@ function updateTags(script: NativeScript, tags: unknown, fields: unknown, ownerN
   return finish(writes);
 }
 
-export function ensureNativeProductionTag(script: NativeScript, cat: string, name: string): NativeRecordOutcome {
-  return updateTags(script, [{ cat, name }], {}, undefined, undefined);
+export function claimNativeProductionTag(script: NativeScript, cat: string, name: string): NativeRecordOutcome {
+  if (!tagCategoryId(cat) || !trimmed(name, 80)) return refuseRecord("value");
+  const writes: Write[] = [];
+  const id = planNew(script, writes, "tags", { ...defaults("tags"), cat, name });
+  return typeof id === "string" ? finish(writes) : id;
 }
 
 function removeOrRestore(script: NativeScript, collection: Collection, ids: readonly string[], restore: boolean): Result {
