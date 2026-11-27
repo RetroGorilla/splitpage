@@ -1,6 +1,7 @@
 import type { ShotFields } from "./broll-records.ts";
 import type { OwnerChoice, TagChange, TagRef } from "./production-records.ts";
 import type { RecordCommandRun, SharedRecordCommands } from "./shared-records.ts";
+import type { BrollUnmergedEdit } from "../../core/document/broll.ts";
 
 export interface RegistryEditor {
   readonly addPerson: (name: string) => RegistryCreation;
@@ -12,6 +13,7 @@ export interface RegistryEditor {
   readonly removeTags: (ids: readonly string[]) => RecordCommandRun;
   readonly gear: (raw: string) => RecordCommandRun;
   readonly addShot: (name: string) => RegistryCreation;
+  readonly shotUnmergedEdits: (id: string) => readonly BrollUnmergedEdit[];
   readonly setShots: (ids: readonly string[], fields: ShotFields, owner?: OwnerChoice) => RecordCommandRun;
   readonly removeShot: (id: string) => RecordCommandRun;
   readonly addShotProp: (id: string, prop: string) => RecordCommandRun;

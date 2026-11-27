@@ -438,6 +438,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     sizeLimits: sizeOptions.limits,
     document: (joinedNarration?: Parameters<typeof script.reader.document>[0]) => script.reader.document(joinedNarration),
     tagGroup: (id: string) => script.reader.tagGroup(id),
+    shotAlternatives: () => script.reader.shotAlternatives(),
     pictureReferences: () => script.reader.pictureReferences(),
     revision: () => revision,
     peerRevision: () => peerRevision,

@@ -36,15 +36,6 @@ export const BROLL_EDIT_FIELDS = Object.freeze({ name: "Name", desc: "Descriptio
 
 export type BrollUnmergedEdit = { readonly field: keyof typeof BROLL_EDIT_FIELDS; readonly value: string };
 
-export function brollUnmergedEdits(value: unknown): BrollUnmergedEdit[] {
-  if (!Array.isArray(value)) return [];
-  return (value as unknown[]).filter((edit): edit is BrollUnmergedEdit => {
-    if (!edit || typeof edit !== "object") return false;
-    const { field, value } = edit as Record<string, unknown>;
-    return typeof field === "string" && Object.hasOwn(BROLL_EDIT_FIELDS, field) && typeof value === "string";
-  });
-}
-
 export const BROLL_NAME_MAX = 200;
 export const BROLL_TEXT_MAX = 2000;
 export const BROLL_PROP_NAME_MAX = 80;

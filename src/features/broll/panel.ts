@@ -2,7 +2,7 @@ import { numberHtml } from "../common/number-html.ts";
 import { groupItemsByScene } from "../../core/document/scene-items.ts";
 import { brollSortedForList } from "../../core/production/broll.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
-import { BROLL_EDIT_FIELDS, BROLL_NAME_MAX, BROLL_TEXT_MAX, brollUnmergedEdits } from "../../core/document/broll.ts";
+import { BROLL_EDIT_FIELDS, BROLL_NAME_MAX, BROLL_TEXT_MAX } from "../../core/document/broll.ts";
 import { tagCategory, tagStatus } from "../../core/production/looks.ts";
 import { normalizeTagName } from "../../core/document/tags.ts";
 import { formatTimecode, rowSeconds } from "../../core/production/timing.ts";
@@ -553,7 +553,7 @@ function cardHtml(e: PanelShot, starts: Record<string, number>) {
         field("Cuts against", cuts) +
         field("Note", '<textarea class="broll-notes-input ev-field" data-id="' + id + '" rows="1" aria-label="Note" ' +
           'placeholder="Add a note…">\n' + escapeHtml(e.notes) + '</textarea>') +
-        brollUnmergedEdits(e.rec.unmergedEdits).map(({ field: key, value }) =>
+        (ports?.shared.native?.()?.shotUnmergedEdits(e.id) ?? []).map(({ field: key, value }) =>
           field("Unmerged edit · " + BROLL_EDIT_FIELDS[key], escapeHtml(value).replace(/\n/g, '<br>'))).join("") +
       '</dl>' +
       foot +

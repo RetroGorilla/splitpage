@@ -82,6 +82,34 @@ test("editing beside a folded B-roll label keeps the other creator's embed for u
   assert.match(left.document().rows[0]?.visualText ?? "", /Desk$/);
 });
 
+test("undoing a folded close keeps hand-added props on the surviving claim", t => {
+  const seed = fromDocument();
+  t.after(seed.close);
+  type(seed, 0, "B-roll: Desk", visual);
+  const state = seed.encodeState();
+  const left = open({ kind: "state", state }), right = open({ kind: "state", state }, "Bob");
+  t.after(left.close);
+  t.after(right.close);
+  left.ydoc.clientID = 20;
+  right.ydoc.clientID = 30;
+  written(left.commands.closeBroll("A"));
+  written(right.commands.closeBroll("A"));
+  const second = right.document().brollShots[0]?.id;
+  Y.applyUpdate(left.ydoc, right.encodeState(), "peer");
+  Y.applyUpdate(right.ydoc, left.encodeState(), "peer");
+  const shown = right.document().brollShots[0]?.id;
+  assert.ok(shown && shown !== second);
+  written(right.commands.changeRegistry({ kind: "addProp", id: shown, prop: "Lamp" }));
+  const props = right.document().brollShots[0]?.props;
+  assert.deepEqual(props?.map(prop => prop?.name?.toLowerCase()), ["lamp"]);
+  Y.applyUpdate(left.ydoc, right.encodeState(), "peer");
+  written(left.commands.undo());
+  Y.applyUpdate(right.ydoc, left.encodeState(), "peer");
+  assert.deepEqual(left.document(), right.document());
+  assert.equal(left.document().brollShots[0]?.id, second);
+  assert.deepEqual(left.document().brollShots[0]?.props, props);
+});
+
 function closedState(changes: NativeSessionChange[], reason: "requested" | "failed"): Uint8Array {
   const final = changes.at(-1);
   assert(final?.kind === "closed");

@@ -301,7 +301,8 @@ export class NativeScriptReader {
   private pictureRefsByRow?: WeakMap<NativeReadRow, readonly string[]>;
   private readonly seamsByRow = new Map<string, NativeNarrationSeams>();
   private registryCache: { readonly records: Registries; readonly inputs: NativeRegistryRowInputs;
-    readonly groups: ReadonlyMap<string, readonly string[]> } | null = null;
+    readonly groups: ReadonlyMap<string, readonly string[]>;
+    readonly shotAlternatives: ReturnType<typeof projectNativeRegistries>["shotAlternatives"] } | null = null;
   private tagProjection: ReturnType<typeof projectNativeTags> | null = null;
   private readonly anchorsByRow = new Map<string, Set<string>>();
   private readonly rowsByAnchor = new Map<string, Map<string, CommentCell>>();
@@ -1196,16 +1197,21 @@ export class NativeScriptReader {
     const document = { ...this.collect(null), rows, ...sections.length ? { sections } : {} };
     if (this.registryCache) return deepFrozen({ ...document, ...this.registryCache.records });
     const snapshot = { ...document, ...this.storedRegistries(null, this.tagProjection?.stored) };
-    const { inputs, groups } = projectNativeRegistries(snapshot, this.roots, () => this.rows(),
+    const { inputs, groups, shotAlternatives } = projectNativeRegistries(snapshot, this.roots, () => this.rows(),
       (tags, people) => this.tagProjection ??= projectNativeTags(tags, this.roots, people));
     const { people, productionTags, brollShots } = snapshot;
-    this.registryCache = { inputs, groups, records: deepFrozen({ people, productionTags, brollShots }) };
+    this.registryCache = { inputs, groups, shotAlternatives, records: deepFrozen({ people, productionTags, brollShots }) };
     return deepFrozen(snapshot);
   }
 
   tagGroup(id: string): readonly string[] | undefined {
     if (!this.registryCache) this.document();
     return this.registryCache?.groups.get(id);
+  }
+
+  shotAlternatives() {
+    if (!this.registryCache) this.document();
+    return this.registryCache?.shotAlternatives;
   }
 
   pictureReferences() {

@@ -90,6 +90,7 @@ export function createNativeEditorRecords(
 
   const registry: RegistryEditor = {
     canonicalTagId: id => native.tagGroup(id)?.[0] ?? id,
+    shotUnmergedEdits: id => native.shotAlternatives()?.get(id) ?? [],
     addPerson: raw => {
       const name = cappedText(raw, PERSON_NAME_MAX);
       if (!name) return { run: NOTHING_RAN, id: "" };

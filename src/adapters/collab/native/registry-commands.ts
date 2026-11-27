@@ -5,7 +5,7 @@ import { isTagId, nextTagStatus, normalizeTagName, registryKey, TAG_STATUS_IDS, 
 import { cappedLongText, cappedText, plainText } from "../../../core/document/text-policy.ts";
 import type { DocumentShape, DocumentTag } from "../../../core/document/validated.ts";
 import { PERSON_NAME_MAX } from "../../../core/production/records.ts";
-import { brollAnchorTodo, brollInCell, brollMarkerLines, brollSeedLocation, brollSeedRef, planBrollAnchorsInState } from "../../../core/production/broll.ts";
+import { brollInCell, brollMarkerLines, brollSeedLocation, brollSeedRef } from "../../../core/production/broll.ts";
 import { nativeCellView, nativeStoredOffset } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import { compareNativeRankedIds, isValidNativeRank, nativeRankBetween } from "./rank.ts";
@@ -141,27 +141,24 @@ export function closeNativeBroll(script: NativeScript, beat: string, stamp?: Nat
     if (!(text instanceof Y.Text) || !script.reader.beatBoundary(beat)) return RECORD_UNCHANGED;
     const view = nativeCellView(text.toDelta() as NativeDeltaItem[]), lines = brollMarkerLines(view.runs);
     if (!lines.some(({ marker }) => !marker.key)) return RECORD_UNCHANGED;
-    const found = brollInCell(view.runs), rows = script.reader.rows(), doc = script.reader.document();
+    const found = brollInCell(view.runs), rows = script.reader.rows();
     const { readers, plainTextOf } = nativeRegistryProduction(rows);
-    const plan = planBrollAnchorsInState(doc, readers, { id: () => "", docId: () => doc.docId });
-    const existing = new Map(brollAnchorTodo(view.runs, beat, plan).flatMap(({ found, id }) => brollCloseSource(id) ? [] : [[found.index, id]]));
     const row = rows.find(row => row.id === beat), root = script.roots.shots, order = slots(root, true);
     if (!order) return refuseRecord("stored");
     let rank = order.at(-1)?.rank ?? null;
     const writes: Write[] = [], splices: Write[] = [];
     const writer = mintNativeId(script.doc, "");
-    for (const [ordinal, { line, marker, index }] of lines.entries()) {
+    for (const [ordinal, { line, marker }] of lines.entries()) {
       const shot = found[ordinal], source = view.text.slice(line.start, line.end);
-      const match = !marker.key && shot?.name ? BROLL_MARKER_RE.exec(source) : null;
-      if (!shot || !match) continue;
+      const match = !marker.key ? BROLL_MARKER_RE.exec(source) : null;
+      if (!match) continue;
       const from = nativeStoredOffset(view, line.start);
       const until = nativeStoredOffset(view, line.start + match[0].trimEnd().length);
       const point = Y.createRelativePositionFromTypeIndex(text, until - 1).item;
       if (!point) continue;
-      const prior = existing.get(index);
-      const id = prior ?? `bs-visual-${point.client.toString(36)}-${point.clock.toString(36)}-${writer}-${ordinal.toString(36)}`;
-      if (!prior) {
-        if (root.has(id)) return refuseRecord("taken");
+      const id = `bs-visual-${point.client.toString(36)}-${point.clock.toString(36)}-${writer}-${ordinal.toString(36)}`;
+      if (root.has(id)) return refuseRecord("taken");
+      if (shot?.name) {
         rank = nativeRankBetween(rank, null);
         appendShot(writes, root, id, { ...defaults("shots"), origin: "script", name: shot.name, desc: shot.desc,
           audioRef: brollSeedRef(row, plainTextOf), location: brollSeedLocation(row, readers) }, rank);
@@ -169,6 +166,7 @@ export function closeNativeBroll(script: NativeScript, beat: string, stamp?: Nat
       splices.push(() => {
         text.insertEmbed(from, { k: id, label: (match[1] ?? "") + (match[2] ?? "") }, {});
         text.delete(from + 1, until - from);
+        if (match[0] === match[0].trimEnd()) text.insert(from + 1, " ", {});
       });
     }
     if (!splices.length) return RECORD_UNCHANGED;
@@ -481,28 +479,35 @@ function move(root: Root, id: string, before: string | null, canonical?: (id: st
 
 function changeProp(script: NativeScript, id: string, prop: string, kind: "addProp" | "removeProp" | "moveProp", before: string | null,
   entries: Write[]): RegistryPlan {
-  const shot = target(script.roots.shots, id);
-  if (!(shot instanceof Y.Map)) return shot;
   const document = script.reader.document(), writes: Write[] = [];
-  const props = prepareNativeShotProps(shot, document.productionTags, ref => script.reader.tagGroup(ref));
-  if (!props) return refuseRecord("stored");
+  const targets = shotTargets(script, [id]), lists: NonNullable<ReturnType<typeof prepareNativeShotProps>>[] = [];
+  for (const member of targets) {
+    const shot = target(script.roots.shots, member);
+    if (!(shot instanceof Y.Map)) return shot;
+    const props = prepareNativeShotProps(shot, document.productionTags, ref => script.reader.tagGroup(ref));
+    if (!props) return refuseRecord("stored");
+    lists.push(props);
+  }
   if (kind === "addProp") {
     const name = normalizeTagName(prop);
-    if (props.hasName(name)) return RECORD_UNCHANGED;
-    if (props.damaged) return refuseRecord("stored");
-    if (props.distinctCount >= BROLL_PROPS_MAX) return refuseRecord("value");
+    const missing = lists.filter(props => !props.hasName(name));
+    if (!missing.length) return RECORD_UNCHANGED;
+    if (missing.some(props => props.damaged)) return refuseRecord("stored");
+    if (missing.some(props => props.distinctCount >= BROLL_PROPS_MAX)) return refuseRecord("value");
     if (prop !== prop.trim()) return refuseRecord("value");
     const projected = projectedTagIds(script, document);
     const tag = document.productionTags.find(entry => entry?.cat === "prop" && entry.id && !projected.has(entry.id) && normalizeTagName(entry.name) === name);
     const tagId = tag?.id ?? planNew(script, entries, "tags", { ...defaults("tags"), cat: "prop", name: prop });
     if (typeof tagId !== "string") return tagId;
     if (!isTagId(tagId)) return refuseRecord("stored");
-    props.add(writes, { id: tagId, name: tag?.name ?? prop });
+    for (const props of missing) props.add(writes, { id: tagId, name: tag?.name ?? prop });
   } else if (kind === "removeProp") {
-    props.remove(writes, prop);
+    for (const props of lists) props.remove(writes, prop);
   } else {
-    const refusal = props.move(writes, prop, before);
-    if (refusal) return refuseRecord(refusal);
+    for (const [index, props] of lists.entries()) {
+      const refusal = props.move(writes, prop, before);
+      if (refusal && (index === 0 || refusal !== "missing")) return refuseRecord(refusal);
+    }
   }
   return planWrites(writes);
 }

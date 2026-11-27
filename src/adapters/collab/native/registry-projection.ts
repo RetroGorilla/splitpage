@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { BROLL_EDIT_FIELDS, BROLL_NAME_MAX, BROLL_PROP_NAME_MAX, brollCloseSource, brollUnmergedEdits, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
+import { BROLL_EDIT_FIELDS, BROLL_NAME_MAX, BROLL_PROP_NAME_MAX, brollCloseSource, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
 import type { BrollUnmergedEdit } from "../../../core/document/broll.ts";
 import { noFreeze } from "../../../core/document/freeze.ts";
 import { ensureTagIds, isTagId, normalizeTagName, registryKey, TAG_STATUS_IDS, unmergedTagEdits } from "../../../core/document/tags.ts";
@@ -111,35 +111,41 @@ function shotEditValue(shot: DocumentShot, field: BrollUnmergedEdit["field"], pe
   if (field === "status") return shot.status === "shot" ? "Filmed" : "To film";
   if (field === "reshoot") return shot.reshoot === true ? "Flagged" : "Unflagged";
   if (field === "props") return shot.props?.map(prop => prop?.name).filter(Boolean).join(", ") || "None";
-  return shot[field] || "None";
+  const value = shot[field];
+  return typeof value === "string" && value ? value : "Blank";
 }
 
-function foldShots(shots: DocumentShot[], people: DocumentShape["people"]): DocumentShot[] {
+const NO_SHOT_ALTERNATIVES: ReadonlyMap<string, readonly BrollUnmergedEdit[]> = new Map();
+
+function foldShots(shots: DocumentShot[], people: DocumentShape["people"]) {
   const bySource = new Map<string, DocumentShot | DocumentShot[]>();
   for (const shot of shots) {
     const source = brollCloseSource(shot.id);
     if (source) addRegistryMember(bySource, source, shot);
   }
-  const folded = new Map<string, DocumentShot>(), hidden = new Set<string>();
+  const alternatives = new Map<string, readonly BrollUnmergedEdit[]>(), hidden = new Set<string>();
   let names: ReadonlyMap<string, string> | undefined;
   for (const members of bySource.values()) {
     if (!Array.isArray(members)) continue;
     names ??= new Map(people.map(person => [person.id, person.name]));
     members.sort(recordIdOrder);
-    const first = members[0] as DocumentShot, edits: BrollUnmergedEdit[] = [];
-    const shot = { ...first }, saved = members.flatMap(member => brollUnmergedEdits(member.unmergedEdits));
+    const [first, ...rest] = members;
+    if (!first) continue;
+    const edits: BrollUnmergedEdit[] = [];
     for (const field of Object.keys(BROLL_EDIT_FIELDS) as BrollUnmergedEdit["field"][]) {
-      const primary = shotEditValue(shot, field, names), values = new Set<string>();
-      for (const member of members) values.add(shotEditValue(member, field, names));
-      for (const edit of saved) if (edit.field === field) values.add(edit.value);
-      values.delete(primary);
-      for (const value of values) edits.push({ field, value });
+      const seen = [first[field]];
+      for (const member of rest) {
+        const value = member[field];
+        if (seen.some(previous => sameNativeValue(previous, value))) continue;
+        seen.push(value);
+        edits.push({ field, value: shotEditValue(member, field, names) });
+      }
     }
-    if (edits.length) shot.unmergedEdits = edits; else delete shot.unmergedEdits;
-    folded.set(first.id, shot);
-    for (const member of members.slice(1)) hidden.add(member.id);
+    if (edits.length) alternatives.set(first.id, Object.freeze(edits));
+    for (const member of rest) hidden.add(member.id);
   }
-  return hidden.size ? shots.filter(shot => !hidden.has(shot.id)).map(shot => folded.get(shot.id) ?? shot) : shots;
+  return { shots: hidden.size ? shots.filter(shot => !hidden.has(shot.id)) : shots,
+    alternatives: alternatives.size ? alternatives : NO_SHOT_ALTERNATIVES };
 }
 
 export function nativeRegistryProduction(rows: readonly RegistryCellRow[]) {
@@ -288,7 +294,8 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
       shot.props = normalizeBrollProps(props, relevantTags(props));
     }
   }
-  document.brollShots = foldShots(document.brollShots, document.people);
+  const { shots, alternatives } = foldShots(document.brollShots, document.people);
+  document.brollShots = shots;
   document.productionTags = derived.length ? [...published, ...derived] : published;
-  return { inputs: { tags: tagsRemoved, shots: shotsRemoved, seededShots }, groups };
+  return { inputs: { tags: tagsRemoved, shots: shotsRemoved, seededShots }, groups, shotAlternatives: alternatives };
 }

@@ -17,7 +17,7 @@ import { nativeUndoRoute } from "./native-shared-undo.ts";
 import { createNativePresenceCarets } from "./native-presence-carets.ts";
 import { notices } from "./ports/effects.ts";
 import { currentRowsRender } from "./render.ts";
-import { editAllowed } from "./session-owner.ts";
+import { editAllowed, requestRefresh } from "./session-owner.ts";
 import type { SharedEditorBackend, SharedSwitchPorts } from "./shared-session.ts";
 
 const UNSUPPORTED = "native-command-unavailable";
@@ -70,6 +70,7 @@ export function bindNativeEditor(ports: SharedSwitchPorts, native: ReturnType<ty
   let initial: ValidatedDocument | null = null;
   let published = native.revision();
   let paintedSeams: ReadonlyMap<string, NativeNarrationSeams> = new Map();
+  let shotAlternatives: ReturnType<typeof native.shotAlternatives>;
   const readPaint = () => native.document(seams => { paintedSeams = seams; });
   function publish(buffered?: Parameters<typeof keepNativeFieldPaint>[0]): void {
     const revision = native.revision();
@@ -82,6 +83,11 @@ export function bindNativeEditor(ports: SharedSwitchPorts, native: ReturnType<ty
     published = revision;
     publication.publish(snapshot, "remote", fromPeer);
     restoreTags?.(snapshot);
+    const nextAlternatives = native.shotAlternatives();
+    if (nextAlternatives !== shotAlternatives) {
+      shotAlternatives = nextAlternatives;
+      requestRefresh("broll");
+    }
   }
   const stop = native.subscribe(event => {
     try {
@@ -175,6 +181,7 @@ export function bindNativeEditor(ports: SharedSwitchPorts, native: ReturnType<ty
     drop: () => { writerControls()?.writerFlowControl()?.discardVisual?.(); },
     start: () => {
       initial = enterSharedDocument(readPaint());
+      shotAlternatives = native.shotAlternatives();
       published = native.revision();
       publication.publish(initial, "hydration");
     },

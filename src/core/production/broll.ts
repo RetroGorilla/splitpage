@@ -57,7 +57,6 @@ export type BrollShot = {
   location?: string | undefined;
   props?: readonly (BrollPropRef | null | undefined)[] | undefined;
   origin?: string | undefined;
-  unmergedEdits?: unknown;
 };
 
 type BrollSeedFields = { id: string; name: string; desc: string; audioRef: string; location: string };
