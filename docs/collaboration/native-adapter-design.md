@@ -308,8 +308,9 @@ waits for a new caret. App stop and entry rollback release any active wait.
 | Unkeyed B-roll removal | Removing the shot behind an unkeyed line leaves it absent from the live projection. Core reload derives a shot with a new ID. | [#1670](https://github.com/RetroGorilla/splitpage/pull/1670) |
 | Registry recovery | The native editor does not expose the old Recovery panel's deleted registry entries. Local undo can restore a removal. | [#1681](https://github.com/RetroGorilla/splitpage/pull/1681) |
 | Recovery after a peer removes a beat | The Recovery action and its Restore and Discard buttons are absent. The peer who removed an unedited beat can undo the removal to restore it and its words on both copies. | [Native hook app tests](../../src/test/shared-native-hook-mapped-app.test.mjs), [Native caller tests](../../src/test/shared-native-callers-mapped-app.test.mjs) |
-| Concurrent same-name tag creation | Both records and distinct IDs survive. Production shows one card for the category and normalized name. | [#1681](https://github.com/RetroGorilla/splitpage/pull/1681) |
+| Concurrent same-name tag creation | Both records survive. The shared reader shows one tag per category and normalized name and keeps conflicting fields in the tag's details. Removal covers every member the remover has seen. | [#1790](https://github.com/RetroGorilla/splitpage/issues/1790) |
 | Concurrent registry writes | Undo of the winning write can leave a field absent. Unnamed stored entries are hidden, and a missing status can read at its default. An entry without a rank reads before ranked entries in ID order. See [appendix H](#h-outcomes-that-lose-nothing). | [#1670](https://github.com/RetroGorilla/splitpage/pull/1670) |
+| Reuse of a retired tag name | Undo the lowest-ID creation, rename the survivor, then create the original name with a lower ID than the survivor. A shot referring to the retired ID follows the new tag with the original name. The live records keep their fields. | [#1790](https://github.com/RetroGorilla/splitpage/issues/1790) |
 | Concurrent shot prop additions | Distinct prop keys survive, with at most 40 shown. Removing a visible entry can reveal an overflow entry. | [#1678](https://github.com/RetroGorilla/splitpage/pull/1678) |
 | Concurrent shot prop moves | Two moves of one prop compete for its rank. Undo of the winning move can clear the rank and put the prop before ranked entries. Redo restores the winning order. See [section 5](#5-accepted-losses). | [#1678](https://github.com/RetroGorilla/splitpage/pull/1678) |
 | Cleared beat status | A cleared status is absent in the shared snapshot. Core reload supplies `todo`. | [#1660](https://github.com/RetroGorilla/splitpage/pull/1660) |
@@ -1012,10 +1013,33 @@ A beat loses its rank through a same-moment move race (section 10): 3 of 600 gen
 
 **Tags on the same letters.** A writer who untags, then retags a tag on exactly another tag's letters: which of the two reads as the outer tag follows the writers' client ids. With writer client 5 the retagged tag reads outer; with writer client 20 the other tag does. Every copy agrees and both tags stay ([format-commands.test.ts](../../tests/adapters/collab/native/format-commands.test.ts), "carried item 1, as built: across writers"). Accepted as built (Owner).
 
+**Same-name registry tags.** The shared registry reader groups live records by category and normalized name. The
+lowest live ID identifies the projected tag and its shot props. The tag cache holds the grouping while row changes
+refresh derived shots or tags. Editing notes, owner or status writes the new value and one more than the highest counter seen for
+that field onto each observed member in one transaction. The highest counter wins and equal counters prefer the
+lowest ID. At counter zero, the first non-default value in ID order wins. A reset to the default carries its own
+counter. Undo can bring back the earlier values and counters. The reader never rewrites stored records.
+Concurrent writes to one field of an already-folded tag follow the same Yjs outcome as concurrent writes to a single tag.
+
+The card's read-only **Unmerged edit** entries show other distinct values. Each field keeps its own stored
+alternatives so resolving notes and status on different copies clears both. The saved tag records that it was
+folded even if every field agrees. The file merge retains displaced primary values alongside the alternatives.
+For two saved versions of the same ID it retains displaced edits that differ from the common ancestor.
+Script exports with a comments section show these entries there.
+
+Tag creations record their category and normalized name in `tagKeys` outside Undo. After Undo removes the
+creating record, its ID still resolves to a live member of that group. That member can be renamed while the old
+reference continues to resolve through the recorded key. Explicit removal keeps the record tombstoned.
+
+Removal marks every observed member of the folded tag in one undoable transaction. An unseen concurrent addition
+survives and the tag can appear again with that record's fields. Labelled tag removal and surviving-label healing
+keep their existing rules. [Registry races](../../tests/adapters/collab/native/registry-races.test.ts) cover both
+delivery orders, three writers and reload.
+
 ## 4. Undo
 
-One `Y.UndoManager` per person over every root a command writes, headings and names included, not `births` or
-`edited`. Only the local command origin is tracked. Grouping follows the app's word rule with `stopCapturing()`
+One `Y.UndoManager` per person over command roots including headings and names, with `births`, `edited` and
+`tagKeys` outside its scope. Only the local command origin is tracked. Grouping follows the app's word rule with `stopCapturing()`
 (E3). Default delete filter; no depth cap.
 
 - Undo takes back only the presser's changes. A press can pass over spent steps (E11) or change only a removed
@@ -1484,7 +1508,8 @@ E5's checks are the template.
 | `visuals` | One visual cell (`Y.Text`) per beat, kept after the beat is removed |
 | `headings` | Per heading: `rank`, other fields; `removed` when set |
 | `names` | One name cell (`Y.Text`) per heading, written at conversion |
-| `comments`, `replies`, `people`, `tags` | The file's fields; bodies are whole strings |
+| `comments`, `replies`, `people`, `tags` | The file's fields; bodies are whole strings. Tags keep field counters and per-field alternatives |
+| `tagKeys` | Original registry key of each created tag. The map gains one entry per tag creation and has no cleanup. |
 | `shots` | The shot's file fields and a nested `props` map. Each key is the tag ID, or `n:` followed by the JSON-encoded normalized name. Its record holds the encoded name, rank and optional `removed` mark |
 | `edited` | Per beat, `{by, at}` of the last typing |
 
@@ -1514,7 +1539,7 @@ E11, 600 generated histories, names in cells, unless marked:
 | Someone restores a registry entry before receiving another person's removal | The entry disappears again when the unseen removal arrives. Restoring it again brings back its fields |
 | Two people change one registry value at the same moment and the winner undoes | The stored value can become absent. An entry without a name is hidden. A missing tag status reads as `needed`. Rankless entries appear first in ID order and a move gives them a rank. [#1670](https://github.com/RetroGorilla/splitpage/pull/1670) |
 | Two people add different props or move different props on one shot | Both entries survive. Equal ranks sort by key and undo on one copy leaves the other copy's edit |
-| Two people add the same normalized prop name under different tag IDs | Both show in rank and key order when within the cap, as on core reload. Undo removes the acting copy's addition and redo brings it back |
+| Two people add the same normalized prop name under different tag IDs | Both keys survive. If the tags fold together, the shot shows one prop with the canonical ID. Undo removes the acting copy's addition and redo brings it back |
 | One person removes a prop while another edits it | The removed prop stays hidden. Undo of the removal restores it with the concurrent edit |
 | One person removes a prop while another keeps it in a whole-list set | The removal still applies, even when the prop's displayed tag ID differs from its stored name key |
 | Two people move the same prop and the losing writer undoes after both updates arrive | Undo and redo leave the winning order in place |

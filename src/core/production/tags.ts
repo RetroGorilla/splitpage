@@ -11,7 +11,7 @@ import {
   tagStatusId
 } from "../document/tags.ts";
 import type { TagCategoryId, TagName, TagStatusId } from "../document/tags.ts";
-import type { ValidatedDocument } from "../document/validated.ts";
+import type { UnmergedTagEdit, ValidatedDocument } from "../document/validated.ts";
 import { cuesInCell, editCues } from "../text/cues.ts";
 import { retag, setMark } from "../text/edits.ts";
 import type { TextSpan } from "../text/edits.ts";
@@ -31,6 +31,7 @@ export type RegistryTag = {
   owner?: string | undefined;
   notes?: string | undefined;
   status?: string | undefined;
+  unmergedEdits?: readonly UnmergedTagEdit[] | undefined;
 };
 
 export type RegistryList = readonly (RegistryTag | null | undefined)[];
@@ -55,6 +56,7 @@ export type ProductionEntry = {
   owner: string;
   notes: string;
   status: TagStatusId;
+  unmergedEdits?: readonly UnmergedTagEdit[] | undefined;
 };
 
 type RowSigSlot = FieldHtml | readonly FieldTag[];
@@ -190,8 +192,8 @@ export function cueCutRenames(rows: readonly ProductionRow[] | null | undefined,
 export function registrySignature(tags: RegistryList): unknown[] {
   const sig: unknown[] = [];
   tags.forEach(function (t) {
-    if (!t) { sig.push(null, null, null, null, null, null); return; }
-    sig.push(t.cat, t.name, t.owner, t.notes, t.status, t.id);
+    if (!t) { sig.push(null, null, null, null, null, null, null); return; }
+    sig.push(t.cat, t.name, t.owner, t.notes, t.status, t.id, t.unmergedEdits && JSON.stringify(t.unmergedEdits));
   });
   return sig;
 }
@@ -207,10 +209,11 @@ function sameFieldTags(a: readonly FieldTag[], b: readonly FieldTag[]): boolean 
 }
 
 const ROW_SIG_SLOTS = 5;
+const TAG_SIG_SLOTS = 7;
 
 export function refreshedProductionIndex(ix: ProductionIndex, state: TagState, readers: ProductionReaders): ProductionIndex | null {
   const rows = state.rows, tags = state.productionTags;
-  if (ix.rowCount !== rows.length || ix.tagSig.length !== tags.length * 6) return null;
+  if (ix.rowCount !== rows.length || ix.tagSig.length !== tags.length * TAG_SIG_SLOTS) return null;
   const was = ix.rowSig;
   let rs: RowSigSlot[] | null = null;
   for (let i = 0, j = 0; i < rows.length; i++, j += ROW_SIG_SLOTS) {
@@ -232,11 +235,12 @@ export function refreshedProductionIndex(ix: ProductionIndex, state: TagState, r
     }
   }
   const ts = ix.tagSig;
-  for (let i = 0, j = 0; i < tags.length; i++, j += 6) {
+  for (let i = 0, j = 0; i < tags.length; i++, j += TAG_SIG_SLOTS) {
     const t = tags[i];
     if (!t) { if (ts[j] !== null) return null; continue; }
     if (ts[j] !== t.cat || ts[j + 1] !== t.name || ts[j + 2] !== t.owner ||
-        ts[j + 3] !== t.notes || ts[j + 4] !== t.status || ts[j + 5] !== t.id) return null;
+        ts[j + 3] !== t.notes || ts[j + 4] !== t.status || ts[j + 5] !== t.id ||
+        ts[j + 6] !== (t.unmergedEdits && JSON.stringify(t.unmergedEdits))) return null;
   }
   if (!rs) return ix;
   return { entries: ix.entries, unregistered: ix.unregistered, rowCount: ix.rowCount, rowSig: rs, tagSig: ix.tagSig };
@@ -266,7 +270,8 @@ export function deriveProductionIndex(state: Frozen<ValidatedDocument>, readers:
       orphaned: !liveMatch,
       owner: t.owner || "",
       notes: t.notes || "",
-      status: tagStatusId(t.status) || TAG_STATUS_IDS[0]
+      status: tagStatusId(t.status) || TAG_STATUS_IDS[0],
+      ...(t.unmergedEdits?.length ? { unmergedEdits: t.unmergedEdits } : {})
     });
   });
   live.forEach(function (t) {

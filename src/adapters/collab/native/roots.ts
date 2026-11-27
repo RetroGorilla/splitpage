@@ -15,6 +15,7 @@ export interface NativeRoots {
   readonly replies: Y.Map<Y.Map<unknown>>;
   readonly people: Y.Map<Y.Map<unknown>>;
   readonly tags: Y.Map<Y.Map<unknown>>;
+  readonly tagKeys: Y.Map<string>;
   readonly shots: Y.Map<Y.Map<unknown>>;
   readonly edited: Y.Map<unknown>;
 }
@@ -34,6 +35,7 @@ export function declareNativeRoots(doc: Y.Doc): NativeRoots {
     replies: doc.getMap<Y.Map<unknown>>("replies"),
     people: doc.getMap<Y.Map<unknown>>("people"),
     tags: doc.getMap<Y.Map<unknown>>("tags"),
+    tagKeys: doc.getMap<string>("tagKeys"),
     shots: doc.getMap<Y.Map<unknown>>("shots"),
     edited: doc.getMap<unknown>("edited")
   });

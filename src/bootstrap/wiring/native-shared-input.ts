@@ -72,6 +72,10 @@ interface MoveEndpoint {
   readonly offset: number;
 }
 
+interface WriterHeadingTarget extends CellRange {
+  readonly beat: string;
+}
+
 interface Draft {
   readonly beat: string;
   readonly cell: Element;
@@ -979,7 +983,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return anchor && head ? { anchor, head } : null;
   }
 
-  function leaveHeadingLine(force = false): void {
+  function leaveHeadingLine(force = false, beforeEdit?: () => WriterHeadingTarget | null):
+    { readonly target: WriterHeadingTarget | null | undefined } | undefined {
     if (!pendingHeading || draggingHeading || stopped || draft?.composing || native.isClosingOrClosed()) return;
     const focus = document.activeElement?.id === "writer-doc";
     const control = writerControls()?.writerFlowControl();
@@ -993,6 +998,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const point = range?.head;
     if (!force && point?.kind === "beat" && (point.rowId === beat ? newline === -1 || point.offset <= newline
       : writerNarration.cell(beat)?.parentElement === writerNarration.cell(point.rowId)?.parentElement && newline === -1)) return;
+    const target = beforeEdit?.();
     pendingHeading = null;
     try {
       const refusal = admissionRefusal();
@@ -1014,13 +1020,23 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
           : beatPos(landing, Math.max(0, point.offset - consumed));
       const after = keep && { anchor: remap(keep.anchor), head: remap(keep.head) };
       step.recordAfter(writerSelection(after));
+      native.endTypingGroup();
       publish();
       if (focus && after) control?.place(after, true);
       if (notice) notices.show(notice, "warn");
+      // why: a range captured inside a surviving beat stays bounded when only its prefix is removed.
+      return { target: target && target.beat === beat ? { beat, from: target.from - consumed, to: target.to - consumed } : target };
     } catch (error) {
       report(error);
       refuseCommand(UNSUPPORTED);
     }
+  }
+
+  function settleHeadingBeforeEdit(narration: Element | null, beforeEdit?: () => WriterHeadingTarget | null) {
+    if (!pendingHeading) return;
+    const first = narration?.parentElement?.firstElementChild;
+    if (first?.getAttribute("data-id") === pendingHeading && !first.querySelector("br")) return;
+    return leaveHeadingLine(false, beforeEdit);
   }
 
   function structureCaret(cell: Element, selected = false) {
@@ -1340,7 +1356,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     writerControls()?.writerFlowControl()?.place({ anchor: at, head: at });
   }
 
-  function write(input: InputEvent, cell: Element): void {
+  function write(input: InputEvent, cell: Element, remappedTarget?: WriterHeadingTarget | null): void {
     const deletion = /^delete(Content|Word|SoftLine|HardLine)(Backward|Forward)$/.test(input.inputType);
     const text = input.data ?? "";
     const isTitle = cell instanceof HTMLInputElement;
@@ -1349,7 +1365,15 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (input.isComposing || !(deletion || insertAllowed)) { refuseCommand(UNSUPPORTED); return; }
     const refusal = admissionRefusal();
     if (refusal) { refuseCommand(refusal); return; }
-    const ranged = isTitle ? titleInputRange(input, cell) : inputRange(input, cell);
+    let ranged: CellRange | "boundary" | null;
+    if (remappedTarget === undefined) {
+      ranged = isTitle ? titleInputRange(input, cell) : inputRange(input, cell);
+    } else {
+      if (!remappedTarget || remappedTarget.beat !== cell.getAttribute("data-id")) return;
+      const from = Math.max(0, remappedTarget.from), to = remappedTarget.to;
+      if (from > to || deletion && from === to) return;
+      ranged = { from, to };
+    }
     if (ranged === "boundary") return;
     const selection = ranged;
     if (!selection || deletion && selection.from === selection.to) { session.refuse(deletion ? UNSUPPORTED : STALE); return; }
@@ -1499,7 +1523,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (!reason && buffered.field === "visualText" && buffered.cell.closest("#rows")) updateSplitVisualWhoList(buffered.beat);
   }
 
-  function intercept(event: Event): void {
+  function intercept(event: Event, remappedTarget?: WriterHeadingTarget | null): void {
     const target = event.target instanceof Element ? event.target : null;
     if (event.type === "drop" && target?.closest("#rows .row") && rowDrag().dragging()) return;
     const button = event.type === "click" ? target?.closest("#rows .mini-toolbar button[data-cmd], #writer .wr-fmt[data-cmd]") ?? null : null;
@@ -1629,6 +1653,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     }
     if (bufferedTarget && !stopped) {
       if (event.type.startsWith("composition")) {
+        if (writer && event.type === "compositionstart" && settleHeadingBeforeEdit(narration)) {
+          intercept(event);
+          return;
+        }
         event.stopImmediatePropagation();
         try { composition(event as CompositionEvent, bufferedTarget); }
         catch (error) { report(error); stop(PENDING); }
@@ -1671,6 +1699,25 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         if (stopped !== "full" && (narration || titleInput) && !splitting && !joining && !moving && !mark && !line && !adding
           && event.type !== "paste" && !inputType?.startsWith("delete")) session.refuse(stopped);
         return;
+      }
+      if (pendingHeading && (writer || narration?.closest("#writer-doc"))) {
+        const paste = event.type === "paste" ? (event as ClipboardEvent).clipboardData : null;
+        const text = paste?.getData("text/plain");
+        const edits = moving || joining || splitting || line || removeHeading ||
+          mark && !document.getSelection()?.isCollapsed ||
+          text && !/[\r\n]/.test(text) && paste?.types.every(type => type === "text/plain") ||
+          commandInput && (inputType === "insertText" || inputType?.startsWith("delete") || !!heading);
+        // why: the browser's target nodes may detach when heading conversion repaints the beat.
+        const rememberTarget = input && narration && !heading ? () => {
+          const beat = narration.getAttribute("data-id");
+          const target = inputRange(input, narration);
+          return beat && target ? { beat, ...target } : null;
+        } : undefined;
+        const departure = edits && settleHeadingBeforeEdit(narration, rememberTarget);
+        if (departure) {
+          intercept(event, departure.target);
+          return;
+        }
       }
       if (titleInput) {
         if (event.type === "paste") {
@@ -1731,7 +1778,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
           return;
         }
       }
-      if (event.type === "beforeinput" && editableText && event.cancelable) { write(event as InputEvent, editableText); return; }
+      if (event.type === "beforeinput" && editableText && event.cancelable) { write(event as InputEvent, editableText, remappedTarget); return; }
       if (event.type === "input" && cell) restoreUnsupportedInput(cell);
       session.refuse(UNSUPPORTED);
     } catch (error) {

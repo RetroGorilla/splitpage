@@ -30,7 +30,8 @@ export function createProductionIndex(readers: ProductionReaders, seal: Seal): P
       orphaned: e.orphaned,
       owner: e.owner,
       notes: e.notes,
-      status: e.status
+      status: e.status,
+      ...(e.unmergedEdits ? { unmergedEdits: e.unmergedEdits } : {})
     };
   }
 

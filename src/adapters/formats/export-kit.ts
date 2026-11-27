@@ -161,9 +161,9 @@ export function exportComments(doc: ExportDocument, opts?: CommentOptions | null
     const beat = doc.numbering.beats[doc.beats[c.rowIndex]?.id ?? ""]?.full ?? "";
     const field = c.field === "audioText" ? "Audio" : "Visual";
     return Object.assign(c, {
-      number: nums[c.id] || null,
+      number: c.field === "tag" ? null : nums[c.id] || null,
       beat: beat,
-      where: c.field === "title" ? "Document title" : beat ? "Beat " + beat + " · " + field : "Deleted beat"
+      where: c.field === "tag" ? c.location : c.field === "title" ? "Document title" : beat ? "Beat " + beat + " · " + field : "Deleted beat"
     });
   });
   let i = 0;

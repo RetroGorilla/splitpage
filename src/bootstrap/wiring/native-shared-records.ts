@@ -89,6 +89,7 @@ export function createNativeEditorRecords(
   }
 
   const registry: RegistryEditor = {
+    canonicalTagId: id => native.tagGroup(id)?.[0] ?? id,
     addPerson: raw => {
       const name = cappedText(raw, PERSON_NAME_MAX);
       if (!name) return { run: NOTHING_RAN, id: "" };
@@ -114,7 +115,7 @@ export function createNativeEditorRecords(
         const current = new Map(native.document().productionTags.map(tag => [tag?.id, tag]));
         return tags.every(({ id, cat, name }) => {
           if (!id) return true;
-          const tag = current.get(id);
+          const tag = current.get(registry.canonicalTagId(id));
           return !!tag && registryKey(tag.cat, tag.name) === registryKey(cat, name);
         });
       });

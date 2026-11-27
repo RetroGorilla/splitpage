@@ -6,6 +6,7 @@ export interface RegistryEditor {
   readonly addPerson: (name: string) => RegistryCreation;
   readonly removePerson: (id: string) => RecordCommandRun;
   readonly registerTag: (cat: string, name: unknown) => RecordCommandRun;
+  readonly canonicalTagId: (id: string) => string;
   readonly updateTags: (tags: readonly (TagRef & { readonly id: string | null })[], change: TagChange) => RecordCommandRun;
   readonly renameTag: (id: string | null, name: string) => RecordCommandRun;
   readonly removeTags: (ids: readonly string[]) => RecordCommandRun;
