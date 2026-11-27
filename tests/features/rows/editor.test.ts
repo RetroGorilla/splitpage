@@ -106,6 +106,31 @@ test("rows editor: click, mousedown, input and keydown on the script's rows and 
   editor.dispose();
 });
 
+test("rows editor: the row menu trigger takes focus after the pointer click routes", t => {
+  const p = page();
+  const editor = harness(p).mount();
+  t.after(editor.dispose);
+  const trigger = p.doc.createElement("button");
+  trigger.className = "row-more";
+  p.byId("rows").append(trigger);
+  const focus = t.mock.method(trigger, "focus");
+
+  const secondary = new p.win.MouseEvent("mousedown", { button: 2, bubbles: true, cancelable: true });
+  trigger.dispatchEvent(secondary);
+  assert.equal(secondary.defaultPrevented, false);
+  assert.equal(focus.mock.callCount(), 0);
+
+  const primary = new p.win.MouseEvent("mousedown", { button: 0, bubbles: true, cancelable: true });
+  trigger.dispatchEvent(primary);
+  assert.equal(primary.defaultPrevented, true);
+  assert.equal(focus.mock.callCount(), 0);
+
+  const click = new p.win.MouseEvent("click", { detail: 1, bubbles: true });
+  trigger.dispatchEvent(click);
+  assert.deepEqual(focus.mock.calls.map(call => call.arguments), [[{ preventScroll: true }]]);
+  assert.equal(p.doc.activeElement, trigger);
+});
+
 test("rows editor: a picture dragged over a scene's Image section marks that section and takes a copy", () => {
   const p = page();
   const h = harness(p);
