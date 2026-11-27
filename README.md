@@ -10,8 +10,10 @@ and read the narration from a teleprompter.
 
 ## Get Splitpage
 
-The latest published release is [0.4.3, released 2026-11-09](https://github.com/RetroGorilla/splitpage/releases/tag/v0.4.3).
-See the [roadmap](docs/ROADMAP.md) for what it contains.
+[0.5.0, with collaboration](https://github.com/RetroGorilla/splitpage/releases/tag/v0.5.0)
+lets you write a script together. Share from the desktop app through a relay
+you run, and invite co-writers to join in a browser or the desktop app.
+See the [roadmap](docs/ROADMAP.md) for what the release contains.
 
 Download the Windows installer or the portable zip from the
 [latest release](https://github.com/RetroGorilla/splitpage/releases/latest).
@@ -41,7 +43,7 @@ video. The [user guide](docs/help.md) explains the controls. The screenshots
 below show the long demo in the 0.4.1-era interface: its individual rows were
 called scenes, its completed status was Shot, and Present used Scene mode.
 Current `main` calls these beats, Filmed and Beat mode. The descriptions below
-use current terms; the user guide separates changes since 0.4.1.
+use current terms. The user guide lists what's new in each release.
 
 ## Write the picture and the words together
 

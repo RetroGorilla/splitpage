@@ -9,10 +9,25 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 `.splitpage` files. Splitpage runs in a browser or as a
 [desktop app](#desktop-app) for Windows.
 
-## What's new since 0.4.3
+## What's new in 0.5.0
 
-- **Leaving a shared edit.** If a co-writer restores a beat that was removed during your
-  composition, Leave retries the pending text when its original edit range is still valid.
+The instructions below describe this release.
+
+- **Write a script together.** Share from the desktop app through a relay
+  you run. Co-writers open the link in a browser or join from the desktop
+  app. You can add a link password.
+- **See who's here.** Open **Shared** to see who's connected and jump to
+  their beat. In Split and Writer, see co-writers' carets and selections in
+  their colours.
+- **Keep writing offline.** Your edits stay on this device and sync when
+  you reconnect. **Review changes** shows edits that may have overlapped, and
+  **Put it back** adds your offline version as a new beat.
+- **Shared version history.** See the versions the relay keeps and, where
+  recorded, who edited them. Open an earlier version to read it, save it as
+  a separate script, or put one beat back.
+- **Pick up where you left off.** Shared scripts reopen after a restart: from
+  Recent in the desktop app, or from **Shared scripts on this device** in the
+  browser. The desktop that shared a saved script keeps its file up to date.
 
 ## What's new in 0.4.3
 
@@ -1159,6 +1174,8 @@ included (they're your files).
   editors.
 - Use **Shared** or **File ▸ Sharing & people…** to see the connection and
   who is **Here now**. Select someone who is working on a beat to jump to it.
+  In Split and Writer, coloured carets and selections show where co-writers
+  are editing.
   The owner can copy or reset the guest link, and add, change or remove its
   password. After a reset, guests need the new link. If the password changes,
   guests may be asked to enter it again before their work can sync.

@@ -1,4 +1,4 @@
-var CACHE = "splitpage-0.4.3";
+var CACHE = "splitpage-0.5.0";
 var SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-maskable.svg"];
 
 var INDEX_URL = new URL("./index.html", self.location.href).href;
