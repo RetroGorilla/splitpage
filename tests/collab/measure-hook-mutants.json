@@ -118,8 +118,8 @@
     {
       "label": "native history changes the script without replaying selection",
       "file": "src/bootstrap/wiring/native-shared-undo.ts",
-      "find": "        if (selection) input()?.show(selection);",
-      "replace": "        void selection;",
+      "find": "          input()?.show(selection);",
+      "replace": "          void selection;",
       "tests": [
         "src/test/shared-native-measure-undo-mapped-app.test.mjs"
       ]
