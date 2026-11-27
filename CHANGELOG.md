@@ -4,14 +4,16 @@ What changed for a person using Splitpage, newest first. The same entries
 appear in the app under **Help**. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions are in `VERSION`.
 
-## Unreleased
+## 0.5.0 — 2026-11-27
+
+This release lets you write a script together.
 
 ### Added
 - Write a script together. In the desktop app, **File ▸ Share this script…**
   uploads a copy to a relay and gives you one link for everyone you invite.
   Sharing needs a relay that you run; set it up once in **Settings ▸
-  Collaboration**, with the relay setup guide. Your original file stays where it
-  was, and the desktop that shared it keeps that file up to date.
+  Collaboration**, with the relay setup guide. If you shared a saved script,
+  its file stays where it was and the desktop that shared it keeps it up to date.
 - Join a shared script by opening its link in a browser, or with **File ▸ Join
   a shared script…** in the desktop app. A link can require a password. You
   choose the name and colour others see.
@@ -29,10 +31,25 @@ appear in the app under **Help**. The format follows
   script, or put one beat back.
 - Shared scripts come back after a restart and appear in Recent with a
   `Shared` badge.
+- Pictures in a shared script travel through the relay. If an export has to
+  leave out pictures that are still unavailable, it tells you.
+- The sharing and offline review screens fit on phones. Their controls work
+  with a keyboard, and screen readers announce connection changes.
 
 ### Fixed
 - Click buttons through the empty space beside and between notifications.
 - Keep every tag picker choice clickable while editing a tag, with Done available when the picker closes.
+- The Production panel stays open while you use **Edit tag**.
+- Find and Replace keeps an inline picture in place when replacing the text
+  around it.
+- In Writer, Undo steps back through Markdown shortcuts in reverse order. In
+  a shared script, Redo puts the caret back inside the restored text after a
+  beat join.
+- When two people create the same tag at the same time, Production shows one
+  tag with all its uses.
+- Delete or cut a selection of beats in Split in one step in a shared script.
+- If the owner changes a link password, returning guests can enter the new
+  password from their shared copy and resume syncing.
 
 ### For maintainers
 - Replaced the old shared-document adapter, its editor wiring, dedicated test suites and CI job with the standard-Yjs native layer under `src/adapters/collab/native/`.
