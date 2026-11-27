@@ -6,7 +6,8 @@ const SYNTAX: Readonly<Record<string, string>> = {
   prop: "[]", location: "{}", cast: "cast: ⇥", vfx: "~~", sound: "sfx: ⇥", gear: "<>"
 };
 
-export function showToolbarTagPicker(cell: HTMLElement, choose: (cat: string) => void, cancel: (restore: boolean) => void): (() => void) | null {
+export function showToolbarTagPicker(cell: HTMLElement, choose: (cat: string) => void, cancel: (restore: boolean) => void,
+  focusedCategory?: string | null): (() => void) | null {
   const toolbar = cell.closest(".field-wrap, .wr-flow-visual-box")?.querySelector<HTMLElement>(".mini-toolbar");
   const trigger = toolbar?.querySelector<HTMLButtonElement>(".tb-tag");
   if (!toolbar || !trigger) return null;
@@ -88,7 +89,7 @@ export function showToolbarTagPicker(cell: HTMLElement, choose: (cat: string) =>
       buttons[(Math.max(0, index) + step + buttons.length) % buttons.length]?.focus({ preventScroll: true });
     }
   }, true);
-  buttons[0]?.focus({ preventScroll: true });
+  (buttons.find(button => button.dataset.tagCat === focusedCategory) ?? buttons[0])?.focus({ preventScroll: true });
   return () => {
     life.dispose();
     toolbar.setAttribute("data-tags-open", "false");

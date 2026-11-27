@@ -337,9 +337,22 @@ function updateTags(script: NativeScript, tags: unknown, fields: unknown, ownerN
 
 export function claimNativeProductionTag(script: NativeScript, cat: string, name: string): NativeRecordOutcome {
   if (!tagCategoryId(cat) || !trimmed(name, 80)) return refuseRecord("value");
+  const prior = namedTag(script.reader.document(), cat, name);
+  const fields: Fields = prior ? {
+    cat, name, notes: prior.notes ?? "", owner: prior.owner ?? "", status: prior.status ?? TAG_STATUS_IDS[0],
+    ...(prior.unmergedEdits?.length ? { unmergedEdits: prior.unmergedEdits } : {})
+  } : { ...defaults("tags"), cat, name };
   const writes: Write[] = [];
-  const id = planNew(script, writes, "tags", { ...defaults("tags"), cat, name });
-  return typeof id === "string" ? finish(writes) : id;
+  const id = planNew(script, writes, "tags", fields);
+  if (typeof id !== "string") return id;
+  if (prior?.id) {
+    const members = script.reader.tagGroup(prior.id) ?? [prior.id];
+    for (const field of nativeTagFields) {
+      const counter = members.reduce((highest, member) => Math.max(highest, nativeTagCounter(script.roots.tags.get(member), field)), 0);
+      if (counter) writes.push(() => { script.roots.tags.get(id)?.set(nativeTagCounterKey(field), counter); });
+    }
+  }
+  return finish(writes);
 }
 
 function removeOrRestore(script: NativeScript, collection: Collection, ids: readonly string[], restore: boolean): Result {

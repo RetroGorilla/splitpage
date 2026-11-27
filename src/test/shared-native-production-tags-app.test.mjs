@@ -11,7 +11,7 @@ import { adoptReplacement, currentDocument } from "../bootstrap/wiring/session-o
 import { enterSharedSession, forceLeaveSharedSession } from "../bootstrap/wiring/shared-session.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
-import { setCellSelection } from "../features/common/cell-selection.ts";
+import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
 import { nativeEntrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 
 window.Element.prototype.scrollIntoView = () => {};
@@ -215,6 +215,32 @@ test("another author's tag keeps the Production record after the first author un
   assert.deepEqual(currentDocument().productionTags, []);
 });
 
+test("a surviving production tag claim carries the peer's notes and field history", async t => {
+  const { native, peer } = await start(t, "Lamp Lamp");
+  toolbar(0, 4, "prop");
+  await exchange(native, peer);
+  const [first] = peer.document().productionTags;
+  assert.equal(peer.commands.changeRegistry({ kind: "set", collection: "tags", ids: [first.id],
+    fields: { notes: "Bring a spare bulb", status: "have" } }).kind, "written");
+  const second = peer.commands.anchorText(target, 5, 9);
+  assert.equal(second.kind, "anchored");
+  assert.equal(peer.commands.labelVisual(second.range, { cat: "prop", name: "Lamp", words: "Lamp" }).kind, "written");
+  await exchange(native, peer);
+  assert.equal(native.commands.undo().kind, "written");
+  await exchange(native, peer);
+  assert.deepEqual(tags(), [["prop", "Lamp", "Lamp"]]);
+  assert.deepEqual(currentDocument().productionTags.map(({ name, notes, status }) => [name, notes, status]),
+    [["Lamp", "Bring a spare bulb", "have"]]);
+  const [survivor] = peer.document().productionTags;
+  assert.equal(peer.commands.changeRegistry({ kind: "set", collection: "tags", ids: [survivor.id],
+    fields: { notes: "Packed the bulb", status: "returned" } }).kind, "written");
+  await exchange(native, peer);
+  assert.equal(native.commands.redo().kind, "written");
+  await exchange(native, peer);
+  assert.deepEqual(currentDocument().productionTags.map(({ name, notes, status }) => [name, notes, status]),
+    [["Lamp", "Packed the bulb", "returned"]]);
+});
+
 test("the tag picker follows its untouched selection when peer typing repaints the cell", async t => {
   const { native, peer } = await start(t, "Lamp on desk");
   select(0, 4);
@@ -233,6 +259,64 @@ test("the tag picker follows its untouched selection when peer typing repaints t
   toolbar(8, 12, "gear");
   await exchange(native, peer);
   assert.deepEqual(tags(), [["prop", "Lamp", "Lamp"], ["gear", "desk", "desk"]]);
+});
+
+test("the category focused with arrow keys stays focused after peer repaint", async t => {
+  const { native, peer } = await start(t, "Lamp on desk");
+  select(0, 4);
+  visual().closest(".field-wrap").querySelector('[data-cmd="tag"]').click();
+  const choices = [...document.activeElement.closest(".tag-toolbar-picker").querySelectorAll(".tag-toolbar-choice")];
+  const gearIndex = choices.findIndex(button => button.dataset.tagCat === "gear");
+  assert.ok(gearIndex > 0);
+  for (let step = 0; step < gearIndex; step++) {
+    const moved = document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    assert.equal(moved, false);
+  }
+  const gear = document.activeElement;
+  const at = peer.commands.anchorText(target, 12);
+  assert.equal(at.kind, "anchored");
+  assert.equal(peer.commands.typeText(at.range, "!", {}).kind, "written");
+  await exchange(native, peer);
+  assert.notEqual(document.activeElement, gear);
+  assert.equal(document.activeElement.dataset.tagCat, "gear");
+  document.activeElement.click();
+  await exchange(native, peer);
+  assert.deepEqual(tags(), [["gear", "Lamp", "Lamp"]]);
+});
+
+test("a typed tag and its caret follow peer typing before the keyword", async t => {
+  const { native, peer } = await start(t, "Near ");
+  select(5);
+  type("prop: L");
+  await exchange(native, peer);
+  const previous = visual();
+  const at = peer.commands.anchorText(target, 0);
+  assert.equal(at.kind, "anchored");
+  assert.equal(peer.commands.typeText(at.range, "Look: ", {}).kind, "written");
+  await exchange(native, peer);
+  assert.notEqual(visual(), previous);
+  assert.equal(document.activeElement, visual());
+  assert.deepEqual(cellSelection(visual()), { from: 18, to: 18 });
+  type("amp");
+  assert.equal(tab(), false);
+  await exchange(native, peer);
+  assert.deepEqual(tags(), [["prop", "Lamp", "Lamp"]]);
+  assert.match(currentDocument().rows[0].visualText, /^Look: Near /);
+});
+
+test("an open typed tag offers a production name a peer just added", async t => {
+  const { native, peer } = await start(t, "");
+  select(0);
+  type("gear:");
+  await exchange(native, peer);
+  assert.equal(peer.commands.changeRegistry({ kind: "create", collection: "tags", fields: { cat: "gear", name: "Camera" } }).kind,
+    "written");
+  await exchange(native, peer);
+  type(" ca");
+  assert.equal(document.getElementById("tag-open-hint").dataset.name, "Camera");
+  assert.equal(tab(), false);
+  await exchange(native, peer);
+  assert.deepEqual(tags(), [["gear", "Camera", "Camera"]]);
 });
 
 test("Tab labels an existing suffix as written even when it matches a longer name", async t => {
