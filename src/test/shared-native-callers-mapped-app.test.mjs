@@ -1434,6 +1434,36 @@ function exchangeSettled(f, order) {
   }
 }
 
+for (const order of exchanges) {
+  test(`Writer: Redo of a trailing member deletion restores the caret in the joined row, ${order}`, async t => {
+    const rows = ["Lead", "aa", "a"].map((audioText, index) => ({ id: "r" + (index + 1), audioText }));
+    const f = await enter(t, { rows, view: "Writer" });
+    const root = f.place("r3", 0, 1);
+    assert.equal(input(root, "deleteContentBackward"), true);
+    flush();
+    assert.deepEqual(audio(app()), ["Lead", "aa", ""]);
+    written(f.peer.commands.joinRow("r3", "r2", " "));
+    exchangeSettled(f, order);
+    await Promise.resolve();
+    agree(f, ["Lead", "aa"]);
+
+    history(root);
+    agree(f, ["Lead", "aa a"]);
+    caret(f, "r2", 3, 4);
+    history(root, true);
+    agree(f, ["Lead", "aa"]);
+    caret(f, "r2", 2);
+
+    assert.equal(input(root, "insertText", "x"), true);
+    flush();
+    agree(f, ["Lead", "aax"]);
+    caret(f, "r2", 3);
+    history(root);
+    agree(f, ["Lead", "aa"]);
+    land(f, ["Lead", "aa"]);
+  });
+}
+
 function settledAgreement(f, order, rows) {
   exchangeSettled(f, order);
   const expected = withoutEditStamps({ ...f.before, rows });

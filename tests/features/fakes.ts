@@ -153,10 +153,11 @@ export function fakeCapabilities(overrides: Partial<CapabilityPort> = {}): Capab
 
 export function fakeFlowCommandEffects() {
   const notices: string[] = [];
-  const effects: Pick<FlowWriterPorts, "moveBeat" | "undo" | "caretAfterStep" | "replayPlacement" | "notice" | "changed" | "selectionMoved" | "plainVisual" | "beatInput" | "typeAtBeatEdge" | "beatKeydown" | "beatSelection" | "leaveBeat" | "newCommentId" | "openComment"> = {
+  const effects: Pick<FlowWriterPorts, "moveBeat" | "undo" | "caretAfterStep" | "replayPlacement" | "notice" | "changed" | "selectionPlaced" | "selectionMoved" | "plainVisual" | "beatInput" | "typeAtBeatEdge" | "beatKeydown" | "beatSelection" | "leaveBeat" | "newCommentId" | "openComment"> = {
     moveBeat: swapBeatsCommand,
     undo: { step: () => {}, flush: () => {}, breakCoalescing: () => {}, last: () => null, nextRedo: () => null },
-    caretAfterStep: () => 0, replayPlacement: () => null, notice: text => { notices.push(text); }, changed: () => {}, selectionMoved: () => {},
+    caretAfterStep: () => 0, replayPlacement: () => null, notice: text => { notices.push(text); }, changed: () => {},
+    selectionPlaced: () => {}, selectionMoved: () => {},
     plainVisual: () => "", beatInput: () => {}, typeAtBeatEdge: () => false, beatKeydown: () => false,
     beatSelection: () => {}, leaveBeat: () => {}, newCommentId: () => "comment", openComment: () => {}
   };

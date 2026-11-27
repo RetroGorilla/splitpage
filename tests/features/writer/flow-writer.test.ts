@@ -31,6 +31,7 @@ function harness(changeBeforePlan = false, refusePaste = false, tagged = false, 
   }, migration.ports);
   let epoch = 1;
   let breaks = 0;
+  let placements = 0;
   const left: string[] = [];
   const leaves: string[] = [];
   const inputs: string[] = [], warnings: string[] = [];
@@ -94,15 +95,37 @@ function harness(changeBeforePlan = false, refusePaste = false, tagged = false, 
     visualLeave: cell => { leaves.push(cell.innerHTML); cells.sync(cell); },
     undo: { step: () => {}, flush: () => {}, breakCoalescing: () => { breaks++; }, last: () => null, nextRedo: () => null },
     caretAfterStep: () => 0, replayPlacement: () => null, notice: (text, kind) => { if (kind === "warn") warnings.push(text); }, changed: () => {}, selectionMoved: () => {},
+    selectionPlaced: () => { placements++; },
     plainVisual: () => "", beatInput: () => {}, typeAtBeatEdge: () => false,
     beatKeydown: () => false, beatSelection: () => {}, leaveBeat: beat => { left.push(beat.dataset.id ?? ""); },
     newCommentId: () => "c", openComment: () => {}
   });
-  return { writer, root, tags, left, leaves, inputs, warnings, painting: guard.whilePainting, breaks: () => breaks, doc: () => doc, recorded: () => recorded, replace: () => {
+  return { writer, root, tags, left, leaves, inputs, warnings, painting: guard.whilePainting, breaks: () => breaks, placements: () => placements, doc: () => doc, recorded: () => recorded, replace: () => {
     epoch++;
     doc = migrateRows({ rows: [{ id: "a", audioText: "Replacement" }] }, fakeMigration().ports);
   } };
 }
+
+test("Writer reports completed explicit placements and leaves repaint selections alone", () => {
+  const h = harness();
+  try {
+    h.writer.repaint();
+    const missing = beatPos("gone", 0);
+    h.writer.place({ anchor: missing, head: missing });
+    assert.equal(h.placements(), 0);
+
+    const point = beatPos("a", 2);
+    h.writer.place({ anchor: point, head: point });
+    assert.equal(h.placements(), 1);
+
+    const row = h.doc().rows[0];
+    assert.ok(row);
+    row.audioText = "Alpha extended";
+    h.writer.repaint();
+    assert.deepEqual(h.writer.selection(), { anchor: point, head: point });
+    assert.equal(h.placements(), 1);
+  } finally { h.writer.dispose(); }
+});
 
 test("Alt+Enter does not edit the writer", () => {
   const h = harness();

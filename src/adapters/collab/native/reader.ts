@@ -311,6 +311,8 @@ export class NativeScriptReader {
   private spanOwners = new Map<string, string[]>();
   private groups = new Map<string, RowMember[]>();
   private groupHeads = new Map<string, string>();
+  // why: a stored join can outlive the adjacency that made it effective
+  private readonly removedJoins = new Map<string, { readonly row: string; readonly previous: string }>();
   private storedBlocks: readonly StoredBlock[] = [];
   private rankedBlocks: readonly RankedBlock[] = [];
   private removedHeadings: readonly string[] = [];
@@ -588,6 +590,7 @@ export class NativeScriptReader {
         previous = undefined;
         continue;
       }
+      this.removedJoins.delete(id);
       const joined = joinOf(this.roots.beats.get(id)), head = previous?.[0];
       if (head && previous && joined && joined.into === previous.at(-1)?.id) {
         previous.push({ id, glue: joined.glue });
@@ -604,6 +607,10 @@ export class NativeScriptReader {
       const before = this.groups.get(id);
       if (group.length === 1 && before && before.length > 1) this.seamsByRow.delete(id);
       if (group.length !== before?.length || group.some((member, index) => member.id !== before[index]?.id || member.glue !== before[index]?.glue)) {
+        if (before) for (const [index, member] of before.entries()) {
+          const prior = before[index - 1];
+          if (prior && !heads.has(member.id)) this.removedJoins.set(member.id, { row: id, previous: prior.id });
+        }
         this.dirtyBeats.add(id);
       }
     }
@@ -916,6 +923,54 @@ export class NativeScriptReader {
     const members = head === undefined ? undefined : this.groups.get(head);
     if (!members) return [];
     return Object.freeze(members.map(member => Object.freeze({ ...member })));
+  }
+
+  joinedNarrationNeighbor(beat: string): { readonly beat: string; readonly offset: number } | null {
+    this.sync();
+    let member = beat;
+    let row = this.groupHeads.get(member);
+    if (row === undefined) {
+      const previous = this.removedJoinPredecessor(beat);
+      if (!previous) return null;
+      member = previous.member;
+      row = previous.row;
+    }
+    if (row === undefined) return null;
+    const members = this.groups.get(row);
+    if (!members || (member === beat && members.length < 2)) return null;
+    const index = members.findIndex(({ id }) => id === member);
+    const width = (id: string) => nativeCellView(this.narrationItems(this.narration.get(id) ?? EMPTY_SPANS)).length;
+    if (member === beat && width(beat)) return null;
+
+    const before = member === beat ? index : index + 1;
+    for (const { id } of members.slice(0, before).reverse()) {
+      const offset = width(id);
+      if (offset) return { beat: id, offset };
+    }
+    for (const { id } of members.slice(index + 1)) {
+      if (width(id)) return { beat: id, offset: 0 };
+    }
+    return { beat: row, offset: 0 };
+  }
+
+  private removedJoinPredecessor(beat: string): { readonly member: string; readonly row: string } | null {
+    const row = this.removedJoins.get(beat)?.row;
+    const rank = rankOf(this.roots.beats.get(beat));
+    if (row === undefined || rank === null) return null;
+    const visited = new Set<string>();
+    let member = beat;
+    while (!this.groupHeads.has(member) && !visited.has(member)) {
+      visited.add(member);
+      const proof = this.removedJoins.get(member);
+      if (proof?.row !== row || joinOf(this.roots.beats.get(member))?.into !== proof.previous) return null;
+      member = proof.previous;
+    }
+    if (this.groupHeads.get(member) !== row) return null;
+    // why: a move can invalidate the last visible join in the same update that removes its member
+    const next = this.rankedBlocks.findIndex(block => block.rank >= rank);
+    if (next === 0 || (next >= 0 && this.rankedBlocks[next]?.rank === rank)) return null;
+    const prior = this.rankedBlocks.at(next < 0 ? -1 : next - 1);
+    return prior?.block.kind === "b" && prior.block.id === member ? { member, row } : null;
   }
 
   showsHeading(heading: string): boolean {

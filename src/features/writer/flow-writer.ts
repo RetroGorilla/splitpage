@@ -100,6 +100,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     undo: dir => { if (isCurrent()) ports.undo.step(dir); },
     notice: text => { ports.notice(text, "ok"); },
     changed: ports.changed,
+    ...(ports.selectionPlaced ? { selectionPlaced: ports.selectionPlaced } : {}),
     selectionMoved: () => { ports.selectionMoved(); visual?.refresh(); },
     settings: () => SETTINGS,
     openFind: () => { ports.openFind?.(); },
