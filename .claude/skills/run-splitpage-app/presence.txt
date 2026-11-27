@@ -122,6 +122,9 @@ wait !Q(window,'r3','audioText') && !Q(P,'r3','audioText')
 wait dot(rd('r1'))
 eval new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))
 expect !mark() && spans().length===0
+eval Q(P,'r1','audioText').dispatchEvent(new P.KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true,cancelable:true}));true
+wait P.document.querySelectorAll('#rows .row').length===2 && P.document.activeElement?.dataset.id!=='r1'
+wait dot(rd(P.document.activeElement.dataset.id)) && !!mark() && spans().length===0
 eval pclick(Q(P,'r1','audioText'),1,4)
 wait near(Q(window,'r1','audioText'),4) && spans().length===1
 expect spans()[0].style.getPropertyValue('--presence-caret-color')==='#EF958E' && dot(rd('r1'))

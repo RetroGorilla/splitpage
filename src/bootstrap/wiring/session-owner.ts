@@ -15,6 +15,7 @@ import { documentGuardOn, documentView, unwrapped } from "../../application/iden
 import { createNumberingReader } from "../../application/session/numbering.ts";
 import type { DocumentNumberingReader } from "../../application/session/numbering.ts";
 import { timingMarks } from "../../../shared/timing-marks.ts";
+import { beforeBeatsRemoved } from "./ports/presence.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
@@ -368,7 +369,11 @@ export function adoptShared(build: (ports: SharedOwnerPorts) => SharedDocumentSe
     made.dispose();
     throw new Error("A shared owner is adopted before it is hydrated, so the app hears its first document");
   }
-  made.subscribe(change => { now.numbering.changed(change.changes); });
+  made.subscribe(({ changes }) => {
+    now.numbering.changed(changes);
+    // why: the presence publisher must see the old selection before view listeners restore focus.
+    if (changes.rowsRemoved.length) beforeBeatsRemoved(changes.rowsRemoved);
+  });
   changeListeners.forEach(function (entry) { made.subscribe(hearing(entry)); });
   now.current = { kind: "shared", session: made, entered: entered };
   now.capability = nextCapability;

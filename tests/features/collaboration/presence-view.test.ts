@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { location, markRules, mountPresenceView } from "../../../src/features/collaboration/presence.ts";
 import type { PresencePeer } from "../../../src/application/collaboration/presence.ts";
-import { changeSet } from "../../../src/application/session/change-set.ts";
-import type { SessionListener } from "../../../src/application/session/document-session.ts";
 import { cssAttr } from "../../../src/features/common/dom.ts";
 import { fakePresenceView } from "../fakes.ts";
 import { viewHarness } from "../view-harness.ts";
@@ -105,13 +103,13 @@ test("the presence view sends the focused cell's selection as a caret, clamping 
   h.el("writer-doc").tabIndex = 0;
   h.el("writer-doc").innerHTML = '<div class="wr-beat" data-id="r2" data-field="audioText">First</div><div class="wr-beat" data-id="r3" data-field="audioText">Second</div>';
   const asked: unknown[] = [];
-  const documentListeners = new Set<SessionListener>();
+  const removalListeners = new Set<(ids: readonly string[]) => void>();
   const caret = { anchor: { type: { client: 1, clock: 0 }, item: null, assoc: 0 }, head: { type: { client: 1, clock: 0 }, item: null, assoc: 0 } } as const;
   const { collaboration, ports, published } = fakePresenceView({
-    document: { onChange: listener => {
-      documentListeners.add(listener);
-      return () => { documentListeners.delete(listener); };
-    } },
+    onBeatsRemoving: listener => {
+      removalListeners.add(listener);
+      return () => { removalListeners.delete(listener); };
+    },
     caret: (where, cell, ends) => { asked.push([where.beat, where.side, (cell as HTMLElement).dataset.id, ends]); return caret; }
   });
   const dispose = mountPresenceView(ports);
@@ -147,12 +145,10 @@ test("the presence view sends the focused cell's selection as a caret, clamping 
   t.mock.timers.tick(100);
   assert.deepEqual(asked.at(-1), ["r3", "audioText", "r3", { anchor: 0, head: 2 }], "an anchor on the Writer before this beat clamps to its start");
 
+  for (const notify of removalListeners) notify(["r3"]);
+  assert.equal(published.at(-1)?.caret, null, "deleting the current beat clears its published caret immediately");
   second?.remove();
   h.document.getSelection()?.collapse(first?.firstChild ?? null, 1);
-  for (const notify of documentListeners) {
-    notify({ kind: "remote", generation: 1, epoch: 1, changes: changeSet({ rowsRemoved: ["r3"] }) });
-  }
-  assert.equal(published.at(-1)?.caret, null, "deleting the current beat clears its published caret immediately");
   h.document.dispatchEvent(new h.window.Event("selectionchange"));
   t.mock.timers.tick(100);
   assert.deepEqual(published.at(-1), { name: "Ada", color: "#80BDFB", view: "writer", beat: "r2", side: "audioText", caret: null });
@@ -163,5 +159,5 @@ test("the presence view sends the focused cell's selection as a caret, clamping 
   assert.deepEqual(asked.at(-1), ["r2", "audioText", "r2", { anchor: 2, head: 2 }]);
   assert.deepEqual(published.at(-1)?.caret, caret);
   dispose();
-  assert.equal(documentListeners.size, 0);
+  assert.equal(removalListeners.size, 0);
 });

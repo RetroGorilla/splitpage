@@ -4,7 +4,8 @@ import { editorKeys, mapEndsThroughCell } from "../../core/text/selection.ts";
 import type { CellEnds } from "../../core/text/selection.ts";
 import { domKeys } from "../../features/common/cell-dom.ts";
 
-type PresenceNative = Pick<ReturnType<typeof openNativeSession>, "presencePoint" | "presenceOffset" | "readRow" | "isClosingOrClosed">;
+type PresenceNative = Pick<ReturnType<typeof openNativeSession>, "presencePoint" | "presenceOffset" | "readRow" |
+  "isClosingOrClosed" | "subscribeLocalUpdates">;
 type Side = NonNullable<PresenceLocation["side"]>;
 
 function sharedKeys(native: PresenceNative, row: string, side: Side): readonly string[] | null {
@@ -14,6 +15,7 @@ function sharedKeys(native: PresenceNative, row: string, side: Side): readonly s
 
 export function createNativePresenceCarets(native: PresenceNative, bufferedIn: (beat: string, side: Side) => boolean) {
   return Object.freeze({
+    onLocalEdit: (listener: () => void) => native.subscribeLocalUpdates(listener),
     caret(location: PresenceLocation, cell: Element, painted: CellEnds): PresenceCaret | null {
       const { beat, side } = location;
       if (!beat || !side || native.isClosingOrClosed()) return null;
