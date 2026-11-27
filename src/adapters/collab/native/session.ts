@@ -9,7 +9,7 @@ import {
 import type { NativeCommentTarget, NativeNewComment, NativeNewReply } from "./comment-commands.ts";
 import { convertToNativeScript } from "./convert.ts";
 import type { NativeConversionPorts } from "./convert.ts";
-import { formatNativeCue, formatNativeText } from "./format-commands.ts";
+import { formatNativeCue, formatNativeText, labelNativeVisual } from "./format-commands.ts";
 import { createNativeHeading, removeNativeHeading, renameNativeHeading, restoreNativeHeading } from "./heading-commands.ts";
 import { createFirstNativeBeat, insertNativeBeatAdjacent, putBackNativeBeat } from "./insert-commands.ts";
 import { compareNativeOfflineNotice } from "./offline-notice.ts";
@@ -394,6 +394,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
       editNativeTitle(script, range, "", (target, live) => beforeDeletion(target, live, direction, at), false, undefined, placement), writing, false),
     formatText: bind(formatNativeText, adding),
     formatCue: bind(formatNativeCue, adding),
+    labelVisual: bind(labelNativeVisual, adding),
     splitRow: bind(splitNativeRow, adding, true, "split"),
     deleteAndSplit: bindCompound(deleteAndSplitNativeRow, "split"),
     putBack: bind(putBackNativeBeat, adding),
@@ -485,6 +486,40 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
       return {
         point: (offset: number, assoc: 0 | -1) => (retained ?? script.reader.narrationPaint(row, false))(offset, assoc),
         dispose
+      };
+    },
+    trackVisualPeerSelection: (row: string, read: () => { readonly anchor: number; readonly head: number } | null) => {
+      let paintedPeerRevision = peerRevision;
+      let retained: readonly [Y.RelativePosition, Y.RelativePosition] | null = null;
+      const capture = (transaction: Y.Transaction): void => {
+        if (transaction.local || peerRevision !== paintedPeerRevision) return;
+        script.guardSharedCallback(() => {
+          retained = null;
+          const selection = read(), visual = selection && presenceVisual(row);
+          if (!selection || !visual || Math.max(selection.anchor, selection.head) > visual.view.length) return;
+          const at = (offset: number, assoc: 0 | -1) =>
+            Y.createRelativePositionFromTypeIndex(visual.text, nativeStoredOffset(visual.view, offset), assoc);
+          const anchor = at(selection.anchor, selection.anchor < selection.head ? 0 : -1);
+          const head = selection.anchor === selection.head ? anchor : at(selection.head, selection.head < selection.anchor ? 0 : -1);
+          retained = [anchor, head];
+        });
+      };
+      doc.on("beforeTransaction", capture);
+      return {
+        take() {
+          const positions = retained;
+          retained = null;
+          paintedPeerRevision = peerRevision;
+          const visual = positions && presenceVisual(row);
+          if (!positions || !visual) return null;
+          const offset = (point: Y.RelativePosition) => {
+            const at = Y.createAbsolutePositionFromRelativePosition(point, doc);
+            return at?.type === visual.text ? visual.view.ends.filter(end => end <= at.index).length : null;
+          };
+          const anchor = offset(positions[0]), head = offset(positions[1]);
+          return anchor === null || head === null ? null : { anchor, head };
+        },
+        dispose: () => { doc.off("beforeTransaction", capture); }
       };
     },
     titleOffset: (range: Pick<NativeTextRange, "from">, assoc: 0 | -1 = 0) => {

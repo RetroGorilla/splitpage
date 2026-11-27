@@ -75,11 +75,13 @@ export function bindNativeEditor(ports: SharedSwitchPorts, native: ReturnType<ty
     const revision = native.revision();
     if (published === revision) return;
     const fromPeer = native.peerRevision() > published;
+    const restoreTags = fromPeer ? input?.beforePeerTagPaint() : null;
     const snapshot = readPaint();
     if (buffered) keepNativeFieldPaint(buffered, snapshot.rows.find(row => row.id === buffered.beat));
     input?.clearMovePaint();
     published = revision;
     publication.publish(snapshot, "remote", fromPeer);
+    restoreTags?.(snapshot);
   }
   const stop = native.subscribe(event => {
     try {

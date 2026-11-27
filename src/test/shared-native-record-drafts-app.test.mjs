@@ -472,7 +472,7 @@ for (const route of [
   { name: "tag notes", open: () => { openTags(); expandTag(); }, box: tagBox("notes"),
     read: doc => tag(doc).notes, text: "Wide", submit: blur, inputSubmits: true },
   { name: "Gear quick add", open: openGearPanel, box: gearBox, text: "Drone\nCrane", submit: gearSave,
-    read: gear, before: ["Drone"], after: ["Crane", "Drone"] }
+    read: gear, before: ["Drone"], after: ["Crane", "Drone"], createsTagOnly: true }
 ]) {
   const submissions = new Map([["", route.submit ?? enterKey]]);
   if (route.alternate) submissions.set(typeof route.alternate === "string" ? " via Add" : " via blur", route.alternate);
@@ -501,7 +501,8 @@ for (const route of [
       await update();
       copies(route.read, route.after ?? route.text);
       assert.deepEqual(warnings(show), [refused]);
-      assert.equal(hook.nativePeer.step("undo").kind, "written");
+      assert.equal(hook.nativePeer.step("undo").kind, route.createsTagOnly ? "unchanged" : "written");
+      if (route.createsTagOnly) copies(route.read, route.after);
       assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
     });
   }

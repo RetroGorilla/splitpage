@@ -171,7 +171,7 @@ test("a tag derived from cell markup reaches the panel and takes registry edits"
   assert.deepEqual(show.mock.calls.map(call => call.arguments), Array(2).fill(["This is not available in a shared session yet.", "warn"]));
 });
 
-test("gear quick add replaces omitted orphaned gear in one step", async t => {
+test("gear quick add undo restores omitted orphaned gear and keeps new gear", async t => {
   await enter(t);
   assert.equal(registerProductionTag("gear", "Tripod"), true);
   await Promise.resolve();
@@ -184,7 +184,7 @@ test("gear quick add replaces omitted orphaned gear in one step", async t => {
   assert.doesNotMatch($("#gear-list").textContent, /Tripod/);
   key($('#rows .cell-editable[data-field="audioText"]'), "z", true);
   await Promise.resolve();
-  copies(doc => tags(doc).map(entry => entry.name), ["Tripod"]);
+  copies(doc => tags(doc).map(entry => entry.name), ["Tripod", "Lens", "Boom"]);
 });
 
 test("untouched focused gear quick add refreshes across peer additions and saves nothing", async t => {

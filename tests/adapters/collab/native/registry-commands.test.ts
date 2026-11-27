@@ -525,11 +525,15 @@ test("registry operations each use one undo step and peer edits never enter the 
         local.ydoc.transact(() => root.get(action.ids[0] as string)?.set("removed", true), "peer");
       }
       const initial = local.document();
+      const initialIds = new Set(local.ydoc.getMap("tags").keys());
       assert.equal(local.commands.changeRegistry(action).kind, "written", JSON.stringify(action));
       const changed = local.document();
       assert.notDeepEqual(changed, initial);
+      const kept = changed.productionTags.flatMap(tag => tag?.id && !initialIds.has(tag.id) ? [
+        { ...tag, owner: initial.people.some(person => person.id === tag.owner) ? tag.owner : "" }
+      ] : []);
       assert.equal(local.commands.undo().kind, "written");
-      assert.deepEqual(local.document(), initial);
+      assert.deepEqual(local.document(), { ...initial, productionTags: [...initial.productionTags, ...kept] });
       assert.deepEqual(local.commands.undo(), { kind: "unchanged" });
       assert.equal(local.commands.redo().kind, "written");
       assert.deepEqual(local.document(), changed);
@@ -557,10 +561,12 @@ test("consecutive registry commands open separate undo steps", () => {
     assert.equal(session.commands.changeRegistry({ kind: "create", collection: "people", fields: { name: "Crew" } }).kind, "written");
     const afterPerson = session.document();
     assert.equal(session.commands.changeRegistry({ kind: "gear", names: ["Tripod", "Strap"] }).kind, "written");
+    const added = session.document().productionTags.filter(tag => tag?.name === "Tripod" || tag?.name === "Strap");
+    assert.deepEqual(added.map(tag => tag?.name), ["Tripod", "Strap"]);
     assert.equal(session.commands.undo().kind, "written");
-    assert.deepEqual(session.document(), afterPerson);
+    assert.deepEqual(session.document(), { ...afterPerson, productionTags: [...afterPerson.productionTags, ...added] });
     assert.equal(session.commands.undo().kind, "written");
-    assert.deepEqual(session.document(), initial);
+    assert.deepEqual(session.document(), { ...initial, productionTags: [...initial.productionTags, ...added] });
   } finally { session.close(); }
 });
 

@@ -466,13 +466,37 @@ function writeHint(el: HTMLElement, catId: TagCategoryId, name: string) {
   el.classList.add("is-visible");
 }
 
+export function showPlainTagHint(cell: Element, start: number, cat: TagCategoryId, name: string): void {
+  const el = hintEl();
+  if (!el) return;
+  writeHint(el, cat, name);
+  const point = posToDom(cell, start), at = document.createRange();
+  at.setStart(point.node, point.offset);
+  const place = hintPlaceAt(cell, el, at);
+  el.style.left = place.left + "px";
+  el.style.top = place.top + "px";
+}
+
+export function updatePlainTagHint(cat: TagCategoryId, name: string): void {
+  const el = hintEl();
+  if (el) writeHint(el, cat, name);
+}
+
+export function hidePlainTagHint(): void {
+  hintEl()?.classList.remove("is-visible");
+}
+
 function hintPlace(o: OpenPlainTag, el: HTMLElement) {
-  const w = el.offsetWidth, h = el.offsetHeight;
   const at = document.createRange();
   at.setStartAfter(o.span);
   at.collapse(true);
-  const rect = at.getClientRects()[0] || o.cellEl.getBoundingClientRect();
-  const cellRect = o.cellEl.getBoundingClientRect();
+  return hintPlaceAt(o.cellEl, el, at);
+}
+
+function hintPlaceAt(cell: Element, el: HTMLElement, at: Range) {
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const cellRect = cell.getBoundingClientRect();
+  const rect = at.getClientRects()[0] || cellRect;
   let top = cellRect.bottom + 6;
   if (top + h > window.innerHeight - 8) top = Math.max(8, cellRect.top - h - 6);
   return { left: Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - w - 8)), top: top };
@@ -536,22 +560,10 @@ export function maybeOpenPlainTag(e: { inputType?: string; data?: string | null 
   if (cellEl.getAttribute("data-field") !== "visualText" || !cellEl.closest("#rows, .wr-flow-visual-box")) return;
   if (plainTagOpen()) return;
   if (open) { open = null; clearPaint(); }
+  const at = plainTagKeywordAtCaret(cellEl);
+  if (!at) return;
+  const { node, offset, kwStart, kw } = at;
   const sel = window.getSelection() as Selection;
-  if (!sel.rangeCount || !sel.isCollapsed) return;
-  const range = sel.getRangeAt(0);
-  const node = range.startContainer as Text;
-  const offset = range.startOffset;
-  if (node.nodeType !== 3 || !cellEl.contains(node)) return;
-  if (isInsideTagOrLink(node.parentElement)) return;
-
-  const raw = node.data.slice(0, offset);
-  const tail = KEYWORD_AT_END_RE.exec(raw);
-  if (!tail) return;
-  const kwStart = offset - tail[0].length;
-  let before = raw.slice(0, kwStart).replace(ZWSP_RE, "");
-  if (!before) before = charBeforeNode(cellEl, node);
-  const kw = matchPlainTagKeyword(before + tail[0]);
-  if (!kw) return;
 
   const rest = node.splitText(offset);
   const kwNode = node.splitText(kwStart);
@@ -568,6 +580,25 @@ export function maybeOpenPlainTag(e: { inputType?: string; data?: string | null 
   sel.addRange(r);
   open = { cellEl: cellEl, span: span, tail: rest, cat: kw.cat, keyword: kwNode.data, silent: null, suggestion: null, dismissed: null };
   paint(open);
+}
+
+export function plainTagKeywordAtCaret(cellEl: Element) {
+  const sel = window.getSelection() as Selection;
+  if (!sel.rangeCount || !sel.isCollapsed) return null;
+  const range = sel.getRangeAt(0);
+  const node = range.startContainer as Text;
+  const offset = range.startOffset;
+  if (node.nodeType !== 3 || !cellEl.contains(node)) return null;
+  if (isInsideTagOrLink(node.parentElement)) return null;
+
+  const raw = node.data.slice(0, offset);
+  const tail = KEYWORD_AT_END_RE.exec(raw);
+  if (!tail) return null;
+  const kwStart = offset - tail[0].length;
+  let before = raw.slice(0, kwStart).replace(ZWSP_RE, "");
+  if (!before) before = charBeforeNode(cellEl, node);
+  const kw = matchPlainTagKeyword(before + tail[0]);
+  return kw ? { node, offset, kwStart, kw } : null;
 }
 
 function charBeforeNode(cellEl: Element, node: Node) {
@@ -593,7 +624,7 @@ function plainTagBoundaryMarks(marks: Marks, nested = false) {
     .map(name => [name, marks[name as keyof Marks]]));
 }
 
-function existingPlainTagEnd(cell: readonly Run[], from: number, nested = false) {
+export function existingPlainTagEnd(cell: readonly Run[], from: number, nested = false) {
   const boundary = plainTagBoundaryMarks(marksAt(cell, from), nested);
   let pos = 0;
   for (const run of cell) {

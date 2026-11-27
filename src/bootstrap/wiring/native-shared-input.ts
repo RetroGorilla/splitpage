@@ -14,10 +14,14 @@ import { cueShortcutRange } from "../../core/text/cues.ts";
 import { breakLine, deleteRange, markThroughout, replaceText, sliceCell, typingMarks } from "../../core/text/edits.ts";
 import { cellLength, cleanText, projection } from "../../core/text/runs.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
-import type { NativePlainMark } from "../../adapters/collab/native/format-commands.ts";
+import { tagCategoryId } from "../../core/document/tags.ts";
+import { registryCompletion, registryCompletionOf, registryEntryOf } from "../../core/production/records.ts";
+import type { NativePlainMark, NativeVisualLabel } from "../../adapters/collab/native/format-commands.ts";
 import { domToPos, posToDom, readSelection } from "../../features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
 import { cueShortcutHint, noteFieldPainted, renderRow } from "../../features/rows/render.ts";
+import { existingPlainTagEnd, hidePlainTagHint, matchPlainTagKeyword, plainTagKeywordAtCaret, plainTagPhrase, showPlainTagHint, updatePlainTagHint } from "../../features/tags/plain-tags.ts";
+import { showToolbarTagPicker } from "../../features/tags/toolbar-picker.ts";
 import { undoGesture } from "../../features/undo/routes.ts";
 import { scriptCellOf } from "../richtext.ts";
 import { guardUnload } from "../startup/page-lifetime.ts";
@@ -33,7 +37,7 @@ import { repaintWriterAfterPublish, writerControls, writerFlowPorts } from "./wr
 import { currentWhoList } from "./who-list.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "titleOffset" | "trackTitlePaint" | "resolveTextSelection" | "captureTextIdentity" | "captureCompositionCaret" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "trackVisualPeerSelection" | "titleOffset" | "trackTitlePaint" | "resolveTextSelection" | "captureTextIdentity" | "captureCompositionCaret" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -272,6 +276,18 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   let placement: { readonly buffered: Draft; readonly caret: RelativePoint | number } | null = null;
   let lastWrite: number | null = null;
   let stopWriterPaint: (() => void) | null = null;
+  let tagPicker: { readonly cell: HTMLElement; readonly close: () => void; readonly reopen: (focused: string | null) => void } | null = null;
+  let typedTag: {
+    readonly keyword: NonNullable<ReturnType<typeof plainTagKeywordAtCaret>>["kw"];
+    readonly range: NativeTextRange;
+    cell: Element;
+    start: number;
+    readonly peerSelection: ReturnType<NativeInputPorts["native"]["trackVisualPeerSelection"]>;
+    candidates: Parameters<typeof registryCompletion>[0];
+    typed: string;
+    suggestion: string | null;
+    dismissed: string | null;
+  } | null = null;
   let emptyWriter: {
     readonly paint: () => void;
     readonly composing: () => boolean;
@@ -1064,14 +1080,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return leaveHeadingLine(false, beforeEdit);
   }
 
-  function structureCaret(cell: Element, selected = false) {
+  function structureCaret(cell: Element, selected = false, tag = false) {
     const refusal = admissionRefusal();
     if (refusal) { refuseCommand(refusal); return null; }
     const directed = readSelection(cell, document.getSelection());
     if (!directed || !selected && directed.anchor !== directed.head) { session.refuse(UNSUPPORTED); return null; }
     const backward = directed.anchor > directed.head;
     const selection = { from: Math.min(directed.anchor, directed.head), to: Math.max(directed.anchor, directed.head) };
-    if (touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return null; }
+    if (!tag && touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return null; }
     const current = flushForInput(cell, selection, false);
     if (!current) return null;
     const beat = current.cell.getAttribute("data-id") ?? "";
@@ -1210,6 +1226,197 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const updated = selected.surface.cell(selected.beat);
     if (updated) selected.surface.place(updated, selected.beat, selected.backward ? endOffset : offset,
       selected.backward ? offset : endOffset, false);
+  }
+
+  function labelVisual(beat: string, from: number, to: number, label: NativeVisualLabel, landing: number, before: NativeUndoSelectionInput): void {
+    const target = { beat, cell: "visual" } as const;
+    const range = native.commands.anchorText(target, from, to);
+    if (range.kind === "refused") { refuseCommand(range.reason); return; }
+    const step = native.commands.labelVisual.withSelection(before, range.range, label);
+    if (step.result.kind === "refused") { refuseCommand(step.result.reason); return; }
+    const after = native.commands.anchorText(target, landing);
+    if (after.kind === "anchored") step.recordAfter(after.range);
+    publish();
+    const updated = visualTextSurface.cell(beat);
+    if (updated) visualTextSurface.place(updated, beat, landing, landing, false);
+  }
+
+  function closeTagPicker(): void {
+    tagPicker?.close();
+    tagPicker = null;
+  }
+
+  function pickVisualTag(cell: HTMLElement): void {
+    const prior = tagPicker;
+    closeTagPicker();
+    if (prior?.cell === cell) return;
+    closeTypedTag();
+    if (stopped || draft?.composing) { beforePress(); return; }
+    const selected = structureCaret(cell, true, true);
+    if (!selected) return;
+    const { beat, offset, endOffset, html, range, backward } = selected;
+    if (!range) { session.refuse(UNSUPPORTED); return; }
+    const model = scriptCellOf(html ?? "");
+    const phrase = plainTagPhrase(projection(model).slice(offset, endOffset));
+    if (!phrase || sliceCell(model, offset, endOffset).some(run => run.atom || run.marks.href)) {
+      session.refuse(UNSUPPORTED);
+      return;
+    }
+    const unchanged = native.captureTextIdentity(range);
+    const liveSelection = () => unchanged?.() ? native.resolveTextSelection(range) : null;
+    const place = (fresh: HTMLElement, selection: NonNullable<ReturnType<typeof liveSelection>>) => {
+      const { anchor, head } = selection;
+      visualTextSurface.place(fresh, beat, (backward ? head : anchor).offset, (backward ? anchor : head).offset, false);
+    };
+    const open = (shown: HTMLElement, focusedCategory?: string | null): void => {
+      const cancel = (restore: boolean) => {
+        closeTagPicker();
+        const selection = restore && liveSelection();
+        if (selection && shown.isConnected) place(shown, selection);
+      };
+      const close = showToolbarTagPicker(shown, category => {
+        cancel(false);
+        const cat = tagCategoryId(category);
+        if (!cat) return;
+        const refusal = admissionRefusal();
+        if (refusal) { refuseCommand(refusal); return; }
+        const selection = liveSelection();
+        const doc = native.document();
+        if (!selection || !shown.isConnected || !visualIsAddressable(beat, doc.rows.find(row => row.id === beat)?.visualText)) {
+          session.refuse(STALE);
+          return;
+        }
+        const from = selection.anchor.offset, to = selection.head.offset;
+        const name = registryEntryOf(doc, cat, phrase.name)?.name || phrase.name;
+        labelVisual(beat, from + phrase.lead, to - phrase.trail, { cat, name, words: phrase.text }, to, backward ?? range);
+      }, cancel, focusedCategory);
+      if (close) tagPicker = { cell: shown, close, reopen: focused => {
+        closeTagPicker();
+        const fresh = visualTextSurface.cell(beat), selection = liveSelection();
+        if (fresh?.closest("#rows") && selection && document.activeElement === document.body) {
+          place(fresh, selection);
+          open(fresh, focused);
+        }
+      } };
+    };
+    open(cell);
+  }
+
+  function noteVisualTagKeyword(beat: string): void {
+    if (typedTag) return;
+    const cell = visualTextSurface.cell(beat), at = cell && plainTagKeywordAtCaret(cell);
+    if (!cell || !at) return;
+    const from = domToPos(cell, at.node, at.kwStart);
+    if (from === null) return;
+    const keyword = at.kw, start = from + keyword.length;
+    const anchor = native.commands.anchorText({ beat, cell: "visual" }, from, start);
+    if (anchor.kind !== "anchored") return;
+    const candidates = visualTagCandidates(native.document(), keyword.cat);
+    const peerSelection = native.trackVisualPeerSelection(beat, () => {
+      const active = typedTag?.cell;
+      return active && document.activeElement === active ? readSelection(active, document.getSelection()) : null;
+    });
+    typedTag = { keyword, range: anchor.range, cell, start, peerSelection, candidates, typed: "", suggestion: null, dismissed: null };
+    showPlainTagHint(cell, from, keyword.cat, "");
+  }
+
+  function visualTagCandidates(doc: ReturnType<typeof native.document>, cat: string) {
+    return { productionTags: doc.productionTags.filter(tag => tag?.cat === cat) };
+  }
+
+  function beforePeerTagPaint() {
+    const picker = tagPicker, opened = typedTag;
+    if (!picker && !opened) return null;
+    const active = document.activeElement;
+    const focusedCategory = active?.closest(".tag-toolbar-picker") && picker?.cell.closest(".field-wrap")?.contains(active)
+      ? active.getAttribute("data-tag-cat") : null;
+    return (doc: ReturnType<typeof native.document>) => {
+      if (picker && tagPicker === picker && !picker.cell.isConnected) picker.reopen(focusedCategory);
+      if (!opened || typedTag !== opened) return;
+      const { beat } = opened.range.target;
+      const cell = visualTextSurface.cell(beat), html = doc.rows.find(row => row.id === beat)?.visualText;
+      const selection = opened.peerSelection.take();
+      if (!cell || !selection || !cell.closest("#rows") || active !== opened.cell ||
+        !visualTextSurface.mayRestore(opened.cell, cell)) { closeTypedTag(); return; }
+      const repainted = cell !== opened.cell;
+      if (repainted) visualTextSurface.place(cell, beat, selection.anchor, selection.head, false);
+      const proposal = selection.anchor === selection.head && typeof html === "string" && visualTagDraft(cell, selection.head, html);
+      if (!proposal) { closeTypedTag(); return; }
+      opened.candidates = visualTagCandidates(doc, opened.keyword.cat);
+      if (repainted || opened.start !== proposal.start) {
+        opened.cell = cell;
+        opened.start = proposal.start;
+        showPlainTagHint(cell, proposal.from, opened.keyword.cat, opened.suggestion ?? "");
+      }
+      refreshVisualTag(beat);
+    };
+  }
+
+  function closeTypedTag(): void {
+    if (!typedTag) return;
+    typedTag.peerSelection.dispose();
+    typedTag = null;
+    hidePlainTagHint();
+  }
+
+  function visualTagDraft(cell: Element, offset: number, html: string) {
+    const opened = typedTag;
+    if (!opened || opened.range.target.beat !== cell.getAttribute("data-id")) return null;
+    const source = native.resolveTextSelection(opened.range);
+    if (!source || source.head.offset > offset) return null;
+    const from = source.anchor.offset, start = source.head.offset;
+    const model = scriptCellOf(html), text = projection(model);
+    if (start - from !== opened.keyword.length ||
+      matchPlainTagKeyword(text.slice(Math.max(0, from - 1), start))?.keyword !== opened.keyword.keyword) return null;
+    const limit = existingPlainTagEnd(model, start);
+    if (offset > limit) return null;
+    const end = offset === start ? limit : offset;
+    return { opened, from, start, end, text, typed: text.slice(start, end) };
+  }
+
+  function refreshVisualTag(beat: string): void {
+    const opened = typedTag, caret = document.getSelection();
+    if (!opened || opened.range.target.beat !== beat) return;
+    const { cell, start, keyword, candidates } = opened;
+    const node = caret?.anchorNode;
+    if (!cell.isConnected || !caret || !node || !caret.rangeCount || !caret.isCollapsed || !cell.contains(node)) { closeTypedTag(); return; }
+    const at = domToPos(cell, node, caret.anchorOffset);
+    if (at === null || at < start) { closeTypedTag(); return; }
+    const point = posToDom(cell, start), range = caret.getRangeAt(0).cloneRange();
+    range.setStart(point.node, point.offset);
+    const typed = range.toString().replace(/\u200b/g, "");
+    opened.typed = typed;
+    const suggestion = typed === opened.dismissed ? null : registryCompletion(candidates, keyword.cat, typed)?.name ?? null;
+    if (opened.suggestion === suggestion) return;
+    opened.suggestion = suggestion;
+    updatePlainTagHint(keyword.cat, suggestion ?? "");
+  }
+
+  function completeVisualTag(cell: Element): boolean {
+    if (!typedTag || typedTag.range.target.beat !== cell.getAttribute("data-id")) return false;
+    const selection = cellSelection(cell);
+    if (!selection || selection.from !== selection.to) { closeTypedTag(); return false; }
+    const selected = structureCaret(cell);
+    if (!selected) { closeTypedTag(); return true; }
+    const { beat, offset, before, html } = selected;
+    const proposal = visualTagDraft(cell, offset, html ?? "");
+    if (!proposal) { closeTypedTag(); return false; }
+    const { opened, from, start, end, text, typed } = proposal;
+    const phrase = plainTagPhrase(typed);
+    if (!phrase) { closeTypedTag(); return true; }
+    const doc = native.document(), { cat } = opened.keyword;
+    const completion = opened.suggestion && registryCompletionOf(doc, cat, typed, opened.suggestion);
+    if (opened.suggestion && !completion) {
+      opened.suggestion = registryCompletion(doc, cat, opened.typed)?.name ?? null;
+      updatePlainTagHint(cat, opened.suggestion ?? "");
+      return true;
+    }
+    closeTypedTag();
+    const name = completion ?? registryEntryOf(doc, cat, phrase.name)?.name ?? phrase.name;
+    const wordStart = start + phrase.lead;
+    labelVisual(beat, from, end - phrase.trail, { cat, name, words: phrase.text, prefix: text.slice(from, wordStart), completion },
+      from + (completion ?? phrase.text).length + phrase.trail, before);
+    return true;
   }
 
   function inlineText(cell: Element, text: string, line: boolean): void {
@@ -1432,6 +1639,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const reason = finish();
       if (!reason && anchored.field === "visualText" && anchored.cell.closest("#rows")) {
         updateSplitVisualWhoList(anchored.beat, input);
+        if (input.data?.endsWith(":")) noteVisualTagKeyword(anchored.beat);
+        if (typedTag) refreshVisualTag(anchored.beat);
       }
     }
     else timer = setTimeout(() => {
@@ -1547,7 +1756,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     preview(cell, buffered.selection, text);
     const reason = finish();
     if (draft !== buffered) buffered.compositionCaret?.dispose();
-    if (!reason && buffered.field === "visualText" && buffered.cell.closest("#rows")) updateSplitVisualWhoList(buffered.beat);
+    if (!reason && buffered.field === "visualText" && buffered.cell.closest("#rows")) {
+      updateSplitVisualWhoList(buffered.beat);
+      if (typedTag) refreshVisualTag(buffered.beat);
+    }
   }
 
   function intercept(event: Event, remappedTarget?: WriterHeadingTarget | null): void {
@@ -1599,6 +1811,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (titleInput && titleTrack?.input === titleInput) clearTitleTrack();
       if (imeTarget === cell) imeTarget = null;
       const next = (event as FocusEvent).relatedTarget;
+      if (typedTag && visual && next instanceof Element && next !== document.body && visualTextSurface.cellAt(next) !== visual) closeTypedTag();
       if (cell && next instanceof Element && next.closest(ROW_MENU_BUTTON)) {
         insertMenuSelection = captureInsertMenuSelection(cell) ?? insertMenuSelection;
       }
@@ -1610,6 +1823,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       return;
     }
     if (event.type === "pointerdown") {
+      if (typedTag && target?.closest("#tag-open-hint")) {
+        const active = visualTextSurface.cell(typedTag.range.target.beat);
+        if (active?.closest("#rows")) completeVisualTag(active);
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+      closeTypedTag();
       imeTarget = null;
       lastWriterEnterRefusal = null;
       if (!draft?.composing && !stopped) {
@@ -1647,13 +1868,30 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         sharedUndoRoute()?.replay?.(undoing);
         return;
       }
-      if (undoing && cell?.matches(UNDO_SURFACES)) return;
+      if (undoing && cell?.matches(UNDO_SURFACES)) { closeTypedTag(); return; }
       if (titleInput) {
         if (key.key === "Enter" || key.key.startsWith("Arrow") || key.key === "Home" || key.key === "End" || key.key === "Tab") {
           finish();
           native.endDeletionGroup();
         }
         return;
+      }
+      if (typedTag && visual?.closest("#rows")) {
+        if (key.key === "Tab" && !modified && !key.altKey && !key.shiftKey && completeVisualTag(visual)) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          return;
+        }
+        if (key.key === "Escape") {
+          if (typedTag.suggestion) {
+            typedTag.dismissed = typedTag.typed;
+            refreshVisualTag(typedTag.range.target.beat);
+          } else closeTypedTag();
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          return;
+        }
+        if (enter || key.key.startsWith("Arrow") || key.key === "Home" || key.key === "End") closeTypedTag();
       }
       if (key.key === "Tab" && visual?.closest("#rows")
         && currentWhoList()?.keydown(key, visual, () => refuseCommand(UNSUPPORTED))) {
@@ -1711,6 +1949,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       }
     }
     if (inputType && (cell?.matches(UNDO_SURFACES) || titleInput) && HISTORY.test(inputType)) {
+      closeTypedTag();
       if (visual?.closest("#writer") || titleInput) {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -1793,6 +2032,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       }
       if (narration && splitting) {
         split(narration, writer);
+        return;
+      }
+      if (button?.getAttribute("data-cmd") === "tag" && visual instanceof HTMLElement && visual.closest("#rows")) {
+        pickVisualTag(visual);
         return;
       }
       if (editableText && mark) { format(editableText, mark); return; }
@@ -2046,6 +2289,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     draft = null;
     stopWriterPaint?.();
     if (currentWhoList()?.isOpen()) currentWhoList()?.cancel();
+    closeTypedTag();
+    closeTagPicker();
     stopPaint();
     stopSize();
     stopUnload?.();
@@ -2066,6 +2311,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
   return {
     finish,
+    beforePeerTagPaint,
     settleLeave,
     beforePress,
     refuseCommand,

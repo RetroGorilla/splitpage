@@ -6,7 +6,7 @@ import { Server } from "@hocuspocus/server";
 import { openNativeSession } from "../src/adapters/collab/native/session.ts";
 import { cells } from "../tests/adapters/collab/native/helpers.ts";
 import { structureScript } from "../tests/adapters/collab/native/structure-harness.ts";
-import { PROBE } from "./perf-record.mjs";
+import { openTagTypingSamples, PROBE } from "./perf-record.mjs";
 import { REPO } from "./source-scan.mjs";
 
 const driver = ".claude/skills/run-splitpage-app/driver.mjs";
@@ -56,6 +56,14 @@ const setup = [
 function benchmark() {
   const keys = [...typed].flatMap(letter => ["press " + letter, "sleep 65"]);
   const label = long ? "shared long moving peer" : "shared";
+  const splitTyping = (side, field, name) => [
+    `caret #rows .${side}-cell .cell-editable[data-id=r1]`,
+    "key End",
+    "eval window.__perf.reset()",
+    ...keys,
+    ...long ? ["sleep 250"] : [`wait Q(P,'r1','${field}').textContent.includes('${typed}')`],
+    `eval window.__perf.take('${label} ${name}')`
+  ];
   const lines = [
     ...(long ? [
       "expect document.querySelectorAll('#rows .row').length === 300",
@@ -65,12 +73,9 @@ function benchmark() {
     ] : []),
     "eval " + PROBE.replace(/\n\s*/g, " "),
     ...long ? [] : ["eval Q(P,'r2','visualText').focus();true"],
-    "caret #rows .audio-cell .cell-editable[data-id=r1]",
-    "key End",
-    "eval window.__perf.reset()",
-    ...keys,
-    ...long ? ["sleep 250"] : ["wait Q(P,'r1','audioText').textContent.includes('" + typed + "')"],
-    "eval window.__perf.take('" + label + " Split typing')",
+    ...splitTyping("audio", "audioText", "Split typing"),
+    ...long ? [] : splitTyping("visual", "visualText", "Split Visual typing"),
+    ...long ? [] : ["key Space", "press prop:", ...openTagTypingSamples("shared Split Visual")],
     "click #btn-write",
     "wait window.__writerFlowTest.on()",
     "eval window.w=document.querySelector('#writer-doc');w.focus();const beat=w.querySelector('.wr-beat[data-id=r2]');getSelection().collapse(beat,beat.childNodes.length);true",
