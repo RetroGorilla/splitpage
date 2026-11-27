@@ -1,0 +1,36 @@
+open
+wait window.__sharedTest && document.querySelector('#rows .row')
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.audio=()=>document.querySelector('#rows .audio-cell .cell-editable[data-id="r1"]');window.writer=()=>document.querySelector('#writer-doc .wr-beat[data-id="r2"]');window.load=()=>F.openFile(new File([JSON.stringify({schema:2,title:'Shared sound cues',paragraphsDecided:true,rows:[{id:'r1',audioText:'Lead<br>SFX'},{id:'r2',audioText:'Music theme'}]})],'sound-cues.splitpage'));load()
+wait F.state().title==='Shared sound cues'
+eval S.enter()
+wait S.read().peer!==null
+eval audio().focus();getSelection().collapse(audio().lastChild,3);true
+press :
+wait audio().querySelector('.audio-cue')?.textContent==='SFX:'
+expect S.read().peer.rows[0].audioText === S.read().app.rows[0].audioText
+key ctrl KeyZ
+wait S.read().peer.rows[0].audioText==='Lead<br>SFX:'
+expect !audio().querySelector('.audio-cue')
+key ctrl+shift KeyZ
+wait audio().querySelector('.audio-cue')?.textContent==='SFX:'
+press  click
+wait audio().querySelector('.audio-cue')?.textContent==='SFX: click'
+expect S.read().peer.rows[0].audioText === S.read().app.rows[0].audioText
+key Enter
+press Next line
+wait audio().textContent.endsWith('Next line')
+expect audio().querySelector('.audio-cue').textContent === 'SFX: click'
+
+click #btn-write
+wait window.__writerFlowTest.on() && writer()
+eval document.querySelector('#writer-doc').focus();const words=writer().firstChild;getSelection().collapse(words,words.data.indexOf(' theme'));true
+expect window.__writerFlowTest.selection()?.head.offset === 5
+press :
+wait writer().querySelector('.audio-cue')?.textContent==='Music: theme'
+expect S.read().peer.rows[1].audioText === S.read().app.rows[1].audioText
+key ctrl KeyZ
+wait S.read().peer.rows[1].audioText==='Music: theme'
+expect !writer().querySelector('.audio-cue')
+key ctrl+shift KeyZ
+wait writer().querySelector('.audio-cue')?.textContent==='Music: theme'
+expect S.read().peer.rows[1].audioText === S.read().app.rows[1].audioText

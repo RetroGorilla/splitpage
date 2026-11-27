@@ -91,7 +91,7 @@ export function withoutCues(cell: CellInput): Run[] {
   return out;
 }
 
-export function cueShortcut(cell: CellInput, pos: number): Run[] | null {
+export function cueShortcutRange(cell: CellInput, pos: number): TextSpan | null {
   pos = clamp(cell, pos);
   const p = projection(cell);
   if (p.charAt(pos - 1) !== ":") return null;
@@ -101,7 +101,12 @@ export function cueShortcut(cell: CellInput, pos: number): Run[] | null {
   if (to === -1) to = p.length;
   const line = cueLines(cell).filter(function (l) { return l.from === from; })[0];
   if (line && line.cue) return null;
-  return setMark(cell, from, to, "cue", true);
+  return { from, to };
+}
+
+export function cueShortcut(cell: CellInput, pos: number): Run[] | null {
+  const range = cueShortcutRange(cell, pos);
+  return range ? setMark(cell, range.from, range.to, "cue", true) : null;
 }
 
 export function importCues(cell: CellInput): Run[] {

@@ -4,6 +4,11 @@ What changed for a person using Splitpage, newest first. The same entries
 appear in the app under **Help**. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions are in `VERSION`.
 
+## Unreleased
+
+### Fixed
+- Start a line with `SFX:` or `Music:` in Split Audio or Writer to create a sound cue in a shared script.
+
 ## 0.5.0 — 2026-11-27
 
 This release lets you write a script together.

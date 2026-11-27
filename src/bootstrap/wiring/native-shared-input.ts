@@ -10,6 +10,7 @@ import { sceneBeforeBeat, sceneForBeat, scenesInOrder, storedSceneName } from ".
 import type { SceneDocument } from "../../core/document/scenes.ts";
 import { beatPos, enterAt, HEADING_MARKER, headingPos, startsParagraph } from "../../core/flow/flow.ts";
 import type { FlowDoc, FlowPos, FlowRange } from "../../core/flow/flow.ts";
+import { cueShortcutRange } from "../../core/text/cues.ts";
 import { breakLine, deleteRange, markThroughout, replaceText, sliceCell, typingMarks } from "../../core/text/edits.ts";
 import { cellLength, cleanText, projection } from "../../core/text/runs.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
@@ -63,6 +64,7 @@ type TrackedPaint = ReturnType<NativeInputPorts["native"]["trackNarrationPaint"]
 
 interface SelectionCapture {
   readonly indices: NativeTextPlacement;
+  readonly cue?: true;
   inserted?: readonly [RelativePoint | null, RelativePoint | null];
   removed?: "written" | "discarded";
 }
@@ -710,6 +712,21 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return step.result;
   }
 
+  function markTypedCue(beat: string, point: RelativePoint): void {
+    const offset = native.narrationOffset(beat, { from: point }, -1), html = native.narrationHtml(beat);
+    if (offset === null || html == null) return;
+    const span = cueShortcutRange(scriptCellOf(html), offset);
+    if (!span) return;
+    const target = { beat, cell: "narration" } as const;
+    const cue = native.commands.anchorText(target, span.from, span.to);
+    const caret = native.commands.anchorText(target, offset);
+    if (cue.kind !== "anchored" || caret.kind !== "anchored") return;
+    // why: the first Undo takes off the cue mark and leaves the typed colon in place
+    const step = native.commands.formatText.withSelection(caret.range, cue.range, { kind: "plain", mark: "cue", on: true });
+    if (step.result.kind === "refused") refuseCommand(step.result.reason);
+    if (step.result.kind === "written") step.recordAfter(caret.range);
+  }
+
   function finish(selection?: SelectionCapture, moveCaret = true, quiet = false, composed = false): string | null {
     clearTimeout(timer);
     timer = undefined;
@@ -769,7 +786,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (result.kind === "written") {
         lastWrite = at;
         if (buffered.surface === writerNarration) refusedJoinedHeadings.delete(buffered.beat);
-        if (moveCaret && result.caret) placement = { buffered, caret: visualCaret ?? result.caret };
+        const cuePoint = selection?.cue ? result.selection?.[1] : null;
+        if (cuePoint) markTypedCue(buffered.beat, cuePoint);
+        const caret = cuePoint ?? result.caret;
+        if (moveCaret && caret) placement = { buffered, caret: visualCaret ?? caret };
         if (selection && result.selection) selection.inserted = result.selection;
       }
       publish(buffered);
@@ -931,6 +951,13 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   function atBatchBoundary(buffered: Draft): boolean {
     return buffered.units >= BATCH_UNITS || /\s$/.test(buffered.text);
+  }
+
+  function finishTypedCue(buffered: Draft): boolean {
+    const { cell, previewCaret, selection } = buffered;
+    if (!cueShortcutRange(scriptCellOf(cell.innerHTML), previewCaret)) return false;
+    finish({ cue: true, indices: [null, previewCaret - selection.from] });
+    return true;
   }
 
   function caretAnchor(beat: string, offset: number) {
@@ -1381,6 +1408,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (buffered && !buffered.deletion && insideDraft(buffered, cell, selection)) {
       reviseDraft(buffered, selection, text);
       preview(cell, selection, text);
+      if (text.endsWith(":") && buffered.field === "audioText" && finishTypedCue(buffered)) return;
       if (atBatchBoundary(buffered)) finish();
       return;
     }
@@ -1401,6 +1429,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     draft = typeof anchored === "string" ? next : anchored;
     preview(current.cell, current.selection, text);
     if (typeof anchored === "string") { stop(anchored); return; }
+    if (text.endsWith(":") && anchored.field === "audioText" && finishTypedCue(anchored)) return;
     if (anchored.field === "visualText" || atBatchBoundary(anchored)) {
       const reason = finish();
       if (!reason && anchored.field === "visualText" && anchored.cell.closest("#rows")) {
